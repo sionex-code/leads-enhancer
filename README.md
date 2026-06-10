@@ -41,6 +41,38 @@ Output goes to `./output/<slug>-<timestamp>.csv`. The file is **written incremen
 | `--scrollAmount` | 1000 | px scrolled per step |
 | `--maxNoCardRounds` | 12 | empty-scroll rounds before stopping |
 
+## Contact enricher (emails + socials)
+
+`enrich.js` visits each lead's **website** (plain HTTP, no browser — fast), crawls the homepage plus up to 3 contact/about pages, and extracts **emails, contact page URL, Facebook / Instagram / LinkedIn / Twitter**. Appends columns: `email, allEmails, contactPage, facebook, instagram, linkedin, twitter, enrichStatus`.
+
+```bash
+# Enrich the latest CSV in ./output
+node enrich.js
+
+# Enrich a specific file
+node enrich.js output/dentists-in-austin-....csv
+
+# Run ALONGSIDE the scraper: follows the CSV live, enriching rows as they're scraped
+node enrich.js --watch
+
+# Tune speed
+node enrich.js --concurrency 12 --maxPages 5 --timeout 8000
+```
+
+Output: `<input>-enriched.csv` (same row order as the input).
+
+**Resume:** every crawled site is saved to `<input>.enrich-state.jsonl` immediately. Stop anytime (Ctrl+C) and re-run the same command — already-done sites are skipped. Use `--force` to re-crawl everything. Duplicate domains are only crawled once.
+
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `--concurrency N` | 8 | sites crawled in parallel |
+| `--maxPages N` | 4 | pages fetched per site (homepage + contact-ish pages) |
+| `--timeout MS` | 10000 | per-request timeout |
+| `--watch` | off | keep following the input CSV while the scraper writes it |
+| `--force` | off | ignore saved state, re-enrich all |
+
+Best email is auto-picked: prefers an address on the business's own domain, then `info@`/`contact@`-style boxes; `allEmails` keeps everything found.
+
 ## How it works
 
 1. `scrape.js` launches a **persistent** Chrome profile (`.chrome-profile/`) with the spec's anti-detection config (`channel: "chrome"`, `viewport: null`, no custom UA/headers).
