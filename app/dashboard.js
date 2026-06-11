@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import MobileNav from "./components/MobileNav";
 import {
   BarChart3,
   Bot,
@@ -407,6 +408,22 @@ export default function Dashboard() {
           <div className="subtle">{busy || (running ? "Running" : status?.state?.message || "Ready")}</div>
         </header>
 
+        {/* Mobile-only project switcher (the sidebar is hidden on small screens) */}
+        {projects.length > 0 && (
+          <div className="project-chips">
+            {projects.map((p) => (
+              <button
+                key={p.slug}
+                className={`chip-btn ${p.slug === selected ? "active" : ""}`}
+                onClick={() => setSelected(p.slug)}
+              >
+                {p.running && <span className="run-dot" />}
+                {p.name}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="work">
           <section className="panel">
             <div className="form-grid">
@@ -560,7 +577,31 @@ export default function Dashboard() {
               {!leads.length ? (
                 <div className="empty">No leads loaded</div>
               ) : (
-                <table>
+                <>
+                <div className="lead-cards only-mobile">
+                  {leads.map((lead, index) => (
+                    <div className="lead-card" key={`m-${lead.name}-${index}`}>
+                      <div className="lead-card-head">
+                        <strong>{lead.mapsUrl ? <a href={lead.mapsUrl} target="_blank" rel="noreferrer">{lead.name || "Unknown"}</a> : lead.name || "Unknown"}</strong>
+                        <span className="subtle">{lead.category || ""}</span>
+                      </div>
+                      <div className="lead-card-row">
+                        {lead.phone && <span>{lead.phone}</span>}
+                        {lead.whatsappExists === "yes" && <span className="wa-badge">WA ✓</span>}
+                        {lead.whatsappExists === "no" && <span className="wa-badge wa-no">WA ✗</span>}
+                        {lead.website && <a href={lead.website} target="_blank">{lead.domain || "site"}</a>}
+                      </div>
+                      {lead.email && <div className="lead-card-row"><a href={`mailto:${lead.email}`}>{lead.email}</a></div>}
+                      <div className="lead-card-row score-cell">
+                        <Score label="Perf" value={lead.desktop?.performance} />
+                        <Score label="SEO" value={lead.desktop?.seo} />
+                        <Score label="M-Perf" value={lead.mobile?.performance} />
+                      </div>
+                      <div className="lead-card-row socials"><Socials lead={lead} /></div>
+                    </div>
+                  ))}
+                </div>
+                <table className="only-desktop">
                   <thead>
                     <tr>
                       <th>Name</th>
@@ -628,6 +669,7 @@ export default function Dashboard() {
                     ))}
                   </tbody>
                 </table>
+                </>
               )}
             </div>
             <div className="panel">
@@ -636,6 +678,7 @@ export default function Dashboard() {
           </section>
         </div>
       </section>
+      <MobileNav active="projects" />
     </main>
   );
 }

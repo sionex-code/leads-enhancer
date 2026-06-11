@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import MobileNav from "../components/MobileNav";
 import { Bot, Database, Download, ExternalLink, FileText, Loader2, MapPin, Phone, Mail, Search, ShieldCheck, Trash2, X } from "lucide-react";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
@@ -300,7 +301,29 @@ export default function LeadsPage() {
             {!rows.length ? (
               <div className="empty">{loading ? "Loading…" : "No leads in the database yet. Run a project to populate it."}</div>
             ) : (
-              <table>
+              <>
+              <div className="lead-cards only-mobile">
+                {rows.map((lead) => (
+                  <div className="lead-card tappable" key={`m-${lead.id}`} onClick={() => setActive(lead)}>
+                    <div className="lead-card-head">
+                      <strong>{lead.name || "Unknown"}</strong>
+                      <span className="subtle">{lead.category || lead.address || ""}</span>
+                    </div>
+                    <div className="lead-card-row">
+                      {lead.phone && <span>{lead.phone}</span>}
+                      {lead.whatsapp_status === "yes" && <span className="wa-badge">WA ✓</span>}
+                      {lead.domain && <span className="subtle">{lead.domain}</span>}
+                    </div>
+                    {lead.email && <div className="lead-card-row email-row">{lead.email}</div>}
+                    <div className="lead-card-row score-cell">
+                      <Score label="Perf" value={lead.desktop_performance} />
+                      <Score label="SEO" value={lead.desktop_seo} />
+                      <Score label="M-Perf" value={lead.mobile_performance} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <table className="only-desktop">
                 <thead>
                   <tr>
                     <th>Name</th>
@@ -348,11 +371,13 @@ export default function LeadsPage() {
                   ))}
                 </tbody>
               </table>
+              </>
             )}
           </div>
         </div>
       </section>
 
+      <MobileNav active="leads" />
       {active && (
         <LeadDrawer
           lead={active}

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import MobileNav from "../components/MobileNav";
 import { Bot, Brain, Database, FolderOpen, Plus, Send, ShieldCheck, Sparkles, Trash2, Wrench, Zap } from "lucide-react";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
@@ -198,6 +199,19 @@ export default function AgentClient() {
           </div>
         </header>
 
+        {/* Mobile-only chat switcher (sidebar is hidden on phones) */}
+        <div className="project-chips">
+          <button className="chip-btn" onClick={() => { setSessionId(""); setSession(null); }}>
+            <Plus size={13} /> New
+          </button>
+          {sessions.map((s) => (
+            <button key={s.id} className={`chip-btn ${s.id === sessionId ? "active" : ""}`} onClick={() => setSessionId(s.id)}>
+              {s.status === "thinking" && <span className="run-dot" />}
+              {(s.title || "Chat").slice(0, 26)}
+            </button>
+          ))}
+        </div>
+
         <div className="chat-scroll" ref={scrollRef}>
           {!messages.length && (
             <div className="chat-empty">
@@ -252,6 +266,7 @@ export default function AgentClient() {
           </button>
         </div>
       </section>
+      <MobileNav active="agent" />
     </main>
   );
 }
