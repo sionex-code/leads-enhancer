@@ -73,6 +73,120 @@ Output: `<input>-enriched.csv` (same row order as the input).
 
 Best email is auto-picked: prefers an address on the business's own domain, then `info@`/`contact@`-style boxes; `allEmails` keeps everything found.
 
+## WhatsApp check
+
+`whatsapp.js` takes every lead's **phone**, normalizes it to a digits-only E.164 id (country code + number, no `+`), and asks the [OpenWA](https://github.com/rmyndharis/OpenWA) API whether that number is registered on WhatsApp. Appends columns: `whatsappNumber, whatsappExists (yes/no), whatsappId, whatsappStatus`.
+
+```bash
+# Latest CSV in ./output (enriched preferred)
+node whatsapp.js
+
+# A specific CSV
+node whatsapp.js output/dentists-in-austin-....csv
+
+# Write the columns back INTO the input CSV (used by the pipeline)
+node whatsapp.js output/leads-enriched.csv --inplace
+```
+
+Output: `<input>-whatsapp.csv` (or in place with `--inplace`).
+
+**Resume:** every checked number is saved to `<input>.whatsapp-state.jsonl`; re-running skips already-checked numbers (`--force` to redo). The checker self-throttles (global min-gap + 429/5xx backoff) so it stays under the API's rate limit.
+
+It calls `GET {apiUrl}/api/sessions/{sessionId}/contacts/check/{number}` with an `X-API-Key` header and reads `{ exists, whatsappId }` back.
+
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `--concurrency N` | 2 | numbers checked in parallel |
+| `--minGap MS` | 120 | minimum gap between API calls (rate limit) |
+| `--retries N` | 5 | retries on HTTP 429/5xx with backoff |
+| `--timeout MS` | 15000 | per-request timeout |
+| `--inplace` | off | write columns into the input CSV instead of a new file |
+| `--force` | off | ignore saved state, re-check all |
+| `--apiUrl URL` | env `OWA_API_URL` | OpenWA base url |
+| `--sessionId ID` | env `OWA_SESSION_ID` | OpenWA session id |
+| `--apiKey KEY` | env `OWA_API_KEY` | OpenWA `X-API-Key` |
+| `--region CC` | env `OWA_DEFAULT_CC` | default country code for bare local numbers |
+
+## Lighthouse audits and lead reports
+
+`analyze.js` runs Google Lighthouse for every unique website in a lead CSV. It saves a full HTML + JSON Lighthouse report per site, plus a summary CSV with scores for performance, accessibility, best practices, and SEO.
+
+```bash
+# Desktop audit for the latest CSV
+node analyze.js
+
+# Mobile audit
+node analyze.js output/dentists-in-austin-....csv --device mobile
+
+# Build the lead dashboard after audits
+node report.js output/dentists-in-austin-....csv
+```
+
+Useful flags:
+
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `--device desktop|mobile` | desktop | Run desktop or mobile Lighthouse mode |
+| `--concurrency N` | 2 | Lighthouse workers |
+| `--timeout MS` | 90000 | hard timeout per website |
+| `--outDir DIR` | `lighthouse/<device>` | folder for full Lighthouse reports |
+| `--summary FILE` | `<input>-lighthouse-<device>.csv` | scores summary CSV |
+| `--maxSites N` | unlimited | audit only the first N pending sites |
+| `--force` | off | ignore saved audit state |
+
+## Named projects
+
+Use `project.js` when you want the workflow to remember a project name and keep all outputs together under `output/projects/<project>/`.
+
+```bash
+# Create/scrape a project
+node project.js scrape "Austin Dentists" --query "dentists in austin" --max 60
+
+# Enrich emails/socials
+node project.js enrich "Austin Dentists"
+
+# Check which leads' phones are on WhatsApp
+node project.js whatsapp "Austin Dentists"
+
+# Run both desktop and mobile Lighthouse audits
+node project.js audit "Austin Dentists" --device all
+
+# Generate one HTML lead report with both score sets
+node project.js report "Austin Dentists"
+
+# Continue the next missing step
+node project.js resume "Austin Dentists"
+
+# Inspect or delete
+node project.js status "Austin Dentists"
+node project.js list
+node project.js delete "Austin Dentists" --yes
+```
+
+Project `resume` uses existing state files where possible: enrichment skips completed domains, Lighthouse skips already audited domains, and the report rebuilds from the newest project CSV.
+
+## Password-protected web UI
+
+The Next.js UI wraps the same project workflow with live progress, lead rows, logs, stage controls, stop/resume, report links, and project-scoped browser cleanup.
+
+```bash
+# local dev
+LEADS_UI_USER=admin LEADS_UI_PASSWORD=<password> npm run dev
+
+# production
+npm run build
+LEADS_UI_USER=admin LEADS_UI_PASSWORD=<password> npm run start:web
+```
+
+For a subpath deployment, build and start with the same base path:
+
+```bash
+NEXT_PUBLIC_BASE_PATH=/leads npm run build
+LEADS_UI_USER=admin LEADS_UI_PASSWORD=<password> NEXT_PUBLIC_BASE_PATH=/leads npm run start:web
+```
+
+On Linux, the web runner uses `xvfb-run` for the scraper when available. Browser history/profile cleanup is scoped to each project folder at `output/projects/<project>/browser-profile`.
+
 ## How it works
 
 1. `scrape.js` launches a **persistent** Chrome profile (`.chrome-profile/`) with the spec's anti-detection config (`channel: "chrome"`, `viewport: null`, no custom UA/headers).

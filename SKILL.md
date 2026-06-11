@@ -1,72 +1,107 @@
 ---
 name: gmaps-leads
-description: Scrape Google Maps business leads (name, phone, website, address, rating, hours) to CSV, then enrich each lead with emails + social links crawled from their website. Fast, resumable, dedupe built in.
+description: Scrape Google Maps business leads, enrich them with emails/social links, audit websites with Lighthouse on desktop and mobile, and generate named project reports.
 trigger: /gmaps-leads
 ---
 
 # /gmaps-leads
 
-Generate business leads from Google Maps and enrich them with contact details. Two tools, both in `C:\Users\User\Desktop\gmaps-scraper`:
+Use this skill for conversational lead generation projects in `C:\Users\User\Desktop\gmaps-scraper`.
 
-1. **scrape.js** — patchright (stealth Playwright) + real Chrome. Opens a Maps search, clicks every result, captures the side panel, streams CSV in scrape order.
-2. **enrich.js** — pure-HTTP crawler (no browser). Visits each lead's website (homepage + contact/about pages), extracts emails, contact page, Facebook/Instagram/LinkedIn/Twitter. Resumable.
+The workflow has five phases:
 
-## Quick start (the 90% case)
+1. `scrape.js` - scrape Google Maps leads into CSV.
+2. `enrich.js` - crawl lead websites for emails, contact pages, and social links.
+3. `whatsapp.js` - check each lead's phone against WhatsApp (via the OpenWA API).
+4. `analyze.js` - run Lighthouse website audits for desktop or mobile.
+5. `report.js` - build one HTML lead report with contact details, WhatsApp status, and Lighthouse scores.
+
+Prefer `project.js` for normal use because it stores files under `output\projects\<project-name>\` and lets the user resume, inspect, or delete by project name.
+
+## Conversational mapping
+
+When the user asks to scrape a named project:
 
 ```powershell
 cd C:\Users\User\Desktop\gmaps-scraper
+node project.js scrape "<project name>" --query "<business type/location>" --max <number>
+```
 
-# 1. Scrape leads (visible Chrome window opens — REQUIRED, do not run headless)
+When the user asks to enrich emails:
+
+```powershell
+node project.js enrich "<project name>"
+```
+
+When the user asks to check WhatsApp numbers (does this lead have WhatsApp / is the number on WhatsApp):
+
+```powershell
+node project.js whatsapp "<project name>"
+```
+
+When the user asks for a website audit, SEO report, mobile friendliness report, desktop report, or full report:
+
+```powershell
+node project.js audit "<project name>" --device all
+node project.js report "<project name>"
+```
+
+When the user asks to resume:
+
+```powershell
+node project.js resume "<project name>"
+```
+
+When the user asks to check or delete a project:
+
+```powershell
+node project.js status "<project name>"
+node project.js list
+node project.js delete "<project name>" --yes
+```
+
+## Direct commands
+
+Scrape without a project:
+
+```powershell
 node scrape.js "real estate agency miami" --max 50
+```
 
-# 2. Enrich the CSV it just wrote (picks the latest in output/ automatically)
+Enrich the latest CSV in `output\`:
+
+```powershell
 node enrich.js
 ```
 
-Output: `output\<query>-<timestamp>.csv` and `...-enriched.csv`.
-
-To run both at once: start the scrape, then in a second shell run `node enrich.js --watch` — it follows the growing CSV and enriches rows live.
-
-## scrape.js
+Check WhatsApp for the latest CSV in `output\` (writes `<input>-whatsapp.csv` with `whatsappExists`, `whatsappId`, `whatsappStatus`):
 
 ```powershell
-node scrape.js "<search text or full maps URL>" [flags]
+node whatsapp.js
+node whatsapp.js output\leads-enriched.csv --concurrency 2
 ```
 
-| Flag | Default | Meaning |
-|------|---------|---------|
-| `--max N` | unlimited | stop after N leads |
-| `--clickDelay MS` | 1200 | wait after opening a place panel |
-| `--closeDelay MS` | 500 | wait after closing the panel |
-| `--headless` | off | **avoid** — the click→side-panel flow needs a maximized visible window |
-
-CSV columns: `name, category, rating, reviews, website, websiteText, phone, address, plusCode, hours, imageUrls, mapsUrl`. Written incrementally — Ctrl+C keeps everything captured so far.
-
-## enrich.js
+Audit a specific CSV:
 
 ```powershell
-node enrich.js [path\to\leads.csv] [flags]   # no path = latest CSV in output/
+node analyze.js output\leads-enriched.csv --device desktop
+node analyze.js output\leads-enriched.csv --device mobile
 ```
 
-| Flag | Default | Meaning |
-|------|---------|---------|
-| `--concurrency N` | 8 | sites crawled in parallel |
-| `--maxPages N` | 4 | pages fetched per site |
-| `--timeout MS` | 10000 | per-request timeout |
-| `--watch` | off | follow a CSV the scraper is still writing |
-| `--force` | off | ignore saved state, re-crawl everything |
+Generate a report:
 
-Adds columns: `email, allEmails, contactPage, facebook, instagram, linkedin, twitter, enrichStatus`. Best email = own-domain first, then info@/contact@.
+```powershell
+node report.js output\leads-enriched.csv
+```
 
-**Resume:** state is appended to `<input>.enrich-state.jsonl` after every site. Re-running the same command skips completed sites. Duplicate domains are crawled once.
+## Operational notes
 
-## Agent playbook
-
-- Run commands with a generous timeout (scrape ≈ 3 s/lead; enrich ≈ 19 sites/30 s at default concurrency).
-- Scraper progress prints `Captured N leads...`; enricher prints one line per site (`[n] domain -> email|status`).
-- First run on a fresh machine: `npm install` then `npx patchright install chrome` inside the project folder.
-- If the scraper warns "Results feed not found": a Google consent/login page is showing — tell the user to accept it in the Chrome window once (persistent profile `.chrome-profile/` remembers it), then re-run.
-- Don't navigate or resize the Chrome window while scraping — the feed + side panel must stay visible together.
-- `enrichStatus` values: `ok (N emails)`, `no email found`, `no website`, `error: <code>` (dead/blocked sites are normal; they don't stop the run).
-- To redo one site: delete its line from the `.enrich-state.jsonl` and re-run (or `--force` for all).
-- Full docs: `C:\Users\User\Desktop\gmaps-scraper\README.md`.
+- Scraping opens a visible Chrome window by default. Avoid `--headless` unless the user specifically requests it.
+- If Google shows consent/login instead of results, ask the user to accept it in the Chrome window, then rerun the scrape. The persistent `.chrome-profile\` remembers it.
+- Scrape output is written incrementally, so stopping early keeps rows already captured.
+- Enrichment resumes from `<input>.enrich-state.jsonl`; rerunning skips completed domains unless `--force` is used.
+- WhatsApp checking calls the OpenWA API `GET /api/sessions/<sessionId>/contacts/check/<number>`; numbers are normalized to digits-only E.164 (country code + number, no `+`). Connection defaults are baked in but can be overridden with `--apiUrl`/`--sessionId`/`--apiKey` or the `OWA_API_URL`/`OWA_SESSION_ID`/`OWA_API_KEY` env vars. It resumes from `<input>.whatsapp-state.jsonl` (use `--force` to redo) and rate-limits itself to avoid the API's HTTP 429. In the pipeline it runs `--inplace`, adding `whatsappExists`/`whatsappId`/`whatsappStatus` columns to the enriched CSV so the report, dashboard, and leads DB all show WhatsApp status.
+- Lighthouse resumes from `output\projects\<project>\lighthouse\<device>\.analyze-<device>-state.jsonl`; rerunning skips completed domains unless `--force` is used.
+- Desktop and mobile audits write separate summaries: `<input>-lighthouse-desktop.csv` and `<input>-lighthouse-mobile.csv`.
+- `report.js` joins enriched lead data with both Lighthouse summaries when present.
+- For a quick Lighthouse smoke test, use `node analyze.js <csv> --maxSites 1 --device desktop --timeout 120000`.

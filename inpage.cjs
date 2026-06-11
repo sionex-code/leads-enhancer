@@ -11,10 +11,17 @@ function startCapture(CONFIG) {
   window.__MAPS_RUNNING = true;
   window.__MAPS_DONE = false;
   window.__STOP_MAPS_CAPTURE = false;
-  window.__mapsLeads = [];
+  window.__mapsLeads = []; // buffer of not-yet-drained leads (kept small)
+  window.__MAPS_TOTAL = 0; // running count, survives draining
   window.__MAPS_EXIT_REASON = "";
 
   const leads = window.__mapsLeads;
+
+  // Node drains captured leads each poll: returns the buffered rows and empties
+  // the buffer so the page never holds the whole (growing) result set in memory.
+  window.__drainLeads = function () {
+    return leads.splice(0, leads.length);
+  };
   const seen = new Set(); // card-level dedup (place id / name segment)
   const seenContent = new Set(); // content-level dedup (name+phone+address)
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -211,7 +218,8 @@ function startCapture(CONFIG) {
       if (!seenContent.has(contentKey)) {
         seenContent.add(contentKey);
         leads.push(lead);
-        console.log(`Captured #${leads.length}: ${lead.name}`);
+        window.__MAPS_TOTAL++;
+        console.log(`Captured #${window.__MAPS_TOTAL}: ${lead.name}`);
       }
     }
 
@@ -233,7 +241,7 @@ function startCapture(CONFIG) {
     let exitReason = "unknown";
     let noCardRounds = 0;
     while (!window.__STOP_MAPS_CAPTURE && noCardRounds < CONFIG.maxNoCardRounds) {
-      if (CONFIG.maxLeads && leads.length >= CONFIG.maxLeads) {
+      if (CONFIG.maxLeads && window.__MAPS_TOTAL >= CONFIG.maxLeads) {
         exitReason = "max leads reached";
         break;
       }
@@ -264,7 +272,7 @@ function startCapture(CONFIG) {
     window.__MAPS_EXIT_REASON = exitReason;
     window.__MAPS_DONE = true;
     window.__MAPS_RUNNING = false;
-    console.log(`Done. Captured ${leads.length} leads. (${exitReason})`);
+    console.log(`Done. Captured ${window.__MAPS_TOTAL} leads. (${exitReason})`);
   })();
 }
 

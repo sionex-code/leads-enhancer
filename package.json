@@ -2,18 +2,35 @@
   "name": "gmaps-scraper",
   "version": "1.0.0",
   "description": "Fast Google Maps lead scraper using patchright (stealth Chrome). Captures name, category, rating, reviews, website, phone, address, hours, images -> CSV in scrape order.",
-  "type": "commonjs",
+  "type": "module",
   "main": "scrape.js",
   "scripts": {
     "start": "node scrape.js",
+    "dev": "next dev -H 0.0.0.0 -p 3000",
+    "build": "next build",
+    "start:web": "next start -H 0.0.0.0 -p 3000",
     "scrape": "node scrape.js",
     "enrich": "node enrich.js",
+    "whatsapp": "node whatsapp.js",
+    "audit": "node analyze.js",
+    "audit:mobile": "node analyze.js --mobile",
+    "report": "node report.js",
+    "project": "node project.js",
     "install-chrome": "patchright install chrome"
   },
   "bin": {
     "gmaps-scrape": "scrape.js"
   },
   "dependencies": {
-    "patchright": "^1.52.5"
+    "better-sqlite3": "^12.10.0",
+    "lighthouse": "^13.4.0",
+    "lucide-react": "^1.17.0",
+    "next": "^16.2.9",
+    "patchright": "^1.52.5",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "overrides": {
+    "postcss": "^8.5.10"
   }
 }

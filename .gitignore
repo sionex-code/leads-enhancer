@@ -1,5 +1,9 @@
 node_modules/
+.next/
 .chrome-profile/
 output/
 *.enrich-state.jsonl
 *.log
+
+# stray Lighthouse/report test artifacts in repo root
+/*.report.html
