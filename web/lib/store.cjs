@@ -190,8 +190,24 @@ function latestEnrichedCsv(dir) {
   return filesIn(dir, (f) => f.toLowerCase().endsWith("-enriched.csv"))[0];
 }
 
+function mtimeOf(file) {
+  try {
+    return file ? fs.statSync(file).mtimeMs : 0;
+  } catch {
+    return 0;
+  }
+}
+
 function latestInputCsv(dir) {
-  return latestEnrichedCsv(dir) || latestRawCsv(dir);
+  const raw = latestRawCsv(dir);
+  const enriched = latestEnrichedCsv(dir);
+  if (!enriched) return raw;
+  if (!raw) return enriched;
+  // Prefer the enriched CSV only when it's at least as new as the latest raw
+  // scrape. A stale enriched file (from an earlier run, or a differently-named
+  // query) must not shadow a fresher raw CSV — otherwise the UI shows "No leads
+  // loaded" while a full raw scrape sits right next to it.
+  return mtimeOf(enriched) >= mtimeOf(raw) ? enriched : raw;
 }
 
 function summaryPath(input, device) {
@@ -322,7 +338,7 @@ function loadStatus(slugOrName) {
   const mobileRows = readCsvObjects(mobileFile);
   const desktopByDomain = new Map(desktopRows.map((r) => [r.domain || hostOf(r.website), r]));
   const mobileByDomain = new Map(mobileRows.map((r) => [r.domain || hostOf(r.website), r]));
-  const leadRows = readCsvObjects(enriched || raw);
+  const leadRows = readCsvObjects(input);
   const leads = leadRows.map((lead) => {
     const domain = hostOf(lead.website);
     return {
