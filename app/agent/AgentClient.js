@@ -216,6 +216,7 @@ export default function AgentClient() {
             </div>
           )}
           {messages.map((m, i) => {
+            if (m.kind === "note") return null;
             if (m.kind === "tool" || m.kind === "tool-call") return <ToolChip key={i} msg={m} />;
             return (
               <div key={i} className={`bubble ${m.role}`}>

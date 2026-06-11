@@ -190,6 +190,7 @@ HOW TO CALL A TOOL — reply with ONLY a fenced json block, nothing else:
 One tool call per reply. After you receive the TOOL RESULT, either call another tool or give your final answer as plain text (no json block).
 
 RULES:
+- YOU are the only one who can run tools. NEVER tell the user to call a tool or describe which tool could be used — emit the json block and run it yourself, immediately.
 - Never invent data; always read it via tools.
 - Background tasks (scrape/enrich/whatsapp/reports) return immediately — report the started state and job/project to poll; do not loop on status checks more than twice in one turn. Tell the user to ask "check status" later.
 - When reports finish, give the user links: /api/agent/reports/<file>.
@@ -243,11 +244,20 @@ async function processTurn(sessionId) {
   writeSession(session);
 
   try {
+    let nudges = 0;
     for (let step = 0; step < MAX_STEPS; step++) {
-      const reply = await llm.chat(buildMessages(session), { model: session.model || "fast", maxTokens: 1600 });
+      const reply = await llm.chat(buildMessages(session), { model: session.model || "fast", maxTokens: 1600, temperature: 0.2 });
       const call = parseToolCall(reply);
 
       if (!call) {
+        // The model sometimes narrates "use the get_leads tool" instead of
+        // calling it. Nudge it (hidden from the chat UI) and retry.
+        const mentionsTool = Object.keys(TOOLS).some((t) => reply.includes(t));
+        if (mentionsTool && nudges < 2) {
+          nudges++;
+          push(session, { role: "user", kind: "note", content: "SYSTEM: You must run the tool yourself NOW. Reply with ONLY the fenced json tool call, nothing else." });
+          continue;
+        }
         push(session, { role: "assistant", content: reply.trim() });
         break;
       }
