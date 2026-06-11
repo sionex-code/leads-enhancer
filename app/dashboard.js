@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   BarChart3,
@@ -197,6 +197,12 @@ export default function Dashboard() {
 
   const selectedProject = useMemo(() => projects.find((p) => p.slug === selected), [projects, selected]);
 
+  // Async status fetches can land after you've already switched projects. We read
+  // the live selection from a ref so a stale response (for a project you've left)
+  // is dropped instead of clobbering the panel with the wrong project's data.
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+
   // Is the project named in the form already running? Drives the run buttons so
   // you can launch a NEW project while another is still scraping (run many at once).
   const formSlug = useMemo(() => slugify(form.name), [form.name]);
@@ -220,12 +226,13 @@ export default function Dashboard() {
     if (!slug) return;
     try {
       const data = await jsonFetch(`/api/projects/${encodeURIComponent(slug)}/status`);
+      if (slug !== selectedRef.current) return; // switched away mid-flight — drop it
       setStatus(data);
       if (syncForm) {
         setForm((old) => ({ ...old, name: data.name || old.name, query: data.query || old.query, max: data.max || old.max }));
       }
     } catch {
-      setStatus(null);
+      if (slug === selectedRef.current) setStatus(null);
     }
   }
 
@@ -235,12 +242,28 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
+    // Reset the panel immediately so switching projects always visibly changes the
+    // view, even before the new status lands.
+    setStatus(null);
+    let cancelled = false;
+    let timer;
+
     loadStatus(selected, true).catch(() => {}); // switching project: populate the form once
-    const id = setInterval(() => {
-      loadProjects().catch(() => {});
-      loadStatus(selected, false).catch(() => {}); // polling: refresh status only, leave the form alone
-    }, 1500);
-    return () => clearInterval(id);
+
+    // Self-scheduling poll: the next tick is only queued AFTER the current one
+    // settles, so a slow server (e.g. audits running) can never stack up dozens of
+    // overlapping requests — which was the cause of the lag/glitching.
+    const tick = async () => {
+      if (cancelled) return;
+      await Promise.allSettled([loadProjects(), loadStatus(selected, false)]);
+      if (!cancelled) timer = setTimeout(tick, 1500);
+    };
+    timer = setTimeout(tick, 1500);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [selected]);
 
   async function run(stages) {
@@ -310,7 +333,10 @@ export default function Dashboard() {
 
   const stages = status?.state?.stages || {};
   const leads = status?.leads || [];
-  const running = !!status?.state?.activeAlive;
+  // Trust either source: the projects list (authoritative, refreshed every tick)
+  // or the selected project's status. This keeps the Stop button enabled even
+  // when a status fetch is mid-flight or briefly stale after switching projects.
+  const running = !!status?.state?.activeAlive || !!selectedProject?.running;
   const runningCount = projects.filter((p) => p.running).length;
 
   return (

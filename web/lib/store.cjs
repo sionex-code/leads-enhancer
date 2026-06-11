@@ -385,6 +385,46 @@ function loadStatus(slugOrName) {
   };
 }
 
+// Cache for the per-project sidebar summary, keyed by dir. The dashboard polls
+// EVERY project every ~1.5s; recomputing row counts means re-parsing each CSV,
+// so we only redo it when a source file's mtime actually changed. Idle/finished
+// projects then cost a few stat() calls instead of a full CSV parse.
+const summaryCache = new Map();
+
+// Lightweight project summary for the sidebar list. Unlike loadStatus() this
+// does NOT build the full leads array, domain maps, or tail every log file — the
+// sidebar only needs counts + the running flag, and doing the heavy work for
+// every project on every poll is what made the UI glitch under load.
+function projectSummary(dir) {
+  const meta = readMeta(dir);
+  const state = readState(dir);
+  const raw = latestRawCsv(dir);
+  const input = latestInputCsv(dir);
+  const desktopFile = summaryPath(input, "desktop");
+  const mobileFile = summaryPath(input, "mobile");
+
+  const sig = [raw, desktopFile, mobileFile].map((f) => `${f || ""}@${mtimeOf(f)}`).join("|");
+  const cached = summaryCache.get(dir);
+  let counts = cached?.counts;
+  if (!cached || cached.sig !== sig) {
+    counts = {
+      raw: countRows(raw),
+      desktopAudits: readCsvObjects(desktopFile).filter((r) => r.analyzeStatus === "ok").length,
+      mobileAudits: readCsvObjects(mobileFile).filter((r) => r.analyzeStatus === "ok").length,
+    };
+    summaryCache.set(dir, { sig, counts });
+  }
+
+  return {
+    slug: path.basename(dir),
+    name: meta.name || path.basename(dir),
+    query: meta.query || "",
+    counts,
+    running: processAlive(state.activePid),
+    updatedAt: meta.updatedAt || state.updatedAt || "",
+  };
+}
+
 function listProjects() {
   ensureDir(PROJECT_ROOT);
   return fs
@@ -397,18 +437,7 @@ function listProjects() {
         return false;
       }
     })
-    .map((dir) => {
-      const meta = readMeta(dir);
-      const status = loadStatus(meta.name || path.basename(dir));
-      return {
-        slug: path.basename(dir),
-        name: meta.name || path.basename(dir),
-        query: meta.query || "",
-        counts: status.counts,
-        running: !!status.state.activeAlive,
-        updatedAt: meta.updatedAt || status.state.updatedAt || "",
-      };
-    })
+    .map((dir) => projectSummary(dir))
     .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
 }
 
