@@ -5,13 +5,22 @@
 //   node scrape.js "https://www.google.com/maps/search/real+estate+agency+miami"
 //   node scrape.js "dentists in austin" --max 100 --headless
 //   node scrape.js "dentists in austin" --cookies ./gmail-cookies.json
+//   node scrape.js "dentists in austin" --network        # fast: read leads off the Maps RPC
 //
 // Output: ./output/<slug>-<timestamp>.csv  (rows in scrape order: first captured = top row)
+//
+// Capture modes:
+//   (default) DOM   - click each result card, read the side panel. Most resilient,
+//                     but ~1.7s/lead and slows as the list grows.
+//   --network       - decode the "/search?tbm=map" responses (~20 detailed places
+//                     per scroll, no clicking). Much faster and stays flat. Misses
+//                     plusCode (not in the RPC). --dom forces the legacy path.
 
 const fs = require("fs");
 const path = require("path");
 const { chromium } = require("patchright");
 const { startCapture } = require("./inpage.cjs");
+const { rowsFromBody } = require("./mapsparse.cjs");
 
 // ---- CLI args ----------------------------------------------------------------
 // Flags that take a value (so the value isn't mistaken for a positional query word).
@@ -54,6 +63,10 @@ const query = positionals.join(" ").trim() || "real estate agency miami";
 const maxLeads = parseInt(flagValue("--max", "0"), 10) || 0; // 0 = unlimited
 const headless = flags.has("--headless");
 const blockImages = !flags.has("--allowImages");
+// Network mode reads leads straight off the Maps "/search?tbm=map" RPC responses
+// (~20 detailed places per scroll, no per-card clicking) — much faster and it
+// doesn't slow down as the result set grows. --dom forces the legacy click path.
+const useNetwork = flags.has("--network") && !flags.has("--dom");
 const viewportWidth = parsePositiveInt(flagValue("--viewportWidth", "1920"), 1920);
 const viewportHeight = parsePositiveInt(flagValue("--viewportHeight", "1080"), 1080);
 
@@ -230,6 +243,16 @@ function normalizeCookie(cookie) {
     );
   }
 
+  // ---- Network capture mode --------------------------------------------------
+  if (useNetwork) {
+    fs.writeFileSync(outFile, csvHeader(), "utf8");
+    const { written, reason } = await runNetworkCapture(page, outFile);
+    console.log(`\n\n  Exit reason: ${reason || "n/a"}`);
+    console.log(`  Finished. ${written} leads saved to:\n  ${outFile}\n`);
+    await context.close();
+    process.exit(0);
+  }
+
   // Surface in-page progress to the terminal.
   page.on("console", (msg) => {
     const t = msg.text();
@@ -289,6 +312,113 @@ function normalizeCookie(cookie) {
   console.error("\n  Error:", err.message);
   process.exit(1);
 });
+
+// Read leads off the Maps search RPC. We listen for every "/search?tbm=map"
+// response, decode it, and stream new (deduped) rows to the CSV — then scroll the
+// feed to make Google fetch the next batch. No per-card clicking, so throughput
+// stays flat instead of degrading as the result set grows.
+async function runNetworkCapture(page, outFile) {
+  const seen = new Set(); // place key (cid/place id) -> dedup across batches
+  let pending = []; // rows decoded but not yet flushed to CSV
+  let decodeErrors = 0;
+
+  page.on("response", async (res) => {
+    const u = res.url();
+    if (!/\/search\?tbm=map/.test(u)) return;
+    let body;
+    try {
+      body = await res.text();
+    } catch {
+      return; // response body already gone (navigation)
+    }
+    let parsed;
+    try {
+      parsed = rowsFromBody(body);
+    } catch {
+      decodeErrors++;
+      return;
+    }
+    for (let i = 0; i < parsed.rows.length; i++) {
+      const key = parsed.keys[i] || parsed.rows[i].name;
+      if (key && seen.has(key)) continue;
+      if (key) seen.add(key);
+      pending.push(parsed.rows[i]);
+    }
+  });
+
+  const scrollFeed = () =>
+    page
+      .evaluate((amount) => {
+        const feed = document.querySelector('div[role="feed"]');
+        if (feed) feed.scrollBy(0, amount);
+        return !!feed;
+      }, CONFIG.scrollAmount)
+      .catch(() => false);
+
+  const feedHasEnd = () =>
+    page
+      .evaluate(() => {
+        const feed = document.querySelector('div[role="feed"]');
+        return !!feed && feed.textContent.includes("You've reached the end of the list");
+      })
+      .catch(() => false);
+
+  let written = 0;
+  const cap = CONFIG.maxLeads || Infinity;
+  const flush = () => {
+    if (!pending.length) return 0;
+    const room = cap - written;
+    if (room <= 0) return 0;
+    const batch = pending.splice(0, Math.min(pending.length, room));
+    fs.appendFileSync(outFile, batch.map(csvRow).join(""), "utf8");
+    return batch.length;
+  };
+
+  // The first batch arrives with the page load; give it a moment to land.
+  await sleep(1500);
+  written += flush();
+  if (written) process.stdout.write(`\r  Captured ${written} leads...   `);
+
+  let reason = "completed";
+  let noGrowthRounds = 0;
+  const MAX_NO_GROWTH = Math.max(CONFIG.maxNoCardRounds, 8);
+
+  while (true) {
+    if (CONFIG.maxLeads && written >= CONFIG.maxLeads) {
+      reason = "max leads reached";
+      break;
+    }
+    const hadFeed = await scrollFeed();
+    if (!hadFeed) {
+      reason = "results feed gone";
+      break;
+    }
+    await sleep(CONFIG.scrollDelay + 700); // let the next RPC batch arrive + decode
+
+    const added = flush();
+    if (added) {
+      written += added;
+      process.stdout.write(`\r  Captured ${written} leads...   `);
+      noGrowthRounds = 0;
+    } else {
+      noGrowthRounds++;
+    }
+
+    if (await feedHasEnd()) {
+      written += flush();
+      reason = "reached end of list";
+      break;
+    }
+    if (noGrowthRounds >= MAX_NO_GROWTH) {
+      reason = "no new leads after scrolling";
+      break;
+    }
+  }
+
+  written += flush(); // final stragglers
+  if (CONFIG.maxLeads && written > CONFIG.maxLeads) written = CONFIG.maxLeads; // report cap honestly
+  return { written, reason };
+}
 
 async function dismissConsent(page) {
   const tryClick = async (frame) => {

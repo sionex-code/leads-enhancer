@@ -25,15 +25,26 @@ node scrape.js "https://www.google.com/maps/search/real+estate+agency+miami"
 # Limit results / run headless
 node scrape.js "dentists in austin" --max 100
 node scrape.js "plumbers london" --headless
+
+# Fast network mode: read leads straight off the Maps RPC (no per-card clicking)
+node scrape.js "dentists in austin" --network --max 200
 ```
 
 Output goes to `./output/<slug>-<timestamp>.csv`. The file is **written incrementally**, so progress is never lost if you stop early.
+
+### Capture modes
+
+| Mode | Speed | Notes |
+|------|-------|-------|
+| DOM (default) | ~1.7 s/lead, slows as the list grows | Clicks each result card and reads the side panel. Most resilient; captures `plusCode`. |
+| `--network` | ~20 places per scroll, stays flat | Decodes the `/search?tbm=map` responses — name, category, rating, reviews, website, phone (E.164), full address, hours, photos, mapsUrl. Much faster on large runs. Misses `plusCode` (not in the response). `--dom` forces the legacy path. |
 
 ### Options
 
 | Flag | Default | Meaning |
 |------|---------|---------|
 | `--max N` | unlimited | Stop after N leads |
+| `--network` | off | Read leads from the Maps RPC instead of clicking cards (fast) |
 | `--headless` | off | Run without a visible window |
 | `--clickDelay` | 1200 | ms to wait after opening a place |
 | `--closeDelay` | 500 | ms after closing a panel |

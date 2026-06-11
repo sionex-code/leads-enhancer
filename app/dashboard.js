@@ -27,6 +27,7 @@ const blankForm = {
   device: "all",
   enrichConcurrency: "16",
   auditConcurrency: "2",
+  network: true, // fast network capture (read leads off the Maps RPC) vs legacy DOM clicking
 };
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
@@ -386,6 +387,17 @@ export default function Dashboard() {
               <div className="field">
                 <label>Audit workers</label>
                 <input value={form.auditConcurrency} onChange={(e) => setForm({ ...form, auditConcurrency: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>Scrape mode</label>
+                <label className="check" title="Read leads off the Maps network responses (fast). Uncheck for the slower, more resilient click-each-card mode.">
+                  <input
+                    type="checkbox"
+                    checked={!!form.network}
+                    onChange={(e) => setForm({ ...form, network: e.target.checked })}
+                  />
+                  Fast network mode
+                </label>
               </div>
             </div>
             {formRunning && <div className="form-note">“{form.name}” is already running. Change the project name to launch another in parallel.</div>}

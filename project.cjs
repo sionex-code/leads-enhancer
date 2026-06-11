@@ -248,7 +248,7 @@ async function scrapeProject(name) {
   }
 
   args.push(...passValues(["--clickDelay", "--closeDelay", "--scrollDelay", "--scrollAmount", "--maxNoCardRounds"]));
-  args.push(...passBools(["--headless"]));
+  args.push(...passBools(["--headless", "--network", "--dom"]));
   await runScript("scrape.js", args);
   syncDb(name);
 }

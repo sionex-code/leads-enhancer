@@ -152,6 +152,9 @@ async function runScrape() {
 
   const args = [path.join(ROOT, "scrape.js"), query, "--outDir", dir, "--profileDir", path.join(dir, "browser-profile")];
   if (max) args.push("--max", max);
+  // Forward the capture mode chosen by the UI/caller (defaults to fast network mode).
+  if (flags.has("--dom")) args.push("--dom");
+  else args.push("--network");
 
   // Auto-rotate Gmail accounts: each scrape run takes the least-recently-used
   // account from the DB, so concurrent projects sign in with different Gmails.
