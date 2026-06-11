@@ -19,6 +19,7 @@ export async function POST(request) {
     enrichConcurrency: body.enrichConcurrency || 16,
     auditConcurrency: body.auditConcurrency || 2,
     headless: !!body.headless,
+    blockCanvas: !!body.blockCanvas,
     network: body.network !== false, // fast network capture unless explicitly disabled
   });
   return Response.json(result);

@@ -28,6 +28,8 @@ const blankForm = {
   enrichConcurrency: "16",
   auditConcurrency: "2",
   network: true, // fast network capture (read leads off the Maps RPC) vs legacy DOM clicking
+  headless: false, // run Chrome with no visible window
+  blockCanvas: false, // skip map rendering to save CPU/GPU
 };
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
@@ -397,6 +399,22 @@ export default function Dashboard() {
                     onChange={(e) => setForm({ ...form, network: e.target.checked })}
                   />
                   Fast network mode
+                </label>
+                <label className="check" title="Run Chrome with no visible window. Lighter, and required on servers without a display.">
+                  <input
+                    type="checkbox"
+                    checked={!!form.headless}
+                    onChange={(e) => setForm({ ...form, headless: e.target.checked })}
+                  />
+                  Headless
+                </label>
+                <label className="check" title="Skip rendering the map pane (disables GPU/WebGL/2D canvas). Saves CPU/GPU; the lead feed and capture are unaffected.">
+                  <input
+                    type="checkbox"
+                    checked={!!form.blockCanvas}
+                    onChange={(e) => setForm({ ...form, blockCanvas: e.target.checked })}
+                  />
+                  Block canvas
                 </label>
               </div>
             </div>

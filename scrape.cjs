@@ -4,6 +4,7 @@
 //   node scrape.js "real estate agency miami"
 //   node scrape.js "https://www.google.com/maps/search/real+estate+agency+miami"
 //   node scrape.js "dentists in austin" --max 100 --headless
+//   node scrape.js "dentists in austin" --blockCanvas    # skip map rendering (saves CPU/GPU)
 //   node scrape.js "dentists in austin" --cookies ./gmail-cookies.json
 //   node scrape.js "dentists in austin" --network        # fast: read leads off the Maps RPC
 //
@@ -63,6 +64,11 @@ const query = positionals.join(" ").trim() || "real estate agency miami";
 const maxLeads = parseInt(flagValue("--max", "0"), 10) || 0; // 0 = unlimited
 const headless = flags.has("--headless");
 const blockImages = !flags.has("--allowImages");
+// --blockCanvas disables the GPU/WebGL/2D-canvas pipeline so Chrome never paints
+// the map pane. The results feed and the network RPC are DOM/HTTP and unaffected,
+// so this is a big CPU/GPU saving on long runs (especially on a headless server)
+// at the cost of a blank map you don't read from anyway.
+const blockCanvas = flags.has("--blockCanvas");
 // Network mode reads leads straight off the Maps "/search?tbm=map" RPC responses
 // (~20 detailed places per scroll, no per-card clicking) — much faster and it
 // doesn't slow down as the result set grows. --dom forces the legacy click path.
@@ -190,7 +196,8 @@ function normalizeCookie(cookie) {
   console.log(`  Output: ${outFile}`);
   console.log(`  Max   : ${maxLeads || "unlimited"}`);
   console.log(`  View  : ${viewportWidth}x${viewportHeight} ${headless ? "headless" : "headful"}`);
-  console.log(`  Images: ${blockImages ? "blocked" : "allowed"}\n`);
+  console.log(`  Images: ${blockImages ? "blocked" : "allowed"}`);
+  console.log(`  Canvas: ${blockCanvas ? "blocked (no map render)" : "rendered"}\n`);
 
   // Spec config: real Chrome channel, no fingerprint injection, no custom UA/headers.
   // This matches the original (most stable) launch: a 1920x1080 viewport plus a
@@ -206,6 +213,12 @@ function normalizeCookie(cookie) {
       `--window-size=${viewportWidth},${viewportHeight}`,
       "--start-maximized",
       "--disable-dev-shm-usage",
+      // Kill the map renderer when asked: --disable-webgl makes the WebGL map fall
+      // back gracefully (no crash), and the GPU/2D-canvas flags drop the rest of
+      // the painting cost. Feed + RPC capture keep working.
+      ...(blockCanvas
+        ? ["--disable-webgl", "--disable-accelerated-2d-canvas", "--disable-gpu"]
+        : []),
     ],
   });
 

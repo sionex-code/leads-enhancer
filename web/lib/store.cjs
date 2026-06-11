@@ -439,6 +439,7 @@ function spawnRunner(payload) {
     String(payload.auditConcurrency || 2),
   ];
   if (payload.headless) args.push("--headless");
+  if (payload.blockCanvas) args.push("--blockCanvas");
   // Scrape capture mode: fast network RPC reading (default) vs legacy DOM clicking.
   args.push(payload.network === false ? "--dom" : "--network");
   const child = spawn(process.execPath, args, {

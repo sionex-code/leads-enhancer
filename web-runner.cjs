@@ -155,6 +155,8 @@ async function runScrape() {
   // Forward the capture mode chosen by the UI/caller (defaults to fast network mode).
   if (flags.has("--dom")) args.push("--dom");
   else args.push("--network");
+  // Skip map rendering when asked — saves CPU/GPU, harmless to feed + RPC capture.
+  if (flags.has("--blockCanvas")) args.push("--blockCanvas");
 
   // Auto-rotate Gmail accounts: each scrape run takes the least-recently-used
   // account from the DB, so concurrent projects sign in with different Gmails.
