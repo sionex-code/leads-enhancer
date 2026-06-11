@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   BarChart3,
+  Bot,
   Brush,
   Database,
   FileText,
@@ -31,6 +32,7 @@ const blankForm = {
   network: true, // fast network capture (read leads off the Maps RPC) vs legacy DOM clicking
   headless: false, // run Chrome with no visible window
   blockCanvas: false, // skip map rendering to save CPU/GPU
+  blockImages: true, // skip downloading images/media/fonts (lighter + faster)
 };
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
@@ -143,14 +145,14 @@ function AccountsPanel({ accounts, onAdd, onDelete, onToggle, busy }) {
   }
 
   return (
-    <section className="panel accounts">
-      <div className="accounts-head">
+    <details className="panel accounts">
+      <summary className="accounts-head">
         <KeyRound size={16} />
         <strong>Gmail accounts</strong>
         <span className="subtle">
           {accounts.length ? `${accounts.filter((a) => a.enabled).length}/${accounts.length} active · auto-rotated per scrape` : "none yet — scrapes run logged out"}
         </span>
-      </div>
+      </summary>
       <div className="accounts-list">
         {accounts.map((a) => (
           <div className={`account-row ${a.enabled ? "" : "off"}`} key={a.id}>
@@ -183,7 +185,7 @@ function AccountsPanel({ accounts, onAdd, onDelete, onToggle, busy }) {
           <Plus size={15} /> Add account
         </button>
       </div>
-    </section>
+    </details>
   );
 }
 
@@ -366,7 +368,10 @@ export default function Dashboard() {
         <nav className="nav">
           <span className="nav-link active">Projects</span>
           <Link className="nav-link" href="/leads">
-            <Database size={15} /> All leads
+            <Database size={15} /> Leads
+          </Link>
+          <Link className="nav-link" href="/agent">
+            <Bot size={15} /> Agent
           </Link>
         </nav>
         {runningCount > 1 && <div className="running-note">{runningCount} projects running</div>}
@@ -403,14 +408,6 @@ export default function Dashboard() {
         </header>
 
         <div className="work">
-          <AccountsPanel
-            accounts={accounts}
-            onAdd={addAccount}
-            onDelete={deleteAccount}
-            onToggle={toggleAccount}
-            busy={busy}
-          />
-
           <section className="panel">
             <div className="form-grid">
               <div className="field">
@@ -451,13 +448,21 @@ export default function Dashboard() {
                   />
                   Headless
                 </label>
-                <label className="check" title="Skip rendering the map pane (disables GPU/WebGL/2D canvas). Saves CPU/GPU; the lead feed and capture are unaffected.">
+                <label className="check" title="Stop the map pane from painting at all (canvas getContext is stubbed out + tile downloads blocked). Big CPU saving; the lead feed and capture are unaffected.">
                   <input
                     type="checkbox"
                     checked={!!form.blockCanvas}
                     onChange={(e) => setForm({ ...form, blockCanvas: e.target.checked })}
                   />
                   Block canvas
+                </label>
+                <label className="check" title="Skip downloading images, media and fonts. Lighter and faster; lead photos still come through as URLs in the CSV.">
+                  <input
+                    type="checkbox"
+                    checked={!!form.blockImages}
+                    onChange={(e) => setForm({ ...form, blockImages: e.target.checked })}
+                  />
+                  Block images
                 </label>
               </div>
             </div>
@@ -505,6 +510,14 @@ export default function Dashboard() {
               )}
             </div>
           </section>
+
+          <AccountsPanel
+            accounts={accounts}
+            onAdd={addAccount}
+            onDelete={deleteAccount}
+            onToggle={toggleAccount}
+            busy={busy}
+          />
 
           {error && <div className="panel empty">{error}</div>}
 

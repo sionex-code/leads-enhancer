@@ -20,6 +20,7 @@ export async function POST(request) {
     auditConcurrency: body.auditConcurrency || 2,
     headless: !!body.headless,
     blockCanvas: !!body.blockCanvas,
+    blockImages: body.blockImages !== false, // images blocked unless explicitly allowed
     network: body.network !== false, // fast network capture unless explicitly disabled
   });
   return Response.json(result);

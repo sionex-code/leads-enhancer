@@ -290,6 +290,28 @@ function queryLeads({ search = "", hasEmail = false, minScore = 0, project = "",
   return { total, rows };
 }
 
+function getLead(id) {
+  return db().prepare("SELECT * FROM leads WHERE id = ?").get(Number(id)) || null;
+}
+
+function deleteLead(id) {
+  return db().prepare("DELETE FROM leads WHERE id = ?").run(Number(id)).changes;
+}
+
+// Delete by domain/name match — used by the agent ("delete the lead for x.com").
+function deleteLeadsWhere({ domain = "", search = "" } = {}) {
+  if (domain) return db().prepare("DELETE FROM leads WHERE domain = ?").run(String(domain).toLowerCase()).changes;
+  if (search) return db().prepare("DELETE FROM leads WHERE name LIKE ? OR domain LIKE ?").run(`%${search}%`, `%${search}%`).changes;
+  return 0;
+}
+
+function listProjectNames() {
+  return db()
+    .prepare("SELECT DISTINCT project FROM leads WHERE project != '' ORDER BY project")
+    .all()
+    .map((r) => r.project);
+}
+
 function statsLeads() {
   const d = db();
   return {
@@ -322,6 +344,10 @@ module.exports = {
   nextAccount,
   upsertLeads,
   queryLeads,
+  getLead,
+  deleteLead,
+  deleteLeadsWhere,
+  listProjectNames,
   statsLeads,
   exportCsv,
 };

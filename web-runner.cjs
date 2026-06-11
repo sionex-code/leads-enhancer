@@ -157,6 +157,8 @@ async function runScrape() {
   else args.push("--network");
   // Skip map rendering when asked — saves CPU/GPU, harmless to feed + RPC capture.
   if (flags.has("--blockCanvas")) args.push("--blockCanvas");
+  // Images are blocked by default; only forward the opt-out.
+  if (flags.has("--allowImages")) args.push("--allowImages");
 
   // Auto-rotate Gmail accounts: each scrape run takes the least-recently-used
   // account from the DB, so concurrent projects sign in with different Gmails.

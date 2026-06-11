@@ -222,13 +222,44 @@ function normalizeCookie(cookie) {
     ],
   });
 
+  // The Chrome flags above only disable GPU acceleration — Chrome then falls back
+  // to software rendering (SwiftShader) and the WebGL map still burns CPU drawing
+  // every frame. So inside the page we make getContext("webgl"/"webgl2") return
+  // null: Maps detects "no WebGL" and falls back to its cheap raster mode, whose
+  // tile images the routing below never lets through — net result, nothing paints.
+  // 2D canvas must stay alive: nulling it too makes Maps bail out before it ever
+  // renders the results feed (verified: feed never appears, 0 leads).
+  if (blockCanvas) {
+    await context.addInitScript(() => {
+      const block = (proto) => {
+        const orig = proto.getContext;
+        Object.defineProperty(proto, "getContext", {
+          value: function (type, ...rest) {
+            if (/webgl/i.test(String(type))) return null;
+            return orig.call(this, type, ...rest);
+          },
+          configurable: true,
+        });
+      };
+      block(HTMLCanvasElement.prototype);
+      if (typeof OffscreenCanvas !== "undefined") block(OffscreenCanvas.prototype);
+    });
+  }
+
   const page = context.pages()[0] || (await context.newPage());
   await page.setViewportSize({ width: viewportWidth, height: viewportHeight }).catch(() => {});
 
-  if (blockImages) {
+  if (blockImages || blockCanvas) {
     await context.route("**/*", (route) => {
-      const type = route.request().resourceType();
-      if (type === "image" || type === "media" || type === "font") return route.abort();
+      const req = route.request();
+      const type = req.resourceType();
+      if (blockImages && (type === "image" || type === "media" || type === "font")) {
+        return route.abort();
+      }
+      // Map tiles arrive as fetch/xhr in vector mode (not resourceType "image"),
+      // so also cut them at the network — no point downloading data for a canvas
+      // that can't paint.
+      if (blockCanvas && /\/maps\/vt[/?]/.test(req.url())) return route.abort();
       return route.continue();
     });
   }
@@ -394,24 +425,42 @@ async function runNetworkCapture(page, outFile) {
 
   // Jump straight to the bottom (instant positioning, no matter how tall the
   // feed is), then fire a few trusted wheel ticks — the ticks are what arm the
-  // next fetch. Returns scrollHeight so the caller can tell whether the list
-  // is still actually growing (vs. a round where every place was a dedup).
+  // next fetch. Leads come from the RPC, not the DOM, so before scrolling we
+  // prune all but the newest cards out of the feed — otherwise the DOM grows
+  // unbounded and every layout/scroll pass gets slower the longer the run.
+  // Returns the cumulative card count (pruned + still rendered) so the caller
+  // can tell whether the list is still actually growing (vs. a round where
+  // every place was a dedup).
+  const KEEP_CARDS = 30;
   const scrollFeed = async () => {
-    if (!(await moveMouseOverFeed())) return { ok: false, height: 0 };
-    const height = await page
-      .evaluate(() => {
+    if (!(await moveMouseOverFeed())) return { ok: false, total: 0 };
+    const total = await page
+      .evaluate((keep) => {
         const feed = document.querySelector('div[role="feed"]');
-        if (!feed) return 0;
+        if (!feed) return null;
+        window.__gmPruned = window.__gmPruned || 0;
+        const cards = Array.from(feed.children).filter((el) =>
+          el.querySelector('a[href*="/maps/place/"]')
+        );
+        if (cards.length > keep) {
+          // Drop everything (cards + separator divs) before the first card we
+          // keep; Google only ever appends, so it never touches them again.
+          const cutoff = cards[cards.length - keep];
+          while (feed.firstElementChild && feed.firstElementChild !== cutoff) {
+            feed.firstElementChild.remove();
+          }
+          window.__gmPruned += cards.length - keep;
+        }
         feed.scrollTop = feed.scrollHeight;
-        return feed.scrollHeight;
-      })
-      .catch(() => 0);
-    if (!height) return { ok: false, height: 0 };
+        return window.__gmPruned + Math.min(cards.length, keep);
+      }, KEEP_CARDS)
+      .catch(() => null);
+    if (total === null) return { ok: false, total: 0 };
     for (let i = 0; i < 3; i++) {
       await page.mouse.wheel(0, 800).catch(() => {});
       await sleep(80);
     }
-    return { ok: true, height };
+    return { ok: true, total };
   };
 
   // Re-arm a stalled lazy-loader: trusted wheel up a couple screens, then the
@@ -450,14 +499,14 @@ async function runNetworkCapture(page, outFile) {
   // Be generous before declaring the list exhausted: Google often pauses for a
   // beat between batches, and a stalled loader usually restarts after a jiggle.
   const MAX_NO_GROWTH = Math.max(CONFIG.maxNoCardRounds, 15);
-  let lastHeight = 0;
+  let lastTotal = 0;
 
   while (true) {
     if (CONFIG.maxLeads && written >= CONFIG.maxLeads) {
       reason = "max leads reached";
       break;
     }
-    const { ok, height } = await scrollFeed();
+    const { ok, total } = await scrollFeed();
     if (!ok) {
       reason = "results feed gone";
       break;
@@ -467,11 +516,11 @@ async function runNetworkCapture(page, outFile) {
     await sleep(CONFIG.scrollDelay + 250);
 
     const added = flush();
-    // The feed getting taller means Google rendered more cards — progress, even if
+    // More cumulative cards means Google rendered more results — progress, even if
     // this round's RPC places were all dedups. Only count a round as "dead" when
     // nothing was written AND the feed didn't grow.
-    const grew = height > lastHeight + 4;
-    if (height > lastHeight) lastHeight = height;
+    const grew = total > lastTotal;
+    if (total > lastTotal) lastTotal = total;
 
     if (added) {
       written += added;
