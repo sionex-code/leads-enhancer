@@ -80,7 +80,7 @@ const viewportHeight = parsePositiveInt(flagValue("--viewportHeight", "1080"), 1
 const CONFIG = {
   clickDelay: parseInt(flagValue("--clickDelay", "1200"), 10),
   closeDelay: parseInt(flagValue("--closeDelay", "500"), 10),
-  scrollDelay: parseInt(flagValue("--scrollDelay", "800"), 10),
+  scrollDelay: parseInt(flagValue("--scrollDelay", "350"), 10),
   scrollAmount: parseInt(flagValue("--scrollAmount", "1000"), 10),
   maxNoCardRounds: parseInt(flagValue("--maxNoCardRounds", "12"), 10),
   maxLeads,
@@ -370,7 +370,13 @@ async function runNetworkCapture(page, outFile) {
       .evaluate(() => {
         const feed = document.querySelector('div[role="feed"]');
         if (!feed) return { ok: false, height: 0 };
+        // Jump to the bottom, then fire a real wheel event at the feed. Google's
+        // lazy-loader listens for wheel/scroll input; a synthetic wheel pulls the
+        // next batch immediately instead of waiting on a passive scrollTop nudge.
         feed.scrollTop = feed.scrollHeight;
+        feed.dispatchEvent(
+          new WheelEvent("wheel", { deltaY: 3000, bubbles: true, cancelable: true })
+        );
         const cards = feed.querySelectorAll('div[role="article"]');
         const last = cards[cards.length - 1];
         if (last) last.scrollIntoView({ block: "end" });
@@ -430,7 +436,7 @@ async function runNetworkCapture(page, outFile) {
       reason = "results feed gone";
       break;
     }
-    await sleep(CONFIG.scrollDelay + 700); // let the next RPC batch arrive + decode
+    await sleep(CONFIG.scrollDelay + 250); // let the next RPC batch arrive + decode
 
     const added = flush();
     // The feed getting taller means Google rendered more cards — progress, even if
