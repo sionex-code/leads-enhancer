@@ -499,7 +499,13 @@ export default function Dashboard() {
                     {leads.map((lead, index) => (
                       <tr key={`${lead.name}-${index}`}>
                         <td className="name-cell">
-                          {lead.name || "Unknown"}
+                          {lead.mapsUrl ? (
+                            <a href={lead.mapsUrl} target="_blank" rel="noreferrer">
+                              {lead.name || "Unknown"}
+                            </a>
+                          ) : (
+                            lead.name || "Unknown"
+                          )}
                           <br />
                           <span className="subtle">{lead.category || lead.address || ""}</span>
                         </td>
