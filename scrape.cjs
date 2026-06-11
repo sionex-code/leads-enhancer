@@ -233,6 +233,22 @@ function normalizeCookie(cookie) {
     });
   }
 
+  // Pre-seed Google's consent cookie so EU/datacenter IPs never get redirected
+  // to the full-page consent.google.com wall (which has no results feed and used
+  // to dead-end the scrape with 0 leads on the VPS). Harmless elsewhere. Seeded
+  // before the account cookies so a real account's own SOCS wins if present.
+  await context
+    .addCookies([
+      {
+        name: "SOCS",
+        value: "CAISHAgBEhJnd3NfMjAyNDAxMDktMF9SQzIaAmRlIAEaBgiA_LyaBg",
+        domain: ".google.com",
+        path: "/",
+      },
+      { name: "CONSENT", value: "PENDING+987", domain: ".google.com", path: "/" },
+    ])
+    .catch(() => {});
+
   const cookieFile = flagValue("--cookies", "");
   if (cookieFile) {
     const cookies = loadCookies(cookieFile);
@@ -501,6 +517,9 @@ async function dismissConsent(page) {
       'button:has-text("Accept all")',
       'button:has-text("Reject all")',
       'button:has-text("I agree")',
+      // consent.google.com localizes button text by IP-geo (e.g. German on the VPS)
+      'button:has-text("Alle akzeptieren")',
+      'button:has-text("Alle ablehnen")',
     ];
     for (const sel of selectors) {
       try {
