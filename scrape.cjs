@@ -359,35 +359,51 @@ async function runNetworkCapture(page, outFile) {
     }
   });
 
-  // Scroll the feed to its bottom so Google's lazy-loader fetches the next batch.
-  // A fixed scrollBy() stalls once the feed is tall: small increments land inside
-  // already-loaded content and never reach the sentinel that triggers the next
-  // RPC. Jumping to the bottom AND nudging the last card into view reliably pulls
-  // the next page. Returns scrollHeight so the caller can tell whether the list is
-  // still actually growing (vs. a round where every place was a dedup).
-  const scrollFeed = () =>
-    page
-      .evaluate(() => {
-        const feed = document.querySelector('div[role="feed"]');
-        if (!feed) return { ok: false, height: 0 };
-        feed.scrollTop = feed.scrollHeight;
-        const cards = feed.querySelectorAll('div[role="article"]');
-        const last = cards[cards.length - 1];
-        if (last) last.scrollIntoView({ block: "end" });
-        return { ok: true, height: feed.scrollHeight };
-      })
-      .catch(() => ({ ok: false, height: 0 }));
+  // Google's lazy-loader ignores programmatic scrolling (feed.scrollTop /
+  // scrollBy dispatch untrusted events it filters out) — which is why a run
+  // stalls until someone scrolls the list by hand. page.mouse.wheel() sends
+  // trusted wheel input through CDP, indistinguishable from hand-scrolling,
+  // so the next-batch fetch fires every time (headless included). The cursor
+  // must be over the feed for the wheel to land on it.
+  const moveMouseOverFeed = async () => {
+    try {
+      const box = await page.locator('div[role="feed"]').boundingBox({ timeout: 2000 });
+      if (!box || !box.width) return false;
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
-  // Re-arm a stalled lazy-loader: scroll up a couple screens, then the next loop
-  // iteration snaps back to the bottom. The jump (rather than sitting pinned at
-  // the bottom) is what makes Google's IntersectionObserver fire another fetch.
-  const jiggleFeed = () =>
-    page
+  // Jump straight to the bottom (instant positioning, no matter how tall the
+  // feed is), then fire a few trusted wheel ticks — the ticks are what arm the
+  // next fetch. Returns scrollHeight so the caller can tell whether the list
+  // is still actually growing (vs. a round where every place was a dedup).
+  const scrollFeed = async () => {
+    if (!(await moveMouseOverFeed())) return { ok: false, height: 0 };
+    const height = await page
       .evaluate(() => {
         const feed = document.querySelector('div[role="feed"]');
-        if (feed) feed.scrollTop = Math.max(0, feed.scrollHeight - feed.clientHeight * 2);
+        if (!feed) return 0;
+        feed.scrollTop = feed.scrollHeight;
+        return feed.scrollHeight;
       })
-      .catch(() => {});
+      .catch(() => 0);
+    if (!height) return { ok: false, height: 0 };
+    for (let i = 0; i < 3; i++) {
+      await page.mouse.wheel(0, 800).catch(() => {});
+      await sleep(80);
+    }
+    return { ok: true, height };
+  };
+
+  // Re-arm a stalled lazy-loader: trusted wheel up a couple screens, then the
+  // next loop iteration snaps back to the bottom and wheels down again.
+  const jiggleFeed = async () => {
+    await moveMouseOverFeed();
+    await page.mouse.wheel(0, -2000).catch(() => {});
+  };
 
   const feedHasEnd = () =>
     page
@@ -430,7 +446,9 @@ async function runNetworkCapture(page, outFile) {
       reason = "results feed gone";
       break;
     }
-    await sleep(CONFIG.scrollDelay + 450); // let the next RPC batch arrive + decode
+    // Let the next RPC batch arrive + decode. The wheel ticks above already add
+    // ~240ms, so this stays shorter than the old fixed wait.
+    await sleep(CONFIG.scrollDelay + 250);
 
     const added = flush();
     // The feed getting taller means Google rendered more cards — progress, even if

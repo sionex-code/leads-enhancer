@@ -1,0 +1,56 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+env:
+  VPS_HOST: 144.91.104.65
+  VPS_USER: adminsafe
+  APP_DIR: /home/adminsafe/gmaps-scraper
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload release tarball
+        run: |
+          tar czf /tmp/deploy.tgz --exclude=.git --exclude=.github .
+          scp -i ~/.ssh/id_ed25519 /tmp/deploy.tgz "$VPS_USER@$VPS_HOST:/tmp/gmaps-deploy.tgz"
+
+      # Extract over the app dir (output/, leads.db and .chrome-profile are never
+      # touched), install, rebuild with the /leads base path, restart pm2.
+      - name: Deploy
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$VPS_USER@$VPS_HOST" "
+            set -e
+            cd $APP_DIR
+            tar czf ~/gmaps-scraper-backup-\$(date +%Y%m%d-%H%M%S).tgz \
+              --exclude=node_modules --exclude=.next --exclude=output --exclude=.chrome-profile .
+            ls -t ~/gmaps-scraper-backup-*.tgz | tail -n +6 | xargs -r rm --
+            tar xzf /tmp/gmaps-deploy.tgz
+            rm /tmp/gmaps-deploy.tgz
+            npm install --no-audit --no-fund
+            NEXT_PUBLIC_BASE_PATH=/leads npm run build
+            pm2 restart gmaps-leads-ui --update-env
+          "
+
+      - name: Health check
+        run: |
+          sleep 5
+          ssh -i ~/.ssh/id_ed25519 "$VPS_USER@$VPS_HOST" \
+            'code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/leads); echo "HTTP $code"; [ "$code" = "200" ] || [ "$code" = "401" ]'
