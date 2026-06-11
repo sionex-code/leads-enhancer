@@ -12,6 +12,7 @@ import {
   MessageCircle,
   PauseCircle,
   Play,
+  OctagonX,
   Plus,
   RotateCcw,
   Search,
@@ -313,6 +314,22 @@ export default function Dashboard() {
     }
   }
 
+  // Stop every running project at once — kills their runner trees plus any
+  // Lighthouse/Chrome/scrape processes still churning in the background.
+  async function stopAllProjects() {
+    setBusy("stop all");
+    setError("");
+    try {
+      await jsonFetch("/api/projects/stop-all", { method: "POST" });
+      await loadProjects();
+      if (selected) await loadStatus();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function addAccount(name, cookies) {
     await jsonFetch("/api/accounts", { method: "POST", body: JSON.stringify({ name, cookies }) });
     await loadAccounts();
@@ -469,6 +486,9 @@ export default function Dashboard() {
               </button>
               <button className="danger" disabled={!!busy || !running} onClick={() => projectAction("stop")}>
                 <PauseCircle size={16} /> Stop
+              </button>
+              <button className="danger" disabled={!!busy || runningCount === 0} onClick={stopAllProjects} title="Stop every running project and any Lighthouse/Chrome processes still running in the background">
+                <OctagonX size={16} /> Stop all{runningCount > 0 ? ` (${runningCount})` : ""}
               </button>
               <button disabled={!!busy || !selected} onClick={() => projectAction("cleanup")}>
                 <Brush size={16} /> Clean browser

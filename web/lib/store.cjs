@@ -314,6 +314,45 @@ function cleanupBrowser(dir) {
   return { killed, profileDir };
 }
 
+// Stop EVERYTHING: kill each running project's whole process tree (which cascades
+// to the scrape/enrich/analyze children and the Lighthouse + headless Chrome they
+// spawn), mark every project idle, then sweep any orphaned processes still
+// referencing the projects tree (e.g. a Lighthouse run whose parent already died).
+function stopAll() {
+  ensureDir(PROJECT_ROOT);
+  let projects = 0;
+  for (const name of fs.readdirSync(PROJECT_ROOT)) {
+    const dir = path.join(PROJECT_ROOT, name);
+    try {
+      if (!fs.statSync(dir).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    const state = readState(dir);
+    if (state.activePid && processAlive(state.activePid)) {
+      killTree(state.activePid);
+      projects++;
+    }
+    if (state.activePid || state.running) {
+      const stages = { ...(state.stages || {}) };
+      for (const [k, s] of Object.entries(stages)) {
+        if (s && s.status === "running") stages[k] = { ...s, status: "stopped" };
+      }
+      writeState(dir, {
+        running: false,
+        activePid: null,
+        message: "Stopped (stop all)",
+        stoppedAt: new Date().toISOString(),
+        stages,
+      });
+    }
+  }
+  // Backstop for orphans whose runner is already gone (taskkill /T on the runner
+  // normally gets these, but a detached/re-parented Lighthouse can survive).
+  const swept = killProcessesUsingPath(PROJECT_ROOT);
+  return { projects, swept };
+}
+
 function projectLogFiles(dir) {
   return [
     path.join(dir, "web-runner.log"),
@@ -570,6 +609,7 @@ module.exports = {
   processAlive,
   killTree,
   cleanupBrowser,
+  stopAll,
   spawnRunner,
   deleteProject,
   writeRotatedCookies,
