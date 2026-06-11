@@ -346,14 +346,35 @@ async function runNetworkCapture(page, outFile) {
     }
   });
 
+  // Scroll the feed to its bottom so Google's lazy-loader fetches the next batch.
+  // A fixed scrollBy() stalls once the feed is tall: small increments land inside
+  // already-loaded content and never reach the sentinel that triggers the next
+  // RPC. Jumping to the bottom AND nudging the last card into view reliably pulls
+  // the next page. Returns scrollHeight so the caller can tell whether the list is
+  // still actually growing (vs. a round where every place was a dedup).
   const scrollFeed = () =>
     page
-      .evaluate((amount) => {
+      .evaluate(() => {
         const feed = document.querySelector('div[role="feed"]');
-        if (feed) feed.scrollBy(0, amount);
-        return !!feed;
-      }, CONFIG.scrollAmount)
-      .catch(() => false);
+        if (!feed) return { ok: false, height: 0 };
+        feed.scrollTop = feed.scrollHeight;
+        const cards = feed.querySelectorAll('div[role="article"]');
+        const last = cards[cards.length - 1];
+        if (last) last.scrollIntoView({ block: "end" });
+        return { ok: true, height: feed.scrollHeight };
+      })
+      .catch(() => ({ ok: false, height: 0 }));
+
+  // Re-arm a stalled lazy-loader: scroll up a couple screens, then the next loop
+  // iteration snaps back to the bottom. The jump (rather than sitting pinned at
+  // the bottom) is what makes Google's IntersectionObserver fire another fetch.
+  const jiggleFeed = () =>
+    page
+      .evaluate(() => {
+        const feed = document.querySelector('div[role="feed"]');
+        if (feed) feed.scrollTop = Math.max(0, feed.scrollHeight - feed.clientHeight * 2);
+      })
+      .catch(() => {});
 
   const feedHasEnd = () =>
     page
@@ -381,27 +402,40 @@ async function runNetworkCapture(page, outFile) {
 
   let reason = "completed";
   let noGrowthRounds = 0;
-  const MAX_NO_GROWTH = Math.max(CONFIG.maxNoCardRounds, 8);
+  // Be generous before declaring the list exhausted: Google often pauses for a
+  // beat between batches, and a stalled loader usually restarts after a jiggle.
+  const MAX_NO_GROWTH = Math.max(CONFIG.maxNoCardRounds, 15);
+  let lastHeight = 0;
 
   while (true) {
     if (CONFIG.maxLeads && written >= CONFIG.maxLeads) {
       reason = "max leads reached";
       break;
     }
-    const hadFeed = await scrollFeed();
-    if (!hadFeed) {
+    const { ok, height } = await scrollFeed();
+    if (!ok) {
       reason = "results feed gone";
       break;
     }
     await sleep(CONFIG.scrollDelay + 700); // let the next RPC batch arrive + decode
 
     const added = flush();
+    // The feed getting taller means Google rendered more cards — progress, even if
+    // this round's RPC places were all dedups. Only count a round as "dead" when
+    // nothing was written AND the feed didn't grow.
+    const grew = height > lastHeight + 4;
+    if (height > lastHeight) lastHeight = height;
+
     if (added) {
       written += added;
       process.stdout.write(`\r  Captured ${written} leads...   `);
       noGrowthRounds = 0;
+    } else if (grew) {
+      noGrowthRounds = 0;
     } else {
       noGrowthRounds++;
+      await jiggleFeed(); // re-arm the lazy-loader before the next scroll-to-bottom
+      await sleep(400);
     }
 
     if (await feedHasEnd()) {
