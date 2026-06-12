@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import MobileNav from "../components/MobileNav";
+import AnimatedNumber from "../components/AnimatedNumber";
 import {
   Ban,
   Bot,
@@ -496,7 +497,7 @@ export default function LeadsPage() {
                 if (label === "Done") setWorkflow("complete");
                 if (label === "Total") setWorkflow("");
               }}>
-                <strong>{value}</strong>
+                <strong><AnimatedNumber value={value} /></strong>
                 <span>{label}</span>
               </button>
             ))}
@@ -509,7 +510,7 @@ export default function LeadsPage() {
           <div>
             <h1>Lead manager</h1>
             <div className="subtle">
-              {total} lead{total === 1 ? "" : "s"} match. Manage watch lists, contacts, email intent, outreach status, and notes.
+              <AnimatedNumber value={total} /> lead{total === 1 ? "" : "s"} match. Manage watch lists, contacts, email intent, outreach status, and notes.
             </div>
           </div>
           <div className="topbar-actions">

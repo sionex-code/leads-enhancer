@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import MobileNav from "./components/MobileNav";
+import AnimatedNumber from "./components/AnimatedNumber";
 import {
   BarChart3,
   Bot,
@@ -409,7 +410,7 @@ export default function Dashboard() {
                 </strong>
                 <br />
                 <span className="subtle">
-                  {project.counts?.raw || 0} leads | {project.counts?.desktopAudits || 0}/{project.counts?.mobileAudits || 0} audits
+                  <AnimatedNumber value={project.counts?.raw || 0} /> leads | {project.counts?.desktopAudits || 0}/{project.counts?.mobileAudits || 0} audits
                 </span>
               </span>
               <span
@@ -584,23 +585,23 @@ export default function Dashboard() {
 
           <section className="stats">
             <div className="stat">
-              <strong>{status?.counts?.raw || 0}</strong>
+              <strong><AnimatedNumber value={status?.counts?.raw || 0} /></strong>
               <span className="subtle">Scraped leads</span>
             </div>
             <div className="stat">
-              <strong>{status?.counts?.websites || 0}</strong>
+              <strong><AnimatedNumber value={status?.counts?.websites || 0} /></strong>
               <span className="subtle">Websites</span>
             </div>
             <div className="stat">
-              <strong>{status?.counts?.enriched || 0}</strong>
+              <strong><AnimatedNumber value={status?.counts?.enriched || 0} /></strong>
               <span className="subtle">Enriched rows</span>
             </div>
             <div className="stat">
-              <strong>{status?.counts?.desktopAudits || 0}</strong>
+              <strong><AnimatedNumber value={status?.counts?.desktopAudits || 0} /></strong>
               <span className="subtle">Desktop audits</span>
             </div>
             <div className="stat">
-              <strong>{status?.counts?.mobileAudits || 0}</strong>
+              <strong><AnimatedNumber value={status?.counts?.mobileAudits || 0} /></strong>
               <span className="subtle">Mobile audits</span>
             </div>
           </section>
