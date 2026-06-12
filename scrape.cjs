@@ -307,8 +307,26 @@ function normalizeCookie(cookie) {
   if (useNetwork) {
     fs.writeFileSync(outFile, csvHeader(), "utf8");
     const { written, reason } = await runNetworkCapture(page, outFile);
-    console.log(`\n\n  Exit reason: ${reason || "n/a"}`);
-    console.log(`  Finished. ${written} leads saved to:\n  ${outFile}\n`);
+    // The RPC only fires when scrolling loads MORE results. Small result sets
+    // (e.g. a thin region) ship entirely with the initial page, so the listener
+    // never sees a response and we'd report 0 — even with results on screen.
+    // In that case fall through to the DOM click path for the visible cards.
+    const visibleCards = await page
+      .locator('div[role="feed"] a[href*="/maps/place/"]')
+      .count()
+      .catch(() => 0);
+    let total = written;
+    let finalReason = reason;
+    if (written === 0 && visibleCards > 0) {
+      console.log(`\n  Network capture saw no RPC but ${visibleCards} result(s) are on screen — reading the visible cards.`);
+      let rows = await captureFeedCards(page);
+      if (CONFIG.maxLeads) rows = rows.slice(0, CONFIG.maxLeads);
+      if (rows.length) fs.appendFileSync(outFile, rows.map(csvRow).join(""), "utf8");
+      total = rows.length;
+      finalReason = `${reason || "n/a"} (card fallback)`;
+    }
+    console.log(`\n\n  Exit reason: ${finalReason || "n/a"}`);
+    console.log(`  Finished. ${total} leads saved to:\n  ${outFile}\n`);
     await context.close();
     process.exit(0);
   }
@@ -372,6 +390,57 @@ function normalizeCookie(cookie) {
   console.error("\n  Error:", err.message);
   process.exit(1);
 });
+
+// Last-resort extraction for tiny result sets: parse the visible feed cards
+// directly (no clicking — the 2026-06 Maps UI opens place panels collapsed, so
+// the click path can't read them). Cards carry name, rating(reviews),
+// "category · address", an hours line with the phone, and sometimes a website
+// action link — less complete than the RPC rows but far better than 0 leads.
+async function captureFeedCards(page) {
+  return page
+    .evaluate(() => {
+      const clean = (v) =>
+        String(v || "")
+          .replace(/[\uE000-\uF8FF\uFE00-\uFE0F]/g, "")
+          .replace(/\s+/g, " ")
+          .trim();
+      const feed = document.querySelector('div[role="feed"]');
+      if (!feed) return [];
+      return [...feed.querySelectorAll('div[role="article"]')]
+        .filter((card) => card.querySelector('a[href*="/maps/place/"]'))
+        .map((card) => {
+          const link = card.querySelector('a[href*="/maps/place/"]');
+          const name = clean(card.getAttribute("aria-label") || link.getAttribute("aria-label"));
+          const lines = (card.innerText || "").split("\n").map(clean).filter(Boolean);
+          const ratingLine = lines.find((l) => /^\d(\.\d)?\(/.test(l)) || "";
+          const rating = ratingLine.match(/^([\d.]+)/)?.[1] || "";
+          const reviews = ratingLine.match(/\(([\d,]+)\)/)?.[1]?.replace(/,/g, "") || "";
+          // "Category · Address" line: has the separator and isn't the hours line
+          const catLine = lines.find((l) => l !== name && !/^\d/.test(l) && !/^(Open|Closed|Opens|Temporarily|Permanently)\b/i.test(l) && !l.startsWith('"')) || "";
+          const [category = "", address = ""] = catLine.split(" · ").map(clean);
+          const phone = (card.innerText.match(/\+?\d[\d\s().-]{8,18}\d/) || [""])[0].trim();
+          const websiteEl = [...card.querySelectorAll("a[href]")].find(
+            (a) => !a.href.includes("google.com/maps") && /^https?:/.test(a.href)
+          );
+          return {
+            name,
+            category,
+            rating,
+            reviews,
+            website: websiteEl?.href || "",
+            websiteText: "",
+            phone,
+            address,
+            plusCode: "",
+            hours: "",
+            imageUrls: "",
+            mapsUrl: link?.href || location.href,
+          };
+        })
+        .filter((r) => r.name);
+    })
+    .catch(() => []);
+}
 
 // Read leads off the Maps search RPC. We listen for every "/search?tbm=map"
 // response, decode it, and stream new (deduped) rows to the CSV — then scroll the
