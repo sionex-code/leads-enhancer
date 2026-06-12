@@ -1118,6 +1118,104 @@ button.icon {
   30% { transform: translateY(-5px); opacity: 1; }
 }
 
+/* markdown inside chat bubbles */
+.bubble .md p { margin: 6px 0; }
+.bubble .md p:first-child { margin-top: 0; }
+.bubble .md p:last-child { margin-bottom: 0; }
+.bubble .md h1, .bubble .md h2, .bubble .md h3, .bubble .md h4 {
+  margin: 10px 0 6px;
+  font-size: 15px;
+  line-height: 1.3;
+}
+.bubble .md code {
+  background: #0a0e1c;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 1px 5px;
+  font: 12px/1.4 ui-monospace, Consolas, monospace;
+}
+.bubble .md pre code { background: transparent; border: 0; padding: 0; }
+.bubble .md ol { margin: 6px 0; padding-left: 20px; }
+.bubble .md blockquote {
+  margin: 6px 0;
+  padding: 2px 12px;
+  border-left: 3px solid var(--accent-2);
+  color: var(--muted);
+}
+.bubble .md table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 13px;
+}
+.bubble .md th,
+.bubble .md td {
+  border: 1px solid var(--line);
+  padding: 6px 10px;
+  text-align: left;
+  white-space: nowrap;
+}
+.bubble .md th {
+  background: rgba(91, 124, 250, 0.12);
+  font-weight: 600;
+}
+.bubble .md tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.025); }
+.bubble .md hr { border: 0; border-top: 1px solid var(--line); margin: 10px 0; }
+
+/* collapsed thinking block (groups a turn's tool steps) */
+.think-block {
+  align-self: flex-start;
+  max-width: min(760px, 88%);
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  background: rgba(24, 32, 56, 0.5);
+  font-size: 12px;
+  overflow: hidden;
+}
+
+.think-block.live { border-color: rgba(91, 124, 250, 0.55); }
+
+.think-head {
+  border: 0;
+  background: transparent;
+  min-height: 32px;
+  padding: 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-start;
+}
+
+.think-head .chev {
+  margin-left: auto;
+  transition: transform 0.15s ease;
+}
+
+.think-head .chev.open { transform: rotate(180deg); }
+
+.think-block.live .think-head svg:first-child {
+  color: var(--accent-2);
+  animation: bounce 1.2s infinite;
+}
+
+.think-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-top: 1px dashed var(--line);
+}
+
+.think-body .tool-chip {
+  align-self: stretch;
+  max-width: none;
+}
+
 .tool-chip {
   align-self: flex-start;
   max-width: min(760px, 88%);

@@ -2,10 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { marked } from "marked";
 import MobileNav from "../components/MobileNav";
-import { Bot, Brain, Database, FolderOpen, Plus, Send, ShieldCheck, Sparkles, Trash2, Wrench, Zap } from "lucide-react";
+import { Bot, Brain, ChevronDown, Database, FolderOpen, Plus, Send, ShieldCheck, Sparkles, Trash2, Wrench, Zap } from "lucide-react";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
+// GFM markdown (tables, lists, code) with raw HTML from the model escaped.
+const mdRenderer = new marked.Renderer();
+mdRenderer.html = ({ text }) => String(text).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+marked.use({ renderer: mdRenderer, gfm: true, breaks: true });
 
 async function jsonFetch(url, options = {}) {
   const res = await fetch(`${BASE_PATH}${url}`, {
@@ -17,24 +23,26 @@ async function jsonFetch(url, options = {}) {
   return data;
 }
 
-// Render the agent's markdown-ish replies: links (incl. bare /api/agent/reports/...
-// paths become clickable), bold, lists, code fences.
+// Render the agent's markdown replies (GFM: tables, lists, code fences). Bare
+// /api/agent/reports/... paths and naked URLs become links; root-relative
+// hrefs get the basePath prefix; everything opens in a new tab.
 function renderContent(text) {
-  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  let html = esc(String(text || ""));
-  html = html.replace(/```(?:json|tool)?\n?([\s\S]*?)```/g, (_, code) => `<pre>${code.trim()}</pre>`);
-  html = html.replace(/\[([^\]]+)\]\((\/[^)\s]+|https?:[^)\s]+)\)/g, (_, label, url) =>
-    `<a href="${url.startsWith("/") ? BASE_PATH + url : url}" target="_blank">${label}</a>`);
-  html = html.replace(/(^|[\s(])(\/api\/agent\/reports\/[\w.\-]+\.html)/g, (_, pre, url) =>
-    `${pre}<a href="${BASE_PATH}${url}" target="_blank">open report</a>`);
-  html = html.replace(/(^|[\s(])(https?:\/\/[^\s)<]+)/g, (_, pre, url) => `${pre}<a href="${url}" target="_blank">${url}</a>`);
-  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-  html = html.replace(/^[-*] (.*)$/gm, "<li>$1</li>").replace(/(<li>[\s\S]*?<\/li>)(?!\s*<li>)/g, "<ul>$1</ul>");
-  html = html.replace(/\n{2,}/g, "<br/><br/>").replace(/\n/g, "<br/>");
+  let src = String(text || "");
+  src = src.replace(/(^|[\s(])(\/api\/agent\/reports\/[\w.\-]+\.html)/g, (_, pre, url) => `${pre}[open report](${url})`);
+  src = src.replace(/(^|[\s(])(https?:\/\/[^\s)<\]]+)/g, (_, pre, url) => `${pre}[${url}](${url})`);
+  let html;
+  try {
+    html = marked.parse(src);
+  } catch {
+    html = src.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br/>");
+  }
+  html = html
+    .replace(/<a href="(\/[^"]*)"/g, `<a href="${BASE_PATH}$1"`)
+    .replace(/<a /g, '<a target="_blank" rel="noopener" ');
   return { __html: html };
 }
 
-function ToolChip({ msg }) {
+function ToolStep({ msg }) {
   const [open, setOpen] = useState(false);
   let pretty = msg.content;
   try {
@@ -49,6 +57,30 @@ function ToolChip({ msg }) {
         <span className="subtle">{open ? "hide" : "show"}</span>
       </button>
       {open && <pre>{pretty.slice(0, 4000)}</pre>}
+    </div>
+  );
+}
+
+// All consecutive tool steps of a turn collapse into one "thinking" block.
+function ThinkingBlock({ steps, live }) {
+  const [open, setOpen] = useState(false);
+  const calls = steps.filter((s) => s.kind === "tool-call");
+  const tools = [...new Set(calls.map((s) => s.tool))];
+  return (
+    <div className={`think-block ${live ? "live" : ""}`}>
+      <button className="think-head" onClick={() => setOpen(!open)}>
+        <Brain size={13} />
+        <span>
+          {live ? "Thinking" : "Thought"} · {calls.length} tool {calls.length === 1 ? "call" : "calls"}
+          {tools.length ? <span className="subtle"> · {tools.join(", ")}</span> : null}
+        </span>
+        <ChevronDown size={14} className={`chev ${open ? "open" : ""}`} />
+      </button>
+      {open && (
+        <div className="think-body">
+          {steps.map((m, i) => <ToolStep key={i} msg={m} />)}
+        </div>
+      )}
     </div>
   );
 }
@@ -146,6 +178,23 @@ export default function AgentClient() {
   const thinking = session?.status === "thinking";
   const messages = session?.messages || [];
 
+  // Group consecutive tool steps into one collapsible thinking block.
+  const rendered = [];
+  let group = null;
+  messages.forEach((m, i) => {
+    if (m.kind === "note") return;
+    if (m.kind === "tool" || m.kind === "tool-call") {
+      if (!group) {
+        group = { steps: [], key: `g${i}` };
+        rendered.push(group);
+      }
+      group.steps.push(m);
+    } else {
+      group = null;
+      rendered.push({ msg: m, key: i });
+    }
+  });
+
   return (
     <main className="shell">
       <aside className="sidebar">
@@ -192,7 +241,7 @@ export default function AgentClient() {
                 ))}
               </select>
             </label>
-            <div className="model-toggle" title="Fast = gemma-4-26b-a4b-it · Reasoning = gemma-4-31b-it">
+            <div className="model-toggle" title="Fast = llama-3.1-8b-instant · Reasoning = llama-3.3-70b-versatile">
               <button className={model === "fast" ? "on" : ""} onClick={() => setModel("fast")}><Zap size={13} /> Fast</button>
               <button className={model === "reasoning" ? "on" : ""} onClick={() => setModel("reasoning")}><Brain size={13} /> Reasoning</button>
             </div>
@@ -229,12 +278,14 @@ export default function AgentClient() {
               </div>
             </div>
           )}
-          {messages.map((m, i) => {
-            if (m.kind === "note") return null;
-            if (m.kind === "tool" || m.kind === "tool-call") return <ToolChip key={i} msg={m} />;
+          {rendered.map((item, idx) => {
+            if (item.steps) {
+              return <ThinkingBlock key={item.key} steps={item.steps} live={thinking && idx === rendered.length - 1} />;
+            }
+            const m = item.msg;
             return (
-              <div key={i} className={`bubble ${m.role}`}>
-                <div dangerouslySetInnerHTML={renderContent(m.content)} />
+              <div key={item.key} className={`bubble ${m.role}`}>
+                <div className="md" dangerouslySetInnerHTML={renderContent(m.content)} />
               </div>
             );
           })}
