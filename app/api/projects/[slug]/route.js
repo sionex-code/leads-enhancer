@@ -10,3 +10,10 @@ export async function DELETE(_request, context) {
   store.deleteProject(slug);
   return Response.json({ ok: true });
 }
+
+export async function PATCH(request, context) {
+  const { slug } = await context.params;
+  const body = await request.json().catch(() => ({}));
+  const result = store.setProjectWatchlist(slug, !!body.watchlist);
+  return Response.json(result);
+}

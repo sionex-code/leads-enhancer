@@ -400,6 +400,7 @@ function loadStatus(slugOrName) {
     name: meta.name || slugOrName,
     query: meta.query || "",
     max: meta.max || "",
+    watchlist: !!meta.watchlist,
     dir,
     state: { ...state, activeAlive },
     files: {
@@ -458,6 +459,7 @@ function projectSummary(dir) {
     slug: path.basename(dir),
     name: meta.name || path.basename(dir),
     query: meta.query || "",
+    watchlist: !!meta.watchlist,
     counts,
     running: processAlive(state.activePid),
     updatedAt: meta.updatedAt || state.updatedAt || "",
@@ -477,7 +479,7 @@ function listProjects() {
       }
     })
     .map((dir) => projectSummary(dir))
-    .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+    .sort((a, b) => Number(!!b.watchlist) - Number(!!a.watchlist) || String(b.updatedAt).localeCompare(String(a.updatedAt)));
 }
 
 function spawnRunner(payload) {
@@ -532,6 +534,12 @@ function deleteProject(slugOrName) {
   const state = readState(dir);
   if (state.activePid) killTree(state.activePid);
   if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+}
+
+function setProjectWatchlist(slugOrName, watchlist) {
+  const dir = safeProjectDir(slugOrName);
+  const meta = writeMeta(dir, { watchlist: !!watchlist });
+  return { slug: meta.slug, name: meta.name || slugOrName, watchlist: !!meta.watchlist };
 }
 
 // Pull the next Gmail account from the rotation and drop its cookies into the
@@ -613,6 +621,7 @@ module.exports = {
   stopAll,
   spawnRunner,
   deleteProject,
+  setProjectWatchlist,
   writeRotatedCookies,
   syncProjectToDb,
   db,

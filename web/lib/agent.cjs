@@ -84,6 +84,9 @@ function compactLead(r) {
     category: r.category || "", rating: r.rating || "", project: r.project || "",
     whatsapp: r.whatsapp_status || "", socials: socials.join(",") || "",
     perf_d: r.desktop_performance, seo_d: r.desktop_seo, perf_m: r.mobile_performance, seo_m: r.mobile_seo,
+    watchlist: !!r.watchlist, contact_list: !!r.contact_list,
+    email_status: r.email_status || "unset", outreach_status: r.outreach_status || "new",
+    notes: r.notes ? String(r.notes).slice(0, 240) : "",
   };
 }
 
@@ -91,7 +94,7 @@ const TOOLS = {
   list_projects: {
     description: "List all scraping projects with lead counts and running state. No args.",
     args: {},
-    run: async () => store.listProjects().map((p) => ({ name: p.name, slug: p.slug, query: p.query, leads: p.counts?.raw || 0, running: p.running })),
+    run: async () => store.listProjects().map((p) => ({ name: p.name, slug: p.slug, query: p.query, leads: p.counts?.raw || 0, running: p.running, watchlist: !!p.watchlist })),
   },
   project_status: {
     description: "Status of one project: stage states, counts, latest message.",
@@ -104,10 +107,44 @@ const TOOLS = {
   },
   get_leads: {
     description: "Query leads from the global database. All args optional.",
-    args: { project: "filter by project name", search: "text search (name/domain/phone/email/category)", has_email: "true to only return leads with an email", limit: "max rows, default 20 (keep small!)" },
-    run: async ({ project = "", search = "", has_email = false, limit = 20 } = {}) => {
-      const { total, rows } = db.queryLeads({ project, search, hasEmail: has_email === true || has_email === "true", limit: Math.min(Number(limit) || 20, 50) });
+    args: { project: "filter by project name", search: "text search (name/domain/phone/email/category/notes)", workflow: "optional: watchlist, contacts, email-ready, queued, sent, complete, skipped, needs-action", has_email: "true to only return leads with an email", limit: "max rows, default 20 (keep small!)" },
+    run: async ({ project = "", search = "", workflow = "", has_email = false, limit = 20 } = {}) => {
+      const { total, rows } = db.queryLeads({ project, search, workflow, hasEmail: has_email === true || has_email === "true", limit: Math.min(Number(limit) || 20, 50) });
       return { total, shown: rows.length, leads: rows.map(compactLead) };
+    },
+  },
+  update_lead_workflow: {
+    description: "Update one lead's workflow fields: watchlist/contact list, email decision, outreach status, and notes.",
+    args: { id: "lead id from get_leads", watchlist: "true/false optional", contact_list: "true/false optional", email_status: "unset|send|do_not_send|later optional", outreach_status: "new|queued|sent|complete|skipped optional", notes: "optional notes to save" },
+    run: async (args = {}) => {
+      if (!args.id) throw new Error("id required");
+      const lead = db.updateLeadWorkflow(args.id, args);
+      if (!lead) throw new Error("Lead not found");
+      return { updated: compactLead(lead) };
+    },
+  },
+  mark_message_sent: {
+    description: "Mark a lead as contacted/message sent, optionally adding notes.",
+    args: { id: "lead id from get_leads", notes: "optional notes about what was sent" },
+    run: async ({ id, notes = "" } = {}) => {
+      if (!id) throw new Error("id required");
+      const current = db.getLead(id);
+      if (!current) throw new Error("Lead not found");
+      const nextNotes = notes ? [current.notes, `[${new Date().toISOString().slice(0, 10)}] ${notes}`].filter(Boolean).join("\n") : current.notes;
+      const lead = db.updateLeadWorkflow(id, { contact_list: true, email_status: current.email_status === "unset" ? "send" : current.email_status, outreach_status: "sent", notes: nextNotes });
+      return { updated: compactLead(lead) };
+    },
+  },
+  complete_lead: {
+    description: "Mark a lead workflow complete, optionally adding notes.",
+    args: { id: "lead id from get_leads", notes: "optional completion notes" },
+    run: async ({ id, notes = "" } = {}) => {
+      if (!id) throw new Error("id required");
+      const current = db.getLead(id);
+      if (!current) throw new Error("Lead not found");
+      const nextNotes = notes ? [current.notes, `[${new Date().toISOString().slice(0, 10)}] ${notes}`].filter(Boolean).join("\n") : current.notes;
+      const lead = db.updateLeadWorkflow(id, { contact_list: true, outreach_status: "complete", notes: nextNotes });
+      return { updated: compactLead(lead) };
     },
   },
   delete_lead: {
@@ -117,6 +154,26 @@ const TOOLS = {
       if (id) return { deleted: db.deleteLead(id) };
       if (domain) return { deleted: db.deleteLeadsWhere({ domain }) };
       throw new Error("Provide id or domain");
+    },
+  },
+  set_project_watchlist: {
+    description: "Add or remove a scraping project from the project watch list.",
+    args: { project: "project name or slug", watchlist: "true to watch, false to remove" },
+    run: async ({ project, watchlist = true } = {}) => {
+      if (!project) throw new Error("project required");
+      return store.setProjectWatchlist(project, watchlist === true || watchlist === "true");
+    },
+  },
+  delete_project: {
+    description: "Delete a stopped scraping project and its output files. Refuses to delete a running project.",
+    args: { project: "project name or slug" },
+    run: async ({ project } = {}) => {
+      if (!project) throw new Error("project required");
+      const dir = store.safeProjectDir(project);
+      const state = store.readState(dir);
+      if (state.activePid && store.processAlive(state.activePid)) throw new Error("Stop the project before deleting it");
+      store.deleteProject(project);
+      return { deleted: true, project };
     },
   },
   capture_leads: {
@@ -231,6 +288,7 @@ RULES:
 - YOU are the only one who can run tools. NEVER tell the user to call a tool or describe which tool could be used — emit the json block and run it yourself, immediately.
 - Never invent data; always read it via tools.
 - Scraping is scrape-ONLY by default: never pass enrich=true to capture_leads and never call enrich_leads unless the user explicitly asks to enrich. When a scrape finishes, show the leads (get_leads) right away.
+- Lead workflow fields are real CRM state. Use update_lead_workflow, mark_message_sent, and complete_lead when the user asks to watch, contact, note, mark sent, skip, or complete leads.
 - Background tasks (scrape/enrich/whatsapp/reports) return immediately — report the started state and job/project to poll; do not loop on status checks more than twice in one turn. Tell the user to ask "check status" later.
 - When reports finish, give the user links: /api/agent/reports/<file>.
 - Keep answers short and concrete. Use markdown lists/tables sparingly.
@@ -286,12 +344,14 @@ async function processTurn(sessionId) {
     let nudges = 0;
     for (let step = 0; step < MAX_STEPS; step++) {
       if (stopRequests.has(sessionId)) {
-        push(session, { role: "assistant", content: "⏹ Stopped — let me know how to continue." });
+        push(session, { role: "assistant", content: "Stopped. Tell me how to continue." });
         break;
       }
+      session.statusDetail = step === 0 ? "planning" : "reviewing tool result";
+      writeSession(session);
       const reply = await llm.chat(buildMessages(session), { model: session.model || "fast", maxTokens: 1600, temperature: 0.2 });
       if (stopRequests.has(sessionId)) {
-        push(session, { role: "assistant", content: "⏹ Stopped — let me know how to continue." });
+        push(session, { role: "assistant", content: "Stopped. Tell me how to continue." });
         break;
       }
       const call = parseToolCall(reply);

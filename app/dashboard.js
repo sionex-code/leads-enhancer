@@ -19,6 +19,7 @@ import {
   RotateCcw,
   Search,
   ShieldCheck,
+  Star,
   Trash2,
   Zap,
 } from "lucide-react";
@@ -295,6 +296,7 @@ export default function Dashboard() {
 
   async function projectAction(action, method = "POST") {
     if (!selected) return;
+    if (action === "delete" && !confirm(`Delete "${status?.name || selectedProject?.name || selected}"? This removes the project files from disk.`)) return;
     setBusy(action);
     setError("");
     try {
@@ -351,6 +353,22 @@ export default function Dashboard() {
     await loadAccounts();
   }
 
+  async function toggleProjectWatch(project) {
+    const item = project || selectedProject;
+    if (!item?.slug) return;
+    setError("");
+    try {
+      await jsonFetch(`/api/projects/${encodeURIComponent(item.slug)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ watchlist: !item.watchlist }),
+      });
+      await loadProjects();
+      if (item.slug === selected) await loadStatus(item.slug);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   const stages = status?.state?.stages || {};
   const leads = status?.leads || [];
   // Trust either source: the projects list (authoritative, refreshed every tick)
@@ -386,12 +404,23 @@ export default function Dashboard() {
               <span>
                 <strong>
                   {project.running && <span className="run-dot" title="Running" />}
+                  {project.watchlist && <Star size={13} className="watch-icon" fill="currentColor" />}
                   {project.name}
                 </strong>
                 <br />
                 <span className="subtle">
                   {project.counts?.raw || 0} leads | {project.counts?.desktopAudits || 0}/{project.counts?.mobileAudits || 0} audits
                 </span>
+              </span>
+              <span
+                className={`project-watch ${project.watchlist ? "on" : ""}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleProjectWatch(project);
+                }}
+                title={project.watchlist ? "Remove from watch list" : "Add to watch list"}
+              >
+                <Star size={14} fill={project.watchlist ? "currentColor" : "none"} />
               </span>
             </button>
           ))}
@@ -405,7 +434,21 @@ export default function Dashboard() {
             <h1>{status?.name || selectedProject?.name || "Lead Generation"}</h1>
             <div className="subtle">{status?.query || form.query}</div>
           </div>
-          <div className="subtle">{busy || (running ? "Running" : status?.state?.message || "Ready")}</div>
+          <div className="topbar-actions">
+            <span className="subtle">{busy || (running ? "Running" : status?.state?.message || "Ready")}</span>
+            <button
+              className={`ghost ${selectedProject?.watchlist ? "watch-on" : ""}`}
+              disabled={!selectedProject}
+              onClick={() => toggleProjectWatch()}
+              title={selectedProject?.watchlist ? "Remove project from watch list" : "Add project to watch list"}
+            >
+              <Star size={15} fill={selectedProject?.watchlist ? "currentColor" : "none"} />
+              Watch
+            </button>
+            <button className="danger" disabled={!!busy || running || !selected} onClick={() => projectAction("delete")}>
+              <Trash2 size={15} /> Delete
+            </button>
+          </div>
         </header>
 
         {/* Mobile-only project switcher (the sidebar is hidden on small screens) */}
@@ -418,6 +461,7 @@ export default function Dashboard() {
                 onClick={() => setSelected(p.slug)}
               >
                 {p.running && <span className="run-dot" />}
+                {p.watchlist && <Star size={13} fill="currentColor" />}
                 {p.name}
               </button>
             ))}

@@ -3,9 +3,58 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import MobileNav from "../components/MobileNav";
-import { Bot, Database, Download, ExternalLink, FileText, Loader2, MapPin, Phone, Mail, Search, ShieldCheck, Trash2, X } from "lucide-react";
+import {
+  Ban,
+  Bot,
+  CheckCircle2,
+  Clock3,
+  Database,
+  Download,
+  ExternalLink,
+  FileText,
+  Loader2,
+  Mail,
+  MailCheck,
+  MapPin,
+  MessageSquare,
+  Phone,
+  Search,
+  Send,
+  ShieldCheck,
+  Star,
+  Trash2,
+  UserPlus,
+  Users,
+  X,
+} from "lucide-react";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
+const WORKFLOWS = [
+  { key: "", label: "All" },
+  { key: "needs-action", label: "Needs action" },
+  { key: "watchlist", label: "Watch" },
+  { key: "contacts", label: "Contacts" },
+  { key: "email-ready", label: "Email ready" },
+  { key: "queued", label: "Queued" },
+  { key: "sent", label: "Sent" },
+  { key: "complete", label: "Complete" },
+];
+
+const EMAIL_STATUS = {
+  unset: "Unset",
+  send: "Send email",
+  do_not_send: "Do not email",
+  later: "Later",
+};
+
+const OUTREACH_STATUS = {
+  new: "New",
+  queued: "Queued",
+  sent: "Sent",
+  complete: "Complete",
+  skipped: "Skipped",
+};
 
 async function jsonFetch(url, options = {}) {
   const res = await fetch(`${BASE_PATH}${url}`, {
@@ -26,12 +75,24 @@ function scoreClass(value) {
 }
 
 function Score({ label, value }) {
-  if (value === "" || value === null || value === undefined) return <span className="score-pill empty">{label} —</span>;
+  if (value === "" || value === null || value === undefined) return <span className="score-pill empty">{label} -</span>;
   return (
     <span className={`score-pill ${scoreClass(value)}`} title={`${label}: ${value}/100`}>
       {label} {value}
     </span>
   );
+}
+
+function WorkflowBadge({ lead }) {
+  const status = lead.outreach_status || "new";
+  const cls = status === "complete" ? "good" : status === "sent" ? "sent" : status === "queued" ? "avg" : status === "skipped" ? "muted" : "";
+  return <span className={`workflow-badge ${cls}`}>{OUTREACH_STATUS[status] || status}</span>;
+}
+
+function EmailBadge({ status }) {
+  const value = status || "unset";
+  const cls = value === "send" ? "good" : value === "do_not_send" ? "bad" : value === "later" ? "avg" : "muted";
+  return <span className={`workflow-badge ${cls}`}>{EMAIL_STATUS[value] || value}</span>;
 }
 
 const SOCIAL_FIELDS = [
@@ -52,7 +113,7 @@ function Socials({ lead, full = false }) {
   return (
     <>
       {present.map(([key, label]) => (
-        <a key={key} href={lead[key]} target="_blank" title={lead[key]} className={full ? "chip-link" : ""}>
+        <a key={key} href={lead[key]} target="_blank" rel="noreferrer" title={lead[key]} className={full ? "chip-link" : ""}>
           {full ? label : label.slice(0, 2).toUpperCase()}
         </a>
       ))}
@@ -60,11 +121,66 @@ function Socials({ lead, full = false }) {
   );
 }
 
-// ---- per-lead drawer: full detail + independent report + delete ----------------
-function LeadDrawer({ lead, onClose, onDeleted }) {
+function QuickLeadActions({ lead, onPatch, compact = false }) {
+  const busy = false;
+  const iconSize = compact ? 14 : 15;
+  return (
+    <div className={compact ? "quick-actions compact" : "quick-actions"} onClick={(e) => e.stopPropagation()}>
+      <button
+        className={`ghost ${lead.watchlist ? "watch-on" : ""}`}
+        disabled={busy}
+        onClick={() => onPatch(lead.id, { watchlist: !lead.watchlist })}
+        title={lead.watchlist ? "Remove from watch list" : "Add to watch list"}
+      >
+        <Star size={iconSize} fill={lead.watchlist ? "currentColor" : "none"} />
+        {!compact && "Watch"}
+      </button>
+      <button
+        className={`ghost ${lead.contact_list ? "contact-on" : ""}`}
+        disabled={busy}
+        onClick={() => onPatch(lead.id, { contact_list: !lead.contact_list })}
+        title={lead.contact_list ? "Remove from contact list" : "Add to contact list"}
+      >
+        <UserPlus size={iconSize} />
+        {!compact && "Contact"}
+      </button>
+      <button
+        className="ghost"
+        disabled={busy}
+        onClick={() => onPatch(lead.id, { email_status: lead.email_status === "send" ? "unset" : "send", contact_list: true })}
+        title="Toggle send email"
+      >
+        <MailCheck size={iconSize} />
+        {!compact && "Email"}
+      </button>
+      <button
+        className="ghost"
+        disabled={busy}
+        onClick={() => onPatch(lead.id, { outreach_status: "sent", contact_list: true })}
+        title="Mark message sent"
+      >
+        <Send size={iconSize} />
+        {!compact && "Sent"}
+      </button>
+      <button
+        className="ghost"
+        disabled={busy}
+        onClick={() => onPatch(lead.id, { outreach_status: "complete", contact_list: true })}
+        title="Mark complete"
+      >
+        <CheckCircle2 size={iconSize} />
+        {!compact && "Done"}
+      </button>
+    </div>
+  );
+}
+
+function LeadDrawer({ lead, onClose, onDeleted, onPatch }) {
   const [reports, setReports] = useState([]);
-  const [job, setJob] = useState(null); // {id, status, log}
+  const [job, setJob] = useState(null);
   const [error, setError] = useState("");
+  const [notes, setNotes] = useState(lead.notes || "");
+  const [saving, setSaving] = useState(false);
   const pollRef = useRef(null);
 
   const loadReports = useCallback(async () => {
@@ -78,9 +194,10 @@ function LeadDrawer({ lead, onClose, onDeleted }) {
     setReports([]);
     setJob(null);
     setError("");
+    setNotes(lead.notes || "");
     loadReports();
     return () => clearTimeout(pollRef.current);
-  }, [lead.id, loadReports]);
+  }, [lead.id, lead.notes, loadReports]);
 
   async function pollJob(jobId) {
     try {
@@ -94,6 +211,22 @@ function LeadDrawer({ lead, onClose, onDeleted }) {
     } catch {
       pollRef.current = setTimeout(() => pollJob(jobId), 4000);
     }
+  }
+
+  async function patch(patchBody) {
+    setSaving(true);
+    setError("");
+    try {
+      await onPatch(lead.id, patchBody);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveNotes() {
+    await patch({ notes });
   }
 
   async function generate() {
@@ -117,7 +250,7 @@ function LeadDrawer({ lead, onClose, onDeleted }) {
   }
 
   async function remove() {
-    if (!confirm(`Delete "${lead.name}" from the database? This is permanent.`)) return;
+    if (!confirm(`Delete "${lead.name || "this lead"}" from the database? This is permanent.`)) return;
     try {
       await jsonFetch(`/api/leads/${lead.id}`, { method: "DELETE" });
       onDeleted(lead.id);
@@ -130,27 +263,81 @@ function LeadDrawer({ lead, onClose, onDeleted }) {
 
   return (
     <div className="drawer-backdrop" onClick={onClose}>
-      <aside className="drawer" onClick={(e) => e.stopPropagation()}>
+      <aside className="drawer lead-drawer" onClick={(e) => e.stopPropagation()}>
         <header className="drawer-head">
           <div>
             <h2>{lead.name || "Unknown"}</h2>
-            <div className="subtle">{lead.category || ""} {lead.rating ? `· ★ ${lead.rating} (${lead.reviews || "?"})` : ""}</div>
+            <div className="lead-meta-line">
+              <WorkflowBadge lead={lead} />
+              <EmailBadge status={lead.email_status} />
+              {lead.watchlist ? <span className="workflow-badge watch"><Star size={12} fill="currentColor" /> Watch</span> : null}
+              {lead.contact_list ? <span className="workflow-badge contact"><Users size={12} /> Contact</span> : null}
+            </div>
           </div>
           <button className="icon" onClick={onClose} title="Close"><X size={17} /></button>
         </header>
 
         <div className="drawer-body">
+          <section className="drawer-card workflow-card">
+            <h3>Workflow</h3>
+            <div className="workflow-grid">
+              <button className={lead.watchlist ? "toggle-card on" : "toggle-card"} onClick={() => patch({ watchlist: !lead.watchlist })}>
+                <Star size={16} fill={lead.watchlist ? "currentColor" : "none"} />
+                <span>Watch list</span>
+              </button>
+              <button className={lead.contact_list ? "toggle-card on" : "toggle-card"} onClick={() => patch({ contact_list: !lead.contact_list })}>
+                <UserPlus size={16} />
+                <span>Contact list</span>
+              </button>
+            </div>
+            <div className="drawer-field-grid">
+              <label className="field">
+                <span>Email decision</span>
+                <select value={lead.email_status || "unset"} onChange={(e) => patch({ email_status: e.target.value })}>
+                  {Object.entries(EMAIL_STATUS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                </select>
+              </label>
+              <label className="field">
+                <span>Outreach status</span>
+                <select value={lead.outreach_status || "new"} onChange={(e) => patch({ outreach_status: e.target.value, contact_list: e.target.value !== "new" })}>
+                  {Object.entries(OUTREACH_STATUS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                </select>
+              </label>
+            </div>
+            <textarea
+              className="notes-box"
+              placeholder="Notes about outreach, objection, next step, owner, or email copy..."
+              value={notes}
+              rows={5}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+            <div className="drawer-actions">
+              <button className="primary" disabled={saving} onClick={saveNotes}>
+                <MessageSquare size={15} /> Save notes
+              </button>
+              <button disabled={saving} onClick={() => patch({ outreach_status: "sent", contact_list: true })}>
+                <Send size={15} /> Mark sent
+              </button>
+              <button disabled={saving} onClick={() => patch({ outreach_status: "complete", contact_list: true })}>
+                <CheckCircle2 size={15} /> Complete
+              </button>
+              <button disabled={saving} onClick={() => patch({ outreach_status: "skipped", email_status: "do_not_send" })}>
+                <Ban size={15} /> Skip
+              </button>
+            </div>
+          </section>
+
           <section className="drawer-card">
             <h3>Contact</h3>
             <div className="drawer-rows">
-              {lead.phone && <div><Phone size={13} /> {lead.phone} {lead.whatsapp_status === "yes" && <span className="wa-badge">WA ✓</span>}{lead.whatsapp_status === "no" && <span className="wa-badge wa-no">WA ✗</span>}</div>}
+              {lead.phone && <div><Phone size={13} /> {lead.phone} {lead.whatsapp_status === "yes" && <span className="wa-badge">WA yes</span>}{lead.whatsapp_status === "no" && <span className="wa-badge wa-no">WA no</span>}</div>}
               {lead.email && <div><Mail size={13} /> <a href={`mailto:${lead.email}`}>{lead.email}</a></div>}
               {lead.all_emails && lead.all_emails !== lead.email && <div className="subtle">Also: {lead.all_emails}</div>}
               {lead.address && <div><MapPin size={13} /> {lead.address}</div>}
               {lead.website && (
-                <div><ExternalLink size={13} /> <a href={lead.website} target="_blank">{lead.domain || lead.website}</a></div>
+                <div><ExternalLink size={13} /> <a href={lead.website} target="_blank" rel="noreferrer">{lead.domain || lead.website}</a></div>
               )}
-              {lead.maps_url && <div><a href={lead.maps_url} target="_blank">Open on Google Maps</a></div>}
+              {lead.maps_url && <div><a href={lead.maps_url} target="_blank" rel="noreferrer">Open on Google Maps</a></div>}
             </div>
           </section>
 
@@ -160,7 +347,7 @@ function LeadDrawer({ lead, onClose, onDeleted }) {
           </section>
 
           <section className="drawer-card">
-            <h3>Website health (Lighthouse)</h3>
+            <h3>Website health</h3>
             <div className="drawer-scores">
               <div>
                 <span className="subtle">Desktop</span>
@@ -179,17 +366,17 @@ function LeadDrawer({ lead, onClose, onDeleted }) {
 
           <section className="drawer-card">
             <h3>Independent report</h3>
-            <p className="subtle">Live site inspection + Lighthouse (desktop & mobile) + social audit + AI analysis. Takes ~2–3 minutes.</p>
+            <p className="subtle">Live site inspection, Lighthouse desktop/mobile, social audit, and AI analysis.</p>
             {reports.map((r) => (
-              <a key={r.file} className="report-link" href={`${BASE_PATH}/api/agent/reports/${r.file}`} target="_blank">
+              <a key={r.file} className="report-link" href={`${BASE_PATH}/api/agent/reports/${r.file}`} target="_blank" rel="noreferrer">
                 <FileText size={14} /> {r.file} <span className="subtle">{new Date(r.createdAt).toLocaleString()}</span>
               </a>
             ))}
             {generating && (
               <div className="job-progress">
-                <Loader2 size={14} className="spin" /> {job.cancelRequested ? "Stopping…" : "Generating…"}
+                <Loader2 size={14} className="spin" /> {job.cancelRequested ? "Stopping..." : "Generating..."}
                 <button className="job-stop" onClick={cancelJob} title="Stop this report job" disabled={!!job.cancelRequested}>Stop</button>
-                <div className="subtle">{(job.log || []).slice(-2).join(" · ")}</div>
+                <div className="subtle">{(job.log || []).slice(-2).join(" | ")}</div>
               </div>
             )}
             {job?.status === "failed" && <div className="chat-error">Report failed: {job.error}</div>}
@@ -201,7 +388,7 @@ function LeadDrawer({ lead, onClose, onDeleted }) {
               </button>
               <button className="danger" onClick={remove}><Trash2 size={15} /> Delete lead</button>
             </div>
-            {!lead.website && <div className="subtle">No website on this lead — reports need a website.</div>}
+            {!lead.website && <div className="subtle">No website on this lead. Reports need a website.</div>}
           </section>
 
           <section className="drawer-card">
@@ -210,7 +397,9 @@ function LeadDrawer({ lead, onClose, onDeleted }) {
               <div>Project: {lead.project || "-"}</div>
               <div>Query: {lead.query || "-"}</div>
               {lead.hours && <div>Hours: {lead.hours}</div>}
-              <div>First seen: {lead.first_seen?.slice(0, 10)} · Updated: {lead.last_updated?.slice(0, 10)}</div>
+              <div>First seen: {lead.first_seen?.slice(0, 10)} | Updated: {lead.last_updated?.slice(0, 10)}</div>
+              {lead.message_sent_at && <div>Sent: {new Date(lead.message_sent_at).toLocaleString()}</div>}
+              {lead.completed_at && <div>Completed: {new Date(lead.completed_at).toLocaleString()}</div>}
             </div>
           </section>
         </div>
@@ -223,34 +412,65 @@ export default function LeadsPage() {
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [stats, setStats] = useState(null);
+  const [projects, setProjects] = useState([]);
   const [search, setSearch] = useState("");
+  const [project, setProject] = useState("");
+  const [workflow, setWorkflow] = useState("");
   const [hasEmail, setHasEmail] = useState(false);
   const [minScore, setMinScore] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [active, setActive] = useState(null); // lead opened in the drawer
+  const [active, setActive] = useState(null);
+
+  const mergeLead = useCallback((lead) => {
+    setRows((current) => current.map((row) => (row.id === lead.id ? lead : row)));
+    setActive((current) => (current?.id === lead.id ? lead : current));
+  }, []);
+
+  const patchLead = useCallback(async (id, patch) => {
+    const data = await jsonFetch(`/api/leads/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+    if (data.lead) mergeLead(data.lead);
+    return data.lead;
+  }, [mergeLead]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (search) params.set("search", search);
+      if (project) params.set("project", project);
+      if (workflow) params.set("workflow", workflow);
       if (hasEmail) params.set("hasEmail", "1");
       if (minScore) params.set("minScore", String(minScore));
       const data = await jsonFetch(`/api/leads?${params.toString()}`);
       setRows(data.rows || []);
       setTotal(data.total || 0);
       setStats(data.stats || null);
+      setProjects(data.projects || []);
+      if (active?.id) {
+        const next = (data.rows || []).find((row) => row.id === active.id);
+        if (next) setActive(next);
+      }
     } catch {
       setRows([]);
     } finally {
       setLoading(false);
     }
-  }, [search, hasEmail, minScore]);
+  }, [active?.id, hasEmail, minScore, project, search, workflow]);
 
   useEffect(() => {
     const id = setTimeout(load, 250);
     return () => clearTimeout(id);
   }, [load]);
+
+  const statTiles = [
+    ["Total", stats?.total || 0],
+    ["Watch", stats?.watchlist || 0],
+    ["Contacts", stats?.contactList || 0],
+    ["Email ready", stats?.emailReady || 0],
+    ["Queued", stats?.queued || 0],
+    ["Sent", stats?.sent || 0],
+    ["Done", stats?.completed || 0],
+  ];
 
   return (
     <main className="shell">
@@ -265,123 +485,159 @@ export default function LeadsPage() {
           <Link className="nav-link" href="/agent"><Bot size={15} /> Agent</Link>
         </nav>
         {stats && (
-          <div className="db-stats">
-            <div><strong>{stats.total}</strong><span className="subtle">unique leads</span></div>
-            <div><strong>{stats.withEmail}</strong><span className="subtle">with email</span></div>
-            <div><strong>{stats.withWebsite}</strong><span className="subtle">with website</span></div>
-            <div><strong>{stats.audited}</strong><span className="subtle">audited</span></div>
-            <div><strong>{stats.projects}</strong><span className="subtle">projects</span></div>
+          <div className="db-stats crm-stats">
+            {statTiles.map(([label, value]) => (
+              <button key={label} className="stat-mini" onClick={() => {
+                if (label === "Watch") setWorkflow("watchlist");
+                if (label === "Contacts") setWorkflow("contacts");
+                if (label === "Email ready") setWorkflow("email-ready");
+                if (label === "Queued") setWorkflow("queued");
+                if (label === "Sent") setWorkflow("sent");
+                if (label === "Done") setWorkflow("complete");
+                if (label === "Total") setWorkflow("");
+              }}>
+                <strong>{value}</strong>
+                <span>{label}</span>
+              </button>
+            ))}
           </div>
         )}
       </aside>
 
       <section className="project-main">
-        <header className="topbar">
+        <header className="topbar lead-topbar">
           <div>
-            <h1>All leads</h1>
+            <h1>Lead manager</h1>
             <div className="subtle">
-              Deduped across every project. Click a lead to inspect it, generate its report or delete it. {total} match.
+              {total} lead{total === 1 ? "" : "s"} match. Manage watch lists, contacts, email intent, outreach status, and notes.
             </div>
           </div>
-          <a href={`${BASE_PATH}/api/leads/export`}>
-            <button className="primary"><Download size={16} /> Export CSV</button>
-          </a>
+          <div className="topbar-actions">
+            <a href={`${BASE_PATH}/api/leads/export`}>
+              <button className="primary"><Download size={16} /> Export CSV</button>
+            </a>
+          </div>
         </header>
 
-        <div className="work">
-          <section className="panel filters">
-            <div className="field search-field">
-              <Search size={15} />
-              <input placeholder="Search name, domain, phone, email, category…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <div className="work leads-work">
+          <section className="panel crm-toolbar">
+            <div className="workflow-tabs">
+              {WORKFLOWS.map((item) => (
+                <button key={item.key || "all"} className={workflow === item.key ? "active" : ""} onClick={() => setWorkflow(item.key)}>
+                  {item.label}
+                </button>
+              ))}
             </div>
-            <label className="check">
-              <input type="checkbox" checked={hasEmail} onChange={(e) => setHasEmail(e.target.checked)} /> Has email
-            </label>
-            <label className="check">
-              Min performance
-              <select value={minScore} onChange={(e) => setMinScore(Number(e.target.value))}>
-                <option value={0}>any</option>
-                <option value={50}>50+</option>
-                <option value={90}>90+</option>
-              </select>
-            </label>
-            <span className="subtle">{loading ? "Loading…" : `${rows.length} shown`}</span>
+            <div className="filters lead-filters">
+              <div className="field search-field">
+                <Search size={15} />
+                <input placeholder="Search name, domain, phone, email, category, notes..." value={search} onChange={(e) => setSearch(e.target.value)} />
+              </div>
+              <label className="filter-select">
+                Project
+                <select value={project} onChange={(e) => setProject(e.target.value)}>
+                  <option value="">All projects</option>
+                  {projects.map((name) => <option key={name} value={name}>{name}</option>)}
+                </select>
+              </label>
+              <label className="check">
+                <input type="checkbox" checked={hasEmail} onChange={(e) => setHasEmail(e.target.checked)} /> Has email
+              </label>
+              <label className="filter-select">
+                Min perf
+                <select value={minScore} onChange={(e) => setMinScore(Number(e.target.value))}>
+                  <option value={0}>Any</option>
+                  <option value={50}>50+</option>
+                  <option value={90}>90+</option>
+                </select>
+              </label>
+              <span className="subtle">{loading ? "Loading..." : `${rows.length} shown`}</span>
+            </div>
           </section>
 
-          <div className="panel table-wrap tall">
+          <div className="panel table-wrap tall leads-table">
             {!rows.length ? (
-              <div className="empty">{loading ? "Loading…" : "No leads in the database yet. Run a project to populate it."}</div>
+              <div className="empty">{loading ? "Loading..." : "No leads match this view."}</div>
             ) : (
               <>
-              <div className="lead-cards only-mobile">
-                {rows.map((lead) => (
-                  <div className="lead-card tappable" key={`m-${lead.id}`} onClick={() => setActive(lead)}>
-                    <div className="lead-card-head">
-                      <strong>{lead.name || "Unknown"}</strong>
-                      <span className="subtle">{lead.category || lead.address || ""}</span>
-                    </div>
-                    <div className="lead-card-row">
-                      {lead.phone && <span>{lead.phone}</span>}
-                      {lead.whatsapp_status === "yes" && <span className="wa-badge">WA ✓</span>}
-                      {lead.domain && <span className="subtle">{lead.domain}</span>}
-                    </div>
-                    {lead.email && <div className="lead-card-row email-row">{lead.email}</div>}
-                    <div className="lead-card-row score-cell">
-                      <Score label="Perf" value={lead.desktop_performance} />
-                      <Score label="SEO" value={lead.desktop_seo} />
-                      <Score label="M-Perf" value={lead.mobile_performance} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <table className="only-desktop">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Phone</th>
-                    <th>Website</th>
-                    <th>Email</th>
-                    <th>Socials</th>
-                    <th>Desktop</th>
-                    <th>Mobile</th>
-                    <th>Project</th>
-                  </tr>
-                </thead>
-                <tbody>
+                <div className="lead-cards only-mobile">
                   {rows.map((lead) => (
-                    <tr key={lead.id} className="row-click" onClick={() => setActive(lead)}>
-                      <td className="name-cell">
-                        {lead.name || "Unknown"}
-                        <br />
-                        <span className="subtle">{lead.category || lead.address || ""}</span>
-                      </td>
-                      <td>{lead.phone || "-"}</td>
-                      <td onClick={(e) => e.stopPropagation()}>
-                        {lead.website ? (
-                          <a href={lead.website} target="_blank">{lead.domain || lead.website}</a>
-                        ) : (
-                          <span className="subtle">none</span>
-                        )}
-                      </td>
-                      <td onClick={(e) => e.stopPropagation()}>
-                        {lead.email ? <a href={`mailto:${lead.email}`}>{lead.email}</a> : <span className="subtle">{lead.enrich_status || "-"}</span>}
-                      </td>
-                      <td className="socials" onClick={(e) => e.stopPropagation()}>
-                        <Socials lead={lead} />
-                      </td>
-                      <td className="score-cell">
-                        <Score label="Perf" value={lead.desktop_performance} />
-                        <Score label="SEO" value={lead.desktop_seo} />
-                      </td>
-                      <td className="score-cell">
-                        <Score label="Perf" value={lead.mobile_performance} />
-                        <Score label="SEO" value={lead.mobile_seo} />
-                      </td>
-                      <td className="subtle">{lead.project || "-"}</td>
-                    </tr>
+                    <div className="lead-card tappable crm-lead-card" key={`m-${lead.id}`} onClick={() => setActive(lead)}>
+                      <div className="lead-card-head">
+                        <strong>{lead.name || "Unknown"}</strong>
+                        <span className="subtle">{lead.category || lead.address || lead.project || ""}</span>
+                      </div>
+                      <div className="lead-meta-line">
+                        <WorkflowBadge lead={lead} />
+                        <EmailBadge status={lead.email_status} />
+                        {lead.watchlist ? <span className="workflow-badge watch"><Star size={12} fill="currentColor" /> Watch</span> : null}
+                      </div>
+                      <div className="lead-card-row">
+                        {lead.phone && <span>{lead.phone}</span>}
+                        {lead.whatsapp_status === "yes" && <span className="wa-badge">WA yes</span>}
+                        {lead.domain && <span className="subtle">{lead.domain}</span>}
+                      </div>
+                      {lead.email && <div className="lead-card-row email-row">{lead.email}</div>}
+                      {lead.notes && <div className="lead-note-preview">{lead.notes}</div>}
+                      <QuickLeadActions lead={lead} onPatch={patchLead} compact />
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+                <table className="only-desktop crm-table">
+                  <thead>
+                    <tr>
+                      <th>Lead</th>
+                      <th>Contact</th>
+                      <th>Workflow</th>
+                      <th>Email</th>
+                      <th>Website</th>
+                      <th>Health</th>
+                      <th>Project</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((lead) => (
+                      <tr key={lead.id} className="row-click" onClick={() => setActive(lead)}>
+                        <td className="name-cell">
+                          {lead.name || "Unknown"}
+                          <br />
+                          <span className="subtle">{lead.category || lead.address || ""}</span>
+                          {lead.notes && <div className="lead-note-preview">{lead.notes}</div>}
+                        </td>
+                        <td>
+                          {lead.phone || "-"}
+                          {lead.whatsapp_status === "yes" && <> <span className="wa-badge">WA yes</span></>}
+                          <br />
+                          {lead.email ? <a onClick={(e) => e.stopPropagation()} href={`mailto:${lead.email}`}>{lead.email}</a> : <span className="subtle">{lead.enrich_status || "no email"}</span>}
+                        </td>
+                        <td>
+                          <div className="lead-meta-line">
+                            <WorkflowBadge lead={lead} />
+                            {lead.watchlist ? <span className="workflow-badge watch"><Star size={12} fill="currentColor" /> Watch</span> : null}
+                            {lead.contact_list ? <span className="workflow-badge contact"><Users size={12} /> Contact</span> : null}
+                          </div>
+                        </td>
+                        <td><EmailBadge status={lead.email_status} /></td>
+                        <td onClick={(e) => e.stopPropagation()}>
+                          {lead.website ? (
+                            <a href={lead.website} target="_blank" rel="noreferrer">{lead.domain || lead.website}</a>
+                          ) : (
+                            <span className="subtle">none</span>
+                          )}
+                          <div className="socials"><Socials lead={lead} /></div>
+                        </td>
+                        <td className="score-cell">
+                          <Score label="D" value={lead.desktop_performance} />
+                          <Score label="M" value={lead.mobile_performance} />
+                          <Score label="SEO" value={lead.desktop_seo || lead.mobile_seo} />
+                        </td>
+                        <td className="subtle">{lead.project || "-"}</td>
+                        <td><QuickLeadActions lead={lead} onPatch={patchLead} compact /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </>
             )}
           </div>
@@ -393,6 +649,7 @@ export default function LeadsPage() {
         <LeadDrawer
           lead={active}
           onClose={() => setActive(null)}
+          onPatch={patchLead}
           onDeleted={(id) => {
             setActive(null);
             setRows((r) => r.filter((x) => x.id !== id));

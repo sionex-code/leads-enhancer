@@ -114,7 +114,10 @@ export default function AgentClient() {
       setSession(data);
       if (data.project) setProject(data.project);
       if (data.model) setModel(data.model);
-    } catch {}
+      return data;
+    } catch {
+      return null;
+    }
   }, []);
 
   useEffect(() => {
@@ -130,8 +133,9 @@ export default function AgentClient() {
     let timer;
     const tick = async () => {
       if (cancelled) return;
-      await loadSession(sessionId);
-      if (!cancelled) timer = setTimeout(tick, 1200);
+      const data = await loadSession(sessionId);
+      const interval = data?.status === "thinking" ? 1200 : 4500;
+      if (!cancelled) timer = setTimeout(tick, interval);
     };
     tick();
     return () => {
@@ -176,7 +180,8 @@ export default function AgentClient() {
   }
 
   async function removeSession(id, e) {
-    e.stopPropagation();
+    e?.stopPropagation();
+    if (!confirm("Delete this chat?")) return;
     await jsonFetch(`/api/agent?sessionId=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
     if (id === sessionId) {
       setSessionId("");
@@ -187,6 +192,7 @@ export default function AgentClient() {
 
   const thinking = session?.status === "thinking";
   const messages = session?.messages || [];
+  const activeSession = sessions.find((s) => s.id === sessionId);
 
   // Group consecutive tool steps into one collapsible thinking block.
   const rendered = [];
@@ -255,6 +261,12 @@ export default function AgentClient() {
               <button className={model === "fast" ? "on" : ""} onClick={() => setModel("fast")}><Zap size={13} /> Fast</button>
               <button className={model === "reasoning" ? "on" : ""} onClick={() => setModel("reasoning")}><Brain size={13} /> Reasoning</button>
             </div>
+            <button className="ghost" onClick={() => { setSessionId(""); setSession(null); }}>
+              <Plus size={14} /> New
+            </button>
+            <button className="danger" disabled={!sessionId || thinking} onClick={(e) => removeSession(sessionId, e)} title="Delete current chat">
+              <Trash2 size={14} /> Delete
+            </button>
           </div>
         </header>
 
@@ -264,10 +276,15 @@ export default function AgentClient() {
             <Plus size={13} /> New
           </button>
           {sessions.map((s) => (
-            <button key={s.id} className={`chip-btn ${s.id === sessionId ? "active" : ""}`} onClick={() => setSessionId(s.id)}>
-              {s.status === "thinking" && <span className="run-dot" />}
-              {(s.title || "Chat").slice(0, 26)}
-            </button>
+            <span key={s.id} className={`chat-chip ${s.id === sessionId ? "active" : ""}`}>
+              <button className="chat-chip-main" onClick={() => setSessionId(s.id)} title={s.title || "Chat"}>
+                {s.status === "thinking" && <span className="run-dot" />}
+                {(s.title || "Chat").slice(0, 26)}
+              </button>
+              <button className="chip-x" onClick={(e) => removeSession(s.id, e)} title="Delete chat">
+                <Trash2 size={12} />
+              </button>
+            </span>
           ))}
         </div>
 
@@ -275,7 +292,7 @@ export default function AgentClient() {
           {!messages.length && (
             <div className="chat-empty">
               <Bot size={36} />
-              <h2>What should I do?</h2>
+              <h2>{activeSession?.title || "What should I do?"}</h2>
               <div className="suggestions">
                 {[
                   "Capture 20 new leads: dentists in Miami FL",

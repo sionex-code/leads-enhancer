@@ -52,6 +52,14 @@ function migrate(d) {
       mobile_performance INTEGER, mobile_seo INTEGER,
       mobile_accessibility INTEGER, mobile_best_practices INTEGER,
       project TEXT, query TEXT,
+      watchlist INTEGER NOT NULL DEFAULT 0,
+      contact_list INTEGER NOT NULL DEFAULT 0,
+      email_status TEXT NOT NULL DEFAULT 'unset',
+      outreach_status TEXT NOT NULL DEFAULT 'new',
+      notes TEXT,
+      last_contacted_at TEXT,
+      message_sent_at TEXT,
+      completed_at TEXT,
       first_seen TEXT NOT NULL, last_updated TEXT NOT NULL
     );
 
@@ -63,8 +71,22 @@ function migrate(d) {
   // Add columns introduced after a DB was first created (idempotent — keeps an
   // existing leads.db, like the one on the VPS, in sync without a rebuild).
   const have = new Set(d.prepare("PRAGMA table_info(leads)").all().map((c) => c.name));
-  for (const col of ["youtube", "tiktok", "pinterest", "whatsapp", "telegram", "whatsapp_status", "whatsapp_id"]) {
+  const textColumns = ["youtube", "tiktok", "pinterest", "whatsapp", "telegram", "whatsapp_status", "whatsapp_id"];
+  for (const col of textColumns) {
     if (!have.has(col)) d.exec(`ALTER TABLE leads ADD COLUMN ${col} TEXT`);
+  }
+  const workflowColumns = {
+    watchlist: "INTEGER NOT NULL DEFAULT 0",
+    contact_list: "INTEGER NOT NULL DEFAULT 0",
+    email_status: "TEXT NOT NULL DEFAULT 'unset'",
+    outreach_status: "TEXT NOT NULL DEFAULT 'new'",
+    notes: "TEXT",
+    last_contacted_at: "TEXT",
+    message_sent_at: "TEXT",
+    completed_at: "TEXT",
+  };
+  for (const [col, type] of Object.entries(workflowColumns)) {
+    if (!have.has(col)) d.exec(`ALTER TABLE leads ADD COLUMN ${col} ${type}`);
   }
 }
 
@@ -264,13 +286,25 @@ function upsertLeads(leadObjs) {
   return { inserted, updated };
 }
 
-// Query for the viewer page. Supports text search, has-email, and a min score
-// filter across either device's performance.
-function queryLeads({ search = "", hasEmail = false, minScore = 0, project = "", limit = 2000, offset = 0 } = {}) {
+// Query for the viewer page. Supports text search, workflow filters, has-email,
+// and a min score filter across either device's performance.
+function queryLeads({
+  search = "",
+  hasEmail = false,
+  minScore = 0,
+  project = "",
+  workflow = "",
+  emailStatus = "",
+  outreachStatus = "",
+  watchlist = false,
+  contactList = false,
+  limit = 2000,
+  offset = 0,
+} = {}) {
   const where = [];
   const params = {};
   if (search) {
-    where.push("(name LIKE @q OR domain LIKE @q OR phone LIKE @q OR address LIKE @q OR email LIKE @q OR category LIKE @q)");
+    where.push("(name LIKE @q OR domain LIKE @q OR phone LIKE @q OR address LIKE @q OR email LIKE @q OR category LIKE @q OR notes LIKE @q)");
     params.q = `%${search}%`;
   }
   if (hasEmail) where.push("email IS NOT NULL AND email != ''");
@@ -281,6 +315,27 @@ function queryLeads({ search = "", hasEmail = false, minScore = 0, project = "",
   if (minScore > 0) {
     where.push("(COALESCE(desktop_performance,0) >= @min OR COALESCE(mobile_performance,0) >= @min)");
     params.min = Number(minScore);
+  }
+  if (watchlist) where.push("watchlist = 1");
+  if (contactList) where.push("contact_list = 1");
+  if (emailStatus) {
+    where.push("email_status = @emailStatus");
+    params.emailStatus = emailStatus;
+  }
+  if (outreachStatus) {
+    where.push("outreach_status = @outreachStatus");
+    params.outreachStatus = outreachStatus;
+  }
+  if (workflow === "watchlist") where.push("watchlist = 1");
+  if (workflow === "contacts") where.push("contact_list = 1");
+  if (workflow === "email-ready") where.push("email_status = 'send'");
+  if (workflow === "queued") where.push("outreach_status = 'queued'");
+  if (workflow === "sent") where.push("outreach_status = 'sent'");
+  if (workflow === "complete") where.push("outreach_status = 'complete'");
+  if (workflow === "skipped") where.push("outreach_status = 'skipped'");
+  if (workflow === "needs-action") {
+    where.push("(contact_list = 1 OR watchlist = 1 OR email_status = 'send')");
+    where.push("outreach_status NOT IN ('sent', 'complete', 'skipped')");
   }
   const clause = where.length ? "WHERE " + where.join(" AND ") : "";
   const total = db().prepare(`SELECT COUNT(*) c FROM leads ${clause}`).get(params).c;
@@ -296,6 +351,42 @@ function getLead(id) {
 
 function deleteLead(id) {
   return db().prepare("DELETE FROM leads WHERE id = ?").run(Number(id)).changes;
+}
+
+function updateLeadWorkflow(id, patch = {}) {
+  const d = db();
+  const current = getLead(id);
+  if (!current) return null;
+
+  const allowedEmail = new Set(["unset", "send", "do_not_send", "later"]);
+  const allowedOutreach = new Set(["new", "queued", "sent", "complete", "skipped"]);
+  const updates = {};
+  const boolish = (v) => (v === true || v === 1 || v === "1" || v === "true" ? 1 : 0);
+
+  if (patch.watchlist !== undefined) updates.watchlist = boolish(patch.watchlist);
+  if (patch.contact_list !== undefined) updates.contact_list = boolish(patch.contact_list);
+  if (patch.contactList !== undefined) updates.contact_list = boolish(patch.contactList);
+  if (patch.email_status !== undefined && allowedEmail.has(String(patch.email_status))) updates.email_status = String(patch.email_status);
+  if (patch.emailStatus !== undefined && allowedEmail.has(String(patch.emailStatus))) updates.email_status = String(patch.emailStatus);
+  if (patch.outreach_status !== undefined && allowedOutreach.has(String(patch.outreach_status))) updates.outreach_status = String(patch.outreach_status);
+  if (patch.outreachStatus !== undefined && allowedOutreach.has(String(patch.outreachStatus))) updates.outreach_status = String(patch.outreachStatus);
+  if (patch.notes !== undefined) updates.notes = String(patch.notes || "").slice(0, 8000);
+
+  const nextOutreach = updates.outreach_status || current.outreach_status || "new";
+  if (nextOutreach === "sent" && !current.message_sent_at) {
+    updates.message_sent_at = now();
+    updates.last_contacted_at = updates.message_sent_at;
+  }
+  if (nextOutreach === "complete" && !current.completed_at) {
+    updates.completed_at = now();
+    updates.last_contacted_at = updates.last_contacted_at || now();
+  }
+
+  if (!Object.keys(updates).length) return current;
+  updates.last_updated = now();
+  const set = Object.keys(updates).map((k) => `${k} = @${k}`).join(", ");
+  d.prepare(`UPDATE leads SET ${set} WHERE id = @id`).run({ ...updates, id: Number(id) });
+  return getLead(id);
 }
 
 // Delete by domain/name match — used by the agent ("delete the lead for x.com").
@@ -320,10 +411,17 @@ function statsLeads() {
     withWebsite: d.prepare("SELECT COUNT(*) c FROM leads WHERE website IS NOT NULL AND website != ''").get().c,
     audited: d.prepare("SELECT COUNT(*) c FROM leads WHERE desktop_performance IS NOT NULL OR mobile_performance IS NOT NULL").get().c,
     projects: d.prepare("SELECT COUNT(DISTINCT project) c FROM leads WHERE project != ''").get().c,
+    watchlist: d.prepare("SELECT COUNT(*) c FROM leads WHERE watchlist = 1").get().c,
+    contactList: d.prepare("SELECT COUNT(*) c FROM leads WHERE contact_list = 1").get().c,
+    emailReady: d.prepare("SELECT COUNT(*) c FROM leads WHERE email_status = 'send'").get().c,
+    queued: d.prepare("SELECT COUNT(*) c FROM leads WHERE outreach_status = 'queued'").get().c,
+    sent: d.prepare("SELECT COUNT(*) c FROM leads WHERE outreach_status = 'sent'").get().c,
+    completed: d.prepare("SELECT COUNT(*) c FROM leads WHERE outreach_status = 'complete'").get().c,
   };
 }
 
-const EXPORT_COLUMNS = ["dedup_key", ...LEAD_COLUMNS, "first_seen", "last_updated"];
+const WORKFLOW_COLUMNS = ["watchlist", "contact_list", "email_status", "outreach_status", "notes", "last_contacted_at", "message_sent_at", "completed_at"];
+const EXPORT_COLUMNS = ["dedup_key", ...LEAD_COLUMNS, ...WORKFLOW_COLUMNS, "first_seen", "last_updated"];
 
 function exportCsv() {
   const rows = db().prepare(`SELECT * FROM leads ORDER BY last_updated DESC`).all();
@@ -346,6 +444,7 @@ module.exports = {
   queryLeads,
   getLead,
   deleteLead,
+  updateLeadWorkflow,
   deleteLeadsWhere,
   listProjectNames,
   statsLeads,
