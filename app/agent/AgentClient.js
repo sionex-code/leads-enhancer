@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { marked } from "marked";
 import MobileNav from "../components/MobileNav";
-import { Bot, Brain, ChevronDown, Database, FolderOpen, Plus, Send, ShieldCheck, Sparkles, Trash2, Wrench, Zap } from "lucide-react";
+import { Bot, Brain, ChevronDown, Database, FolderOpen, Plus, Send, ShieldCheck, Sparkles, Square, Trash2, Wrench, Zap } from "lucide-react";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
@@ -165,6 +165,16 @@ export default function AgentClient() {
     }
   }
 
+  async function stopAgent() {
+    if (!sessionId) return;
+    try {
+      await jsonFetch("/api/agent", { method: "POST", body: JSON.stringify({ action: "stop", sessionId }) });
+      await loadSession(sessionId);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   async function removeSession(id, e) {
     e.stopPropagation();
     await jsonFetch(`/api/agent?sessionId=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
@@ -312,9 +322,15 @@ export default function AgentClient() {
               }
             }}
           />
-          <button className="primary" disabled={!input.trim() || sending || thinking} onClick={send}>
-            <Send size={16} />
-          </button>
+          {thinking ? (
+            <button className="stop-btn" onClick={stopAgent} title="Stop the agent">
+              <Square size={14} />
+            </button>
+          ) : (
+            <button className="primary" disabled={!input.trim() || sending} onClick={send}>
+              <Send size={16} />
+            </button>
+          )}
         </div>
       </section>
       <MobileNav active="agent" />

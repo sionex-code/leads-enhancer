@@ -16,6 +16,20 @@ const SESSIONS_DIR = path.join(process.cwd(), "output", "agent", "sessions");
 const MAX_STEPS = 8;
 const TOOL_RESULT_CHARS = 2200;
 
+// Stop requests for in-flight turns. The stop action arrives via the same
+// /api/agent route module that runs processTurn, so an in-memory set is safe.
+const stopRequests = new Set();
+
+function requestStop(sessionId) {
+  const session = readSession(sessionId);
+  if (!session) return { ok: false, error: "Session not found" };
+  if (session.status !== "thinking") return { ok: true, note: "Agent is not running" };
+  stopRequests.add(sessionId);
+  session.statusDetail = "stopping…";
+  writeSession(session);
+  return { ok: true };
+}
+
 function ensure() {
   fs.mkdirSync(SESSIONS_DIR, { recursive: true });
 }
@@ -164,6 +178,28 @@ const TOOLS = {
       return { status: job.status, error: job.error || "", progress: (job.log || []).slice(-4), results: job.results || [] };
     },
   },
+  cancel_report_job: {
+    description: "Cancel a running report generation job (kills the in-flight Lighthouse run).",
+    args: { job_id: "id returned by generate_reports" },
+    run: async ({ job_id }) => {
+      const job = siteReport.cancelJob(job_id);
+      if (!job) throw new Error("Unknown job id");
+      return { status: job.status === "running" ? "cancelling" : job.status };
+    },
+  },
+  stop_project: {
+    description: "Stop a project's running background task (scrape/enrich/whatsapp/audit). Kills the worker process tree.",
+    args: { project: "project name or slug" },
+    run: async ({ project }) => {
+      if (!project) throw new Error("project required");
+      const dir = store.safeProjectDir(project);
+      const state = store.readState(dir);
+      const wasRunning = !!state.activePid;
+      if (state.activePid) store.killTree(state.activePid);
+      store.writeState(dir, { running: false, activePid: null, message: "Stopped", stoppedAt: new Date().toISOString() });
+      return { stopped: true, wasRunning };
+    },
+  },
 };
 
 function toolDocs() {
@@ -246,7 +282,15 @@ async function processTurn(sessionId) {
   try {
     let nudges = 0;
     for (let step = 0; step < MAX_STEPS; step++) {
+      if (stopRequests.has(sessionId)) {
+        push(session, { role: "assistant", content: "⏹ Stopped — let me know how to continue." });
+        break;
+      }
       const reply = await llm.chat(buildMessages(session), { model: session.model || "fast", maxTokens: 1600, temperature: 0.2 });
+      if (stopRequests.has(sessionId)) {
+        push(session, { role: "assistant", content: "⏹ Stopped — let me know how to continue." });
+        break;
+      }
       const call = parseToolCall(reply);
 
       if (!call) {
@@ -286,6 +330,7 @@ async function processTurn(sessionId) {
   } catch (err) {
     push(session, { role: "assistant", content: `Something went wrong talking to the model: ${String(err && err.message || err).slice(0, 300)}` });
   } finally {
+    stopRequests.delete(sessionId);
     const s = readSession(sessionId);
     if (s) {
       s.status = "idle";
@@ -317,4 +362,4 @@ function sendMessage({ sessionId, message, project, model }) {
   return { sessionId: session.id };
 }
 
-module.exports = { sendMessage, readSession, listSessions, deleteSession, TOOLS };
+module.exports = { sendMessage, requestStop, readSession, listSessions, deleteSession, TOOLS };

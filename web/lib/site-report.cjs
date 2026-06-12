@@ -158,7 +158,7 @@ function csvEsc(v) {
   return `"${String(v ?? "").replace(/"/g, '""')}"`;
 }
 
-async function runLighthouseBatch(sites, device, workDir, log) {
+async function runLighthouseBatch(sites, device, workDir, log, jobId) {
   const csvFile = path.join(workDir, `sites-${device}.csv`);
   const outDir = path.join(workDir, `lh-${device}`);
   const summaryFile = path.join(workDir, `summary-${device}.csv`);
@@ -174,9 +174,12 @@ async function runLighthouseBatch(sites, device, workDir, log) {
       "--device", device, "--concurrency", "2", "--timeout", "120000",
       "--outDir", outDir, "--summary", summaryFile, "--force",
     ], { cwd: ROOT, stdio: "ignore", windowsHide: true });
+    // record the worker pid so cancelJob can kill the in-flight Lighthouse run
+    if (jobId) patchJob(jobId, { activePid: child.pid });
     child.on("close", resolve);
     child.on("error", resolve);
   });
+  if (jobId) patchJob(jobId, { activePid: null });
 
   const summary = parseCsvObjects(fs.existsSync(summaryFile) ? fs.readFileSync(summaryFile, "utf8") : "");
   const byDomain = {};
@@ -458,20 +461,28 @@ function startReportJob(sites, { devices = ["desktop", "mobile"], onLog } = {}) 
   };
 
   (async () => {
+    // Cancellation is file-based (cancelRequested in the job registry) so it
+    // works from any route bundle; checked at every stage boundary.
+    const assertNotCancelled = () => {
+      if ((getJob(id) || {}).cancelRequested) throw Object.assign(new Error("cancelled"), { cancelled: true });
+    };
     try {
       const workDir = path.join(AGENT_DIR, "work", id);
       fs.mkdirSync(workDir, { recursive: true });
 
       log(`Inspecting ${valid.length} website(s)…`);
       const inspections = await Promise.all(valid.map((s) => inspectWebsite(s.website)));
+      assertNotCancelled();
 
       const lhByDevice = {};
       for (const device of devices) {
-        lhByDevice[device] = await runLighthouseBatch(valid, device, workDir, log);
+        lhByDevice[device] = await runLighthouseBatch(valid, device, workDir, log, id);
+        assertNotCancelled();
       }
 
       const results = [];
       for (let i = 0; i < valid.length; i++) {
+        assertNotCancelled();
         const site = valid[i];
         const domain = hostOf(site.website);
         const lighthouse = {};
@@ -513,11 +524,30 @@ function startReportJob(sites, { devices = ["desktop", "mobile"], onLog } = {}) 
       patchJob(id, { status: "done", finishedAt: new Date().toISOString() });
       log("All reports generated.");
     } catch (err) {
-      patchJob(id, { status: "failed", error: String(err && err.message || err).slice(0, 400) });
+      if (err && err.cancelled) {
+        try { fs.rmSync(path.join(AGENT_DIR, "work", id), { recursive: true, force: true }); } catch {}
+        patchJob(id, { status: "cancelled", activePid: null, finishedAt: new Date().toISOString() });
+        log("Job cancelled.");
+      } else {
+        patchJob(id, { status: "failed", error: String(err && err.message || err).slice(0, 400) });
+      }
     }
   })();
 
   return id;
 }
 
-module.exports = { startReportJob, getJob, listReports, safeReportPath, REPORTS_DIR, inspectWebsite, MAX_SITES };
+// Cancel a running report job: flag it (the job loop checks at every stage
+// boundary) and kill the in-flight Lighthouse worker so it stops immediately.
+function cancelJob(id) {
+  const job = getJob(id);
+  if (!job) return null;
+  if (job.status !== "running") return job;
+  const patched = patchJob(id, { cancelRequested: true });
+  if (job.activePid) {
+    try { require("./store.cjs").killTree(job.activePid); } catch {}
+  }
+  return patched;
+}
+
+module.exports = { startReportJob, getJob, cancelJob, listReports, safeReportPath, REPORTS_DIR, inspectWebsite, MAX_SITES };

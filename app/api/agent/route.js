@@ -15,8 +15,14 @@ export async function GET(request) {
 }
 
 // POST { sessionId?, message, project?, model? } → starts/continues a chat turn
+// POST { action: "stop", sessionId } → interrupt the in-flight turn
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
+  if (body.action === "stop") {
+    if (!body.sessionId) return Response.json({ error: "sessionId required" }, { status: 400 });
+    const result = agent.requestStop(body.sessionId);
+    return Response.json(result, { status: result.ok ? 200 : 404 });
+  }
   if (!body.message || !String(body.message).trim()) {
     return Response.json({ error: "message is required" }, { status: 400 });
   }

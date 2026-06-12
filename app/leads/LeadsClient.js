@@ -107,6 +107,15 @@ function LeadDrawer({ lead, onClose, onDeleted }) {
     }
   }
 
+  async function cancelJob() {
+    if (!job?.id) return;
+    try {
+      await jsonFetch(`/api/agent/jobs/${job.id}`, { method: "DELETE" });
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   async function remove() {
     if (!confirm(`Delete "${lead.name}" from the database? This is permanent.`)) return;
     try {
@@ -178,11 +187,13 @@ function LeadDrawer({ lead, onClose, onDeleted }) {
             ))}
             {generating && (
               <div className="job-progress">
-                <Loader2 size={14} className="spin" /> Generating…
+                <Loader2 size={14} className="spin" /> {job.cancelRequested ? "Stopping…" : "Generating…"}
+                <button className="job-stop" onClick={cancelJob} title="Stop this report job" disabled={!!job.cancelRequested}>Stop</button>
                 <div className="subtle">{(job.log || []).slice(-2).join(" · ")}</div>
               </div>
             )}
             {job?.status === "failed" && <div className="chat-error">Report failed: {job.error}</div>}
+            {job?.status === "cancelled" && <div className="subtle">Report job cancelled.</div>}
             {error && <div className="chat-error">{error}</div>}
             <div className="drawer-actions">
               <button className="primary" disabled={!lead.website || generating} onClick={generate}>
