@@ -56,7 +56,12 @@ async function chatWith(providerName, messages, { model, maxTokens, temperature,
     });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      throw new Error(`LLM(${providerName}) ${res.status}: ${body.slice(0, 300)}`);
+      const err = new Error(`LLM(${providerName}) ${res.status}: ${body.slice(0, 300)}`);
+      err.status = res.status;
+      // Groq 429 bodies include "Please try again in 7.66s"
+      const m = body.match(/try again in ([\d.]+)\s*s/i);
+      err.retryAfterMs = m ? Math.ceil(parseFloat(m[1]) * 1000) : Number(res.headers.get("retry-after")) * 1000 || 0;
+      throw err;
     }
     const data = await res.json();
     const content = data?.choices?.[0]?.message?.content;
@@ -67,15 +72,27 @@ async function chatWith(providerName, messages, { model, maxTokens, temperature,
   }
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 async function chat(messages, { model = "fast", maxTokens = 2048, temperature = 0.4, timeoutMs = 180000 } = {}) {
   const opts = { model, maxTokens, temperature, timeoutMs };
-  try {
-    return await chatWith(PRIMARY, messages, opts);
-  } catch (err) {
-    if (!FALLBACK) throw err;
-    console.warn(`[llm] ${PRIMARY} failed (${String(err && err.message || err).slice(0, 200)}), falling back to ${FALLBACK}`);
-    return await chatWith(FALLBACK, messages, opts);
+  let lastErr;
+  // Rate limits (Groq free tier is 6000 TPM) are transient: wait the suggested
+  // time and retry the primary before giving the turn to the fallback provider.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await chatWith(PRIMARY, messages, opts);
+    } catch (err) {
+      lastErr = err;
+      if (err.status !== 429 || attempt === 2) break;
+      const waitMs = Math.min(err.retryAfterMs || 10000, 30000);
+      console.warn(`[llm] ${PRIMARY} rate-limited, retrying in ${waitMs}ms (attempt ${attempt + 1}/3)`);
+      await sleep(waitMs);
+    }
   }
+  if (!FALLBACK) throw lastErr;
+  console.warn(`[llm] ${PRIMARY} failed (${String(lastErr && lastErr.message || lastErr).slice(0, 200)}), falling back to ${FALLBACK}`);
+  return await chatWith(FALLBACK, messages, opts);
 }
 
 module.exports = { chat, MODELS: PROVIDERS[PRIMARY].models, BASE_URL: PROVIDERS[PRIMARY].baseUrl, PRIMARY };
