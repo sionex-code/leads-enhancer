@@ -120,12 +120,14 @@ const TOOLS = {
     },
   },
   capture_leads: {
-    description: "Start a NEW Google Maps scrape (runs scrape→enrich in background). Returns immediately; check project_status for progress.",
-    args: { project: "project name (new or existing)", query: "Maps search, e.g. 'plumbers in Austin TX'", max: "number of leads, e.g. 20" },
-    run: async ({ project, query, max = 20 }) => {
+    description: "Start a NEW Google Maps scrape (background). Scrape ONLY by default — does NOT enrich. Returns immediately; check project_status for progress.",
+    args: { project: "project name (new or existing)", query: "Maps search, e.g. 'plumbers in Austin TX'", max: "number of leads, e.g. 20", enrich: "true to also run email/social enrichment after the scrape (only when the user explicitly asks)" },
+    run: async ({ project, query, max = 20, enrich = false }) => {
       if (!project || !query) throw new Error("project and query are required");
-      const r = store.spawnRunner({ name: project, query, max: String(max), stages: ["scrape", "enrich"], enrichConcurrency: 16, auditConcurrency: 2, headless: true, network: true });
-      return { started: true, slug: r.slug, note: "Scrape+enrich running in background. Poll project_status." };
+      const withEnrich = enrich === true || enrich === "true";
+      const stages = withEnrich ? ["scrape", "enrich"] : ["scrape"];
+      const r = store.spawnRunner({ name: project, query, max: String(max), stages, enrichConcurrency: 16, auditConcurrency: 2, headless: true, network: true });
+      return { started: true, slug: r.slug, note: `${withEnrich ? "Scrape+enrich" : "Scrape (no enrichment)"} running in background. Poll project_status.` };
     },
   },
   enrich_leads: {
@@ -228,6 +230,7 @@ One tool call per reply. After you receive the TOOL RESULT, either call another 
 RULES:
 - YOU are the only one who can run tools. NEVER tell the user to call a tool or describe which tool could be used — emit the json block and run it yourself, immediately.
 - Never invent data; always read it via tools.
+- Scraping is scrape-ONLY by default: never pass enrich=true to capture_leads and never call enrich_leads unless the user explicitly asks to enrich. When a scrape finishes, show the leads (get_leads) right away.
 - Background tasks (scrape/enrich/whatsapp/reports) return immediately — report the started state and job/project to poll; do not loop on status checks more than twice in one turn. Tell the user to ask "check status" later.
 - When reports finish, give the user links: /api/agent/reports/<file>.
 - Keep answers short and concrete. Use markdown lists/tables sparingly.

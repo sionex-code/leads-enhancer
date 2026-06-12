@@ -448,6 +448,7 @@ async function captureFeedCards(page) {
 // stays flat instead of degrading as the result set grows.
 async function runNetworkCapture(page, outFile) {
   const seen = new Set(); // place key (cid/place id) -> dedup across batches
+  const seenNames = new Set(); // lowercased names, for the visible-card sweep below
   let pending = []; // rows decoded but not yet flushed to CSV
   let decodeErrors = 0;
 
@@ -471,6 +472,7 @@ async function runNetworkCapture(page, outFile) {
       const key = parsed.keys[i] || parsed.rows[i].name;
       if (key && seen.has(key)) continue;
       if (key) seen.add(key);
+      if (parsed.rows[i].name) seenNames.add(parsed.rows[i].name.toLowerCase());
       pending.push(parsed.rows[i]);
     }
   });
@@ -621,7 +623,29 @@ async function runNetworkCapture(page, outFile) {
     }
   }
 
-  written += flush(); // final stragglers
+  // Response bodies can still be decoding when the loop breaks (the handler is
+  // async, and a loaded VPS decodes slowly) — give in-flight batches a moment to
+  // land before the final flush instead of silently dropping them.
+  await sleep(2000);
+  written += flush();
+
+  // Sweep the still-rendered feed cards for places the RPC never delivered —
+  // most often the initial batch that ships inline with the page HTML rather
+  // than over the RPC. Card rows are less complete than RPC rows, but a partial
+  // lead beats a missing one.
+  if (written < cap && reason !== "results feed gone") {
+    const cards = await captureFeedCards(page);
+    const extra = cards
+      .filter((r) => r.name && !seenNames.has(r.name.toLowerCase()))
+      .slice(0, cap - written);
+    if (extra.length) {
+      fs.appendFileSync(outFile, extra.map(csvRow).join(""), "utf8");
+      written += extra.length;
+      console.log(`\n  Recovered ${extra.length} lead(s) from visible cards the RPC never delivered.`);
+    }
+  }
+  if (decodeErrors) console.log(`\n  Warning: ${decodeErrors} RPC batch(es) failed to decode.`);
+
   if (CONFIG.maxLeads && written > CONFIG.maxLeads) written = CONFIG.maxLeads; // report cap honestly
   return { written, reason };
 }

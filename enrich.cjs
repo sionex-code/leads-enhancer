@@ -16,7 +16,7 @@ const fs = require("fs");
 const path = require("path");
 
 // ---- CLI args ----------------------------------------------------------------
-const VALUE_FLAGS = new Set(["--concurrency", "--maxPages", "--timeout", "--browserConcurrency"]);
+const VALUE_FLAGS = new Set(["--concurrency", "--maxPages", "--timeout", "--browserConcurrency", "--siteTimeout"]);
 const rawArgs = process.argv.slice(2);
 const flags = new Set();
 const flagValues = {};
@@ -35,6 +35,9 @@ const flagValue = (name, fallback) => (flagValues[name] !== undefined ? flagValu
 const CONCURRENCY = parseInt(flagValue("--concurrency", "8"), 10);
 const MAX_PAGES = parseInt(flagValue("--maxPages", "4"), 10); // pages crawled per site
 const TIMEOUT = parseInt(flagValue("--timeout", "10000"), 10); // per request, ms
+// Hard ceiling for ONE site end-to-end (all pages + browser fallback). Without
+// this a single hung site keeps the whole run alive indefinitely.
+const SITE_TIMEOUT = parseInt(flagValue("--siteTimeout", "120000"), 10);
 const WATCH = flags.has("--watch"); // keep following the CSV while the scraper appends
 const FORCE = flags.has("--force"); // ignore saved state, re-enrich everything
 const USE_BROWSER = !flags.has("--noBrowser"); // fall back to a real Chrome for JS sites
@@ -272,7 +275,11 @@ async function closeBrowser() {
 // Small semaphore so we never open more than BROWSER_MAX Chrome tabs at once
 // (each tab is heavy; this keeps memory bounded regardless of --concurrency).
 async function withBrowserSlot(fn) {
-  while (_browserPages >= BROWSER_MAX) await new Promise((r) => setTimeout(r, 150));
+  const waitStart = Date.now();
+  while (_browserPages >= BROWSER_MAX) {
+    if (Date.now() - waitStart > 120000) throw new Error("browser slots busy (waited 120s)");
+    await new Promise((r) => setTimeout(r, 150));
+  }
   _browserPages++;
   try {
     return await fn();
@@ -289,10 +296,14 @@ async function autoScroll(page) {
     await page.evaluate(async () => {
       await new Promise((resolve) => {
         let y = 0;
+        const started = Date.now();
         const timer = setInterval(() => {
           window.scrollBy(0, 600);
           y += 600;
-          if (y >= document.body.scrollHeight) {
+          // Deadline matters: on infinite-scroll pages scrollHeight grows as we
+          // scroll, so "reached the bottom" alone may never become true and this
+          // promise would hang the evaluate (and the whole run) forever.
+          if (y >= document.body.scrollHeight || Date.now() - started > 10000) {
             clearInterval(timer);
             resolve();
           }
@@ -311,12 +322,14 @@ async function autoScroll(page) {
 
 // Render homepage (and one contact-ish page if needed) in real Chrome and pull
 // emails/socials from the live DOM. Returns the emails found.
+const BROWSER_SITE_BUDGET = 45000; // hard cap on one site's whole browser session
+
 async function browserEmails(website, result) {
   return withBrowserSlot(async () => {
     const ctx = await getBrowserContext();
     const page = await ctx.newPage();
     const emails = new Set();
-    try {
+    const work = (async () => {
       await page.goto(website, { waitUntil: "domcontentloaded", timeout: TIMEOUT }).catch(() => {});
       await page.waitForTimeout(900); // let client-side JS paint the first view
       await autoScroll(page); // reveal lazy-loaded footer/contact block
@@ -337,8 +350,19 @@ async function browserEmails(website, result) {
           extractSocial(html, result);
         }
       }
+    })();
+    let budget;
+    const deadline = new Promise((_, reject) => {
+      budget = setTimeout(() => reject(new Error("browser budget exceeded (45s)")), BROWSER_SITE_BUDGET);
+    });
+    try {
+      await Promise.race([work, deadline]);
     } finally {
+      clearTimeout(budget);
+      // Closing the page force-rejects any still-pending evaluate/goto, so `work`
+      // settles and the browser slot is released even when the page was hung.
       await page.close().catch(() => {});
+      work.catch(() => {});
     }
     return [...emails];
   });
@@ -447,6 +471,20 @@ function loadState(stateFile) {
     } catch {}
   }
   return map;
+}
+
+// Race a promise against a hard deadline. The loser keeps running in the
+// background but its result is ignored; per-stage budgets inside it make sure
+// it settles eventually instead of pinning a browser slot.
+function withTimeout(promise, ms, label) {
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} (gave up after ${Math.round(ms / 1000)}s)`)), ms);
+  });
+  return Promise.race([promise, deadline]).finally(() => {
+    clearTimeout(timer);
+    promise.catch(() => {});
+  });
 }
 
 const siteKey = (website) => {
@@ -562,7 +600,7 @@ const siteKey = (website) => {
       active++;
       let result;
       try {
-        result = await enrichSite(job.website);
+        result = await withTimeout(enrichSite(job.website), SITE_TIMEOUT, "site timeout");
       } catch (err) {
         result = { ...EXTRA_HEADERS.reduce((o, h) => ((o[h] = ""), o), {}), enrichStatus: "error: " + err.message };
       }
@@ -606,6 +644,9 @@ const siteKey = (website) => {
   await closeBrowser();
   console.log(`\n  Done. ${processed} sites crawled this run, ${withEmail} with email.`);
   console.log(`  Enriched CSV: ${outFile}\n`);
+  // A timed-out site can leave a zombie fetch/Chrome handle behind; everything is
+  // flushed to disk above, so exit explicitly instead of waiting on stray handles.
+  process.exit(0);
 })().catch(async (err) => {
   await closeBrowser();
   console.error("\n  Error:", err.message);
