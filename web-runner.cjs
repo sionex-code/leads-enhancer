@@ -150,6 +150,28 @@ async function runScrape() {
   if (!query) throw new Error("Scrape needs a query");
   writeMeta(dir, { name: projectName, slug: slugify(projectName), query, max });
 
+  // Default path: the HTTP grid scraper (no browser). It tiles the geocoded
+  // area and hits Maps' internal endpoint directly — far faster, and it appends
+  // to the CSV + upserts the leads DB in realtime so counts grow live in the UI.
+  // Falls back to the browser scraper for direct Maps URLs, --dom mode, or when
+  // the query has no geocodable "<service> in <location>" shape (exit code 3).
+  if (!flags.has("--dom") && !/^https?:\/\//i.test(query)) {
+    const stageLog = path.join(dir, "scrape.log");
+    setStage(dir, "scrape", { status: "running", startedAt: new Date().toISOString(), error: "" });
+    const gridArgs = [path.join(ROOT, "gridscrape.js"), query, "--outDir", dir, "--project", projectName];
+    if (max) gridArgs.push("--max", max);
+    try {
+      await runProcess("scrape", stageLog, gridArgs, {
+        label: `node gridscrape.js "${query}" --max ${max || "unlimited"}`,
+      });
+      setStage(dir, "scrape", { status: "done", finishedAt: new Date().toISOString() });
+      return;
+    } catch (err) {
+      if (!/exited with code 3/.test(err.message)) throw err;
+      log("Grid scrape can't geocode this query — falling back to browser scraper");
+    }
+  }
+
   const args = [path.join(ROOT, "scrape.js"), query, "--outDir", dir, "--profileDir", path.join(dir, "browser-profile")];
   if (max) args.push("--max", max);
   // Forward the capture mode chosen by the UI/caller (defaults to fast network mode).
