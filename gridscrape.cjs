@@ -61,24 +61,67 @@ function slugify(q) {
 }
 
 // ---- query -> keyword + geocoded bbox -------------------------------------------
-function splitQuery(q) {
-  const m = /^(.*\S)\s+(?:in|near)\s+(\S.*)$/i.exec(q);
-  if (!m) return null;
-  return { keyword: m[1].trim(), location: m[2].trim() };
-}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function geocode(location) {
+async function geocode(location, { strict = false } = {}) {
   const url =
-    "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=" +
+    "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=" +
     encodeURIComponent(location);
   const res = await fetch(url, {
     headers: { "User-Agent": "gmaps-scraper/1.0 (lead research tool)" },
   });
   if (!res.ok) throw new Error(`Geocoder HTTP ${res.status}`);
   const arr = await res.json();
-  if (!Array.isArray(arr) || !arr.length || !arr[0].boundingbox) return null;
-  const [latMin, latMax, lngMin, lngMax] = arr[0].boundingbox.map(Number);
-  return { latMin, latMax, lngMin, lngMax, display: arr[0].display_name || location };
+  if (!Array.isArray(arr)) return null;
+  // strict = the location is a guess (trailing words of the query): only accept
+  // real places/areas, never a random business or street that happens to match.
+  const hit = arr.find(
+    (r) => r.boundingbox && (!strict || r.category === "boundary" || r.category === "place")
+  );
+  if (!hit) return null;
+  const [latMin, latMax, lngMin, lngMax] = hit.boundingbox.map(Number);
+  return { latMin, latMax, lngMin, lngMax, display: hit.display_name || location };
+}
+
+// Work out keyword + area from the free-form query. Tries, in order:
+//   1. "<service> in|near <location>"  (explicit, lenient geocode)
+//   2. "<service>, <location>"         (comma form)
+//   3. trailing 1-4 words as the location ("plumbers Lahore", "dentists New York")
+// Returns { keyword, location, geo } or null when nothing geocodes.
+async function resolveQuery(q) {
+  const candidates = [];
+  const m = /^(.*\S)\s+(?:in|near)\s+(\S.*)$/i.exec(q);
+  if (m) candidates.push({ keyword: m[1].trim(), location: m[2].trim(), strict: false });
+  const comma = q.indexOf(",");
+  if (comma > 0) {
+    candidates.push({
+      keyword: q.slice(0, comma).trim(),
+      location: q.slice(comma + 1).trim(),
+      strict: false,
+    });
+  }
+  const words = q.trim().split(/\s+/);
+  for (let k = Math.min(4, words.length - 1); k >= 1; k--) {
+    candidates.push({
+      keyword: words.slice(0, -k).join(" "),
+      location: words.slice(-k).join(" "),
+      strict: true,
+    });
+  }
+  let first = true;
+  for (const c of candidates) {
+    if (!c.keyword || !c.location) continue;
+    if (!first) await sleep(1100); // Nominatim usage policy: max 1 req/s
+    first = false;
+    let geo = null;
+    try {
+      geo = await geocode(c.location, { strict: c.strict });
+    } catch (err) {
+      console.warn(`  Geocode "${c.location}" failed: ${err.message}`);
+    }
+    if (geo) return { keyword: c.keyword, location: c.location, geo };
+  }
+  return null;
 }
 
 // Pad tiny city bboxes (Nominatim can return a near-point box) and pick grid
@@ -164,24 +207,13 @@ const FETCH_HEADERS = {
 
 // ---- main ---------------------------------------------------------------------------
 (async () => {
-  const parts = splitQuery(QUERY);
+  const parts = await resolveQuery(QUERY);
   if (!parts) {
-    console.error(`Grid scrape needs a location: try "${QUERY} in <city>". Falling back is up to the caller.`);
+    console.error(`Could not find a location in "${QUERY}" — try "<service> in <city>". Falling back is up to the caller.`);
     process.exit(3);
   }
+  const geo = parts.geo;
   console.log(`  Query: "${parts.keyword}" | Location: "${parts.location}"`);
-
-  let geo;
-  try {
-    geo = await geocode(parts.location);
-  } catch (err) {
-    console.error(`Geocoding failed: ${err.message}`);
-    process.exit(3);
-  }
-  if (!geo) {
-    console.error(`Could not geocode "${parts.location}"`);
-    process.exit(3);
-  }
   console.log(`  Area: ${geo.display}`);
 
   const { bbox, centers } = planGrid(geo);
