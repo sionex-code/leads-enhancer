@@ -505,6 +505,8 @@ function spawnRunner(payload) {
     payload.device || "all",
     "--enrichConcurrency",
     String(payload.enrichConcurrency || 16),
+    "--enrichEngine",
+    payload.enrichEngine === "crawlee" ? "crawlee" : "patchright",
     "--auditConcurrency",
     String(payload.auditConcurrency || 2),
   ];

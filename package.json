@@ -23,11 +23,13 @@
   },
   "dependencies": {
     "better-sqlite3": "^12.10.0",
+    "crawlee": "^3.17.0",
     "lighthouse": "^13.4.0",
     "lucide-react": "^1.17.0",
     "marked": "^18.0.5",
     "next": "^16.2.9",
     "patchright": "^1.52.5",
+    "playwright": "^1.60.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },

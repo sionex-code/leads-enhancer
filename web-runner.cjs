@@ -28,6 +28,7 @@ const VALUE_FLAGS = new Set([
   "--max",
   "--device",
   "--enrichConcurrency",
+  "--enrichEngine",
   "--auditConcurrency",
   "--whatsappConcurrency",
 ]);
@@ -220,6 +221,17 @@ async function runScrape() {
 async function runEnrich() {
   const input = latestRawCsv(dir);
   if (!input) throw new Error("No scraped CSV found to enrich");
+  // Two enrichment engines share the same input/output/state contract:
+  //   patchright (default) — enrich.cjs, HTTP first + headless-Chrome fallback
+  //   crawlee               — enrich-crawlee.js, CheerioCrawler + a Playwright
+  //                           scroll-to-load fallback; faster on big batches.
+  const engine = value("--enrichEngine", "patchright").toLowerCase();
+  if (engine === "crawlee") {
+    const concurrency = value("--enrichConcurrency", "30");
+    const args = [input, "--concurrency", concurrency, "--timeout", "15000"];
+    await runNode("enrich", "enrich-crawlee.js", path.join(dir, "enrich.log"), args);
+    return;
+  }
   const concurrency = value("--enrichConcurrency", "16");
   // 15s timeout (plus the in-enricher retry) is far more forgiving of slow
   // small-business sites than the old 10s, which surfaced a lot of "AbortError".

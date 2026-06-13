@@ -17,6 +17,7 @@ export async function POST(request) {
     stages,
     device: body.device || "all",
     enrichConcurrency: body.enrichConcurrency || 16,
+    enrichEngine: body.enrichEngine === "crawlee" ? "crawlee" : "patchright",
     auditConcurrency: body.auditConcurrency || 2,
     headless: !!body.headless,
     blockCanvas: !!body.blockCanvas,

@@ -122,9 +122,69 @@ function decodeEntities(s) {
     .replace(/&nbsp;/gi, " ");
 }
 
+// Cloudflare hides emails as hex behind a one-byte XOR key (data-cfemail / the
+// /cdn-cgi/l/email-protection#hex link). The address is already in the HTML, so
+// decode it here instead of rendering the page just to read it.
+function decodeCfEmail(hex) {
+  try {
+    const key = parseInt(hex.slice(0, 2), 16);
+    let out = "";
+    for (let i = 2; i < hex.length; i += 2) out += String.fromCharCode(parseInt(hex.slice(i, i + 2), 16) ^ key);
+    return out.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+// Bracketed obfuscation: "name [at] domain [dot] com" -> "name@domain.com".
+// Limited to bracketed forms so we don't mangle ordinary prose ("meet at 5").
+function deobfuscateEmails(s) {
+  return s
+    .replace(/\s*[\[({<]\s*(?:at|@)\s*[\])}>]\s*/gi, "@")
+    .replace(/\s*[\[({<]\s*(?:dot|\.)\s*[\])}>]\s*/gi, ".");
+}
+
+// Pull `email` out of schema.org JSON-LD blocks (Organization/LocalBusiness),
+// walking nested objects/arrays.
+function emailsFromJsonLd(html, out) {
+  for (const m of html.matchAll(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
+    let data;
+    try {
+      data = JSON.parse(m[1].trim());
+    } catch {
+      continue;
+    }
+    const stack = [data];
+    while (stack.length) {
+      const node = stack.pop();
+      if (!node || typeof node !== "object") continue;
+      for (const [k, v] of Object.entries(node)) {
+        if (k.toLowerCase() === "email" && typeof v === "string") {
+          const e = v.replace(/^mailto:/i, "").toLowerCase().trim();
+          if (EMAIL_RE.test(e)) out.add(e.match(EMAIL_RE)[0]);
+          EMAIL_RE.lastIndex = 0;
+        } else if (v && typeof v === "object") stack.push(v);
+      }
+    }
+  }
+}
+
 function extractEmails(html) {
   const out = new Set();
-  const text = decodeEntities(html);
+  // Cloudflare-protected addresses (data-cfemail="..." and email-protection#hex).
+  for (const m of html.matchAll(/data-cfemail=["']([0-9a-fA-F]+)["']/g)) {
+    const e = decodeCfEmail(m[1]);
+    if (EMAIL_RE.test(e)) out.add(e.match(EMAIL_RE)[0]);
+    EMAIL_RE.lastIndex = 0;
+  }
+  for (const m of html.matchAll(/email-protection#([0-9a-fA-F]+)/g)) {
+    const e = decodeCfEmail(m[1]);
+    if (EMAIL_RE.test(e)) out.add(e.match(EMAIL_RE)[0]);
+    EMAIL_RE.lastIndex = 0;
+  }
+  emailsFromJsonLd(html, out);
+
+  const text = deobfuscateEmails(decodeEntities(html));
   // mailto: links first (may be URL-encoded)
   for (const m of text.matchAll(/mailto:([^"'?\s<>]+)/gi)) {
     try {
