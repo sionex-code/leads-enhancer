@@ -41,6 +41,7 @@ function migrate(d) {
       dedup_key TEXT UNIQUE NOT NULL,
       name TEXT, category TEXT, rating TEXT, reviews TEXT,
       website TEXT, domain TEXT, phone TEXT, address TEXT,
+      city TEXT, country TEXT,
       plus_code TEXT, hours TEXT, maps_url TEXT, image_urls TEXT,
       email TEXT, all_emails TEXT, contact_page TEXT,
       facebook TEXT, instagram TEXT, linkedin TEXT, twitter TEXT,
@@ -71,7 +72,8 @@ function migrate(d) {
   // Add columns introduced after a DB was first created (idempotent — keeps an
   // existing leads.db, like the one on the VPS, in sync without a rebuild).
   const have = new Set(d.prepare("PRAGMA table_info(leads)").all().map((c) => c.name));
-  const textColumns = ["youtube", "tiktok", "pinterest", "whatsapp", "telegram", "whatsapp_status", "whatsapp_id"];
+  const textColumns = ["youtube", "tiktok", "pinterest", "whatsapp", "telegram", "whatsapp_status", "whatsapp_id", "city", "country"];
+  const addedCity = !have.has("city");
   for (const col of textColumns) {
     if (!have.has(col)) d.exec(`ALTER TABLE leads ADD COLUMN ${col} TEXT`);
   }
@@ -88,6 +90,45 @@ function migrate(d) {
   for (const [col, type] of Object.entries(workflowColumns)) {
     if (!have.has(col)) d.exec(`ALTER TABLE leads ADD COLUMN ${col} ${type}`);
   }
+  d.exec("CREATE INDEX IF NOT EXISTS idx_leads_country ON leads(country)");
+
+  // One-time backfill: derive city/country from the existing address text so the
+  // grouping/filters work on leads scraped before these columns existed.
+  if (addedCity) {
+    const rows = d.prepare("SELECT id, address FROM leads WHERE address IS NOT NULL AND address != ''").all();
+    const upd = d.prepare("UPDATE leads SET city = @city, country = @country WHERE id = @id");
+    const tx = d.transaction((list) => {
+      for (const r of list) {
+        const { city, country } = parseLocation(r.address);
+        if (city || country) upd.run({ id: r.id, city, country });
+      }
+    });
+    tx(rows);
+  }
+}
+
+// Best-effort split of a freeform Google Maps address into a city + country for
+// grouping. Addresses look like "123 Main St, Miami, FL 33101, USA" (country may
+// be absent). The last letters-only segment is treated as the country; the city
+// is the last non-street segment that has no digits.
+function parseLocation(address) {
+  const segments = String(address || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (!segments.length) return { city: "", country: "" };
+  let country = "";
+  const last = segments[segments.length - 1];
+  if (/^[A-Za-zÀ-ɏ .'’&-]{2,40}$/.test(last)) {
+    country = last;
+    segments.pop();
+  }
+  let city = "";
+  // Drop the first segment (usually the street) and pick the last digit-free part.
+  for (const seg of segments.slice(1)) {
+    if (!/\d/.test(seg) && seg.length >= 2) city = seg;
+  }
+  return { city, country };
 }
 
 // ---- helpers ----------------------------------------------------------------
@@ -178,7 +219,7 @@ function nextAccount() {
 // ---- leads (global, deduped) ------------------------------------------------
 const LEAD_COLUMNS = [
   "name", "category", "rating", "reviews", "website", "domain", "phone",
-  "address", "plus_code", "hours", "maps_url", "image_urls",
+  "address", "city", "country", "plus_code", "hours", "maps_url", "image_urls",
   "email", "all_emails", "contact_page", "facebook", "instagram", "linkedin",
   "twitter", "youtube", "tiktok", "pinterest", "whatsapp", "telegram", "enrich_status",
   "whatsapp_status", "whatsapp_id",
@@ -196,6 +237,8 @@ function normalizeLead(lead) {
     return "";
   };
   const website = g("website");
+  const address = g("address");
+  const loc = parseLocation(address);
   return {
     name: g("name"),
     category: g("category"),
@@ -204,7 +247,9 @@ function normalizeLead(lead) {
     website,
     domain: hostOf(website) || g("domain"),
     phone: g("phone"),
-    address: g("address"),
+    address,
+    city: g("city") || loc.city,
+    country: g("country") || loc.country,
     plus_code: g("plusCode", "plus_code"),
     hours: g("hours"),
     maps_url: g("mapsUrl", "maps_url"),
@@ -291,8 +336,11 @@ function upsertLeads(leadObjs) {
 function queryLeads({
   search = "",
   hasEmail = false,
+  hasPhone = false,
   minScore = 0,
   project = "",
+  country = "",
+  city = "",
   workflow = "",
   emailStatus = "",
   outreachStatus = "",
@@ -308,9 +356,18 @@ function queryLeads({
     params.q = `%${search}%`;
   }
   if (hasEmail) where.push("email IS NOT NULL AND email != ''");
+  if (hasPhone) where.push("phone IS NOT NULL AND phone != ''");
   if (project) {
-    where.push("project = @project");
+    where.push("project = @project COLLATE NOCASE");
     params.project = project;
+  }
+  if (country) {
+    where.push("country = @country COLLATE NOCASE");
+    params.country = country;
+  }
+  if (city) {
+    where.push("city = @city COLLATE NOCASE");
+    params.city = city;
   }
   if (minScore > 0) {
     where.push("(COALESCE(desktop_performance,0) >= @min OR COALESCE(mobile_performance,0) >= @min)");
@@ -426,6 +483,53 @@ function listProjectNames() {
     .map((r) => r.project);
 }
 
+// Distinct countries (with lead counts) for the location filter/grouping.
+function listCountries() {
+  return db()
+    .prepare("SELECT country AS name, COUNT(*) AS count FROM leads WHERE country IS NOT NULL AND country != '' GROUP BY country ORDER BY count DESC, country")
+    .all();
+}
+
+// Distinct cities for the location filter, optionally scoped to one country.
+function listCities(country = "") {
+  if (country) {
+    return db()
+      .prepare("SELECT city AS name, COUNT(*) AS count FROM leads WHERE city IS NOT NULL AND city != '' AND country = ? COLLATE NOCASE GROUP BY city ORDER BY count DESC, city")
+      .all(country);
+  }
+  return db()
+    .prepare("SELECT city AS name, COUNT(*) AS count FROM leads WHERE city IS NOT NULL AND city != '' GROUP BY city ORDER BY count DESC, city")
+    .all();
+}
+
+// Persist enrichment / WhatsApp results onto a lead (from on-demand single-lead
+// actions). Only contact/social/audit columns are writable here; empty values
+// never overwrite an existing non-empty one, matching the batch upsert merge rule.
+const ENRICHABLE = new Set([
+  "email", "all_emails", "contact_page", "facebook", "instagram", "linkedin",
+  "twitter", "youtube", "tiktok", "pinterest", "whatsapp", "telegram",
+  "enrich_status", "whatsapp_status", "whatsapp_id",
+]);
+function updateLeadFields(id, fields = {}, { overwrite = false } = {}) {
+  const current = getLead(id);
+  if (!current) return null;
+  const updates = {};
+  for (const [k, v] of Object.entries(fields)) {
+    if (!ENRICHABLE.has(k)) continue;
+    const val = v === null || v === undefined ? "" : String(v);
+    // enrich_status / whatsapp_status are always written (they report the outcome);
+    // other fields only when non-empty unless overwrite is requested.
+    if (overwrite || val !== "" || k === "enrich_status" || k === "whatsapp_status") {
+      updates[k] = val;
+    }
+  }
+  if (!Object.keys(updates).length) return current;
+  updates.last_updated = now();
+  const set = Object.keys(updates).map((k) => `${k} = @${k}`).join(", ");
+  db().prepare(`UPDATE leads SET ${set} WHERE id = @id`).run({ ...updates, id: Number(id) });
+  return getLead(id);
+}
+
 function statsLeads() {
   const d = db();
   return {
@@ -470,7 +574,11 @@ module.exports = {
   updateLeadWorkflow,
   createOrUpdateLead,
   deleteLeadsWhere,
+  updateLeadFields,
   listProjectNames,
+  listCountries,
+  listCities,
+  parseLocation,
   statsLeads,
   exportCsv,
 };

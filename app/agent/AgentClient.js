@@ -5,7 +5,7 @@ import Link from "next/link";
 import { marked } from "marked";
 import MobileNav from "../components/MobileNav";
 import useSidebarCollapse from "../components/useSidebarCollapse";
-import { Bot, Brain, ChevronDown, Database, FolderOpen, PanelLeftClose, PanelLeftOpen, Plus, Send, ShieldCheck, Sparkles, Square, Trash2, Wrench, Zap } from "lucide-react";
+import { Bot, Brain, ChevronDown, Database, FolderOpen, PanelLeftClose, PanelLeftOpen, Plus, Send, ShieldCheck, Sparkles, Square, Star, Trash2, Wrench, Zap } from "lucide-react";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
@@ -232,6 +232,7 @@ export default function AgentClient() {
             <FolderOpen size={15} /> <span className="nav-text">Projects</span>
           </Link>
           <Link className="nav-link" href="/leads" title="Leads"><Database size={15} /> <span className="nav-text">Leads</span></Link>
+          <Link className="nav-link" href="/watchlist" title="Watch list"><Star size={15} /> <span className="nav-text">Watch</span></Link>
           <span className="nav-link active" title="Agent"><Bot size={15} /> <span className="nav-text">Agent</span></span>
         </nav>
         <button className="primary new-chat" onClick={() => { setSessionId(""); setSession(null); }}>

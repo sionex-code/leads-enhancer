@@ -4,19 +4,26 @@
 //         REASONING llama-3.3-70b-versatile, FAST llama-3.1-8b-instant.
 //         Groq supports native tool-calls, but the agent keeps its prompt-based
 //         JSON tool protocol so both providers behave identically.
+//         GROQ_API_KEY may hold MULTIPLE comma-separated keys — on a 429 we
+//         rotate to the next key before falling back to the Kiro proxy, so the
+//         free-tier 6000 TPM limit on one key doesn't stall a turn.
 //   kiro  http://144.91.104.65/v1 (plain HTTP — the HTTPS cert is self-signed).
 //         REASONING gemma-4-31b-it, FAST gemma-4-26b-a4b-it.
 //         NOTE: the proxy strips the OpenAI `tools` parameter.
 //
-// The non-primary provider is used as an automatic fallback (e.g. Groq free-tier
-// 429s fall back to the Kiro proxy). Force a provider with LLM_PROVIDER=groq|kiro.
+// The non-primary provider is used as an automatic fallback (e.g. all Groq keys
+// 429 → the Kiro proxy). Force a provider with LLM_PROVIDER=groq|kiro.
 
-const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
+// One or many keys: "key1,key2" (or GROQ_API_KEYS). Whitespace/commas split.
+const GROQ_API_KEYS = (process.env.GROQ_API_KEY || process.env.GROQ_API_KEYS || "")
+  .split(/[\s,]+/)
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 const PROVIDERS = {
   groq: {
     baseUrl: process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1",
-    apiKey: GROQ_API_KEY,
+    apiKeys: GROQ_API_KEYS,
     models: {
       reasoning: process.env.GROQ_MODEL_REASONING || "llama-3.3-70b-versatile",
       fast: process.env.GROQ_MODEL_FAST || "llama-3.1-8b-instant",
@@ -24,7 +31,7 @@ const PROVIDERS = {
   },
   kiro: {
     baseUrl: process.env.LLM_BASE_URL || "http://144.91.104.65/v1",
-    apiKey: process.env.LLM_API_KEY || "local-proxy",
+    apiKeys: [process.env.LLM_API_KEY || "local-proxy"],
     models: {
       reasoning: process.env.LLM_MODEL_REASONING || "gemma-4-31b-it",
       fast: process.env.LLM_MODEL_FAST || "gemma-4-26b-a4b-it",
@@ -32,10 +39,10 @@ const PROVIDERS = {
   },
 };
 
-const PRIMARY = PROVIDERS[process.env.LLM_PROVIDER] ? process.env.LLM_PROVIDER : (GROQ_API_KEY ? "groq" : "kiro");
-const FALLBACK = PRIMARY === "groq" ? "kiro" : (GROQ_API_KEY ? "groq" : null);
+const PRIMARY = PROVIDERS[process.env.LLM_PROVIDER] ? process.env.LLM_PROVIDER : (GROQ_API_KEYS.length ? "groq" : "kiro");
+const FALLBACK = PRIMARY === "groq" ? "kiro" : (GROQ_API_KEYS.length ? "groq" : null);
 
-async function chatWith(providerName, messages, { model, maxTokens, temperature, timeoutMs }) {
+async function chatWith(providerName, apiKey, messages, { model, maxTokens, temperature, timeoutMs }) {
   const p = PROVIDERS[providerName];
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -45,7 +52,7 @@ async function chatWith(providerName, messages, { model, maxTokens, temperature,
       signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${p.apiKey}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model: p.models[model] || model,
@@ -74,25 +81,42 @@ async function chatWith(providerName, messages, { model, maxTokens, temperature,
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Ordered list of (provider, apiKey) attempts: every key of the primary provider
+// first, then every key of the fallback. A 429 on one key is retried once (after
+// the suggested wait) and then we move to the next key/provider.
+function attemptChain() {
+  const order = FALLBACK ? [PRIMARY, FALLBACK] : [PRIMARY];
+  const chain = [];
+  for (const name of order) {
+    for (const apiKey of PROVIDERS[name].apiKeys) chain.push({ name, apiKey });
+  }
+  return chain;
+}
+
 async function chat(messages, { model = "fast", maxTokens = 2048, temperature = 0.4, timeoutMs = 180000 } = {}) {
   const opts = { model, maxTokens, temperature, timeoutMs };
+  const chain = attemptChain();
   let lastErr;
-  // Rate limits (Groq free tier is 6000 TPM) are transient: wait the suggested
-  // time and retry the primary before giving the turn to the fallback provider.
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      return await chatWith(PRIMARY, messages, opts);
-    } catch (err) {
-      lastErr = err;
-      if (err.status !== 429 || attempt === 2) break;
-      const waitMs = Math.min(err.retryAfterMs || 10000, 30000);
-      console.warn(`[llm] ${PRIMARY} rate-limited, retrying in ${waitMs}ms (attempt ${attempt + 1}/3)`);
-      await sleep(waitMs);
+  for (let i = 0; i < chain.length; i++) {
+    const { name, apiKey } = chain[i];
+    // Give a rate-limited key one paid retry before rotating to the next one.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await chatWith(name, apiKey, messages, opts);
+      } catch (err) {
+        lastErr = err;
+        if (err.status === 429 && attempt === 0) {
+          const waitMs = Math.min(err.retryAfterMs || 8000, 20000);
+          console.warn(`[llm] ${name} key#${i + 1} rate-limited, retrying in ${waitMs}ms`);
+          await sleep(waitMs);
+          continue;
+        }
+        if (i < chain.length - 1) console.warn(`[llm] ${name} key#${i + 1} failed (${String(err && err.message || err).slice(0, 160)}), trying next`);
+        break;
+      }
     }
   }
-  if (!FALLBACK) throw lastErr;
-  console.warn(`[llm] ${PRIMARY} failed (${String(lastErr && lastErr.message || lastErr).slice(0, 200)}), falling back to ${FALLBACK}`);
-  return await chatWith(FALLBACK, messages, opts);
+  throw lastErr;
 }
 
 module.exports = { chat, MODELS: PROVIDERS[PRIMARY].models, BASE_URL: PROVIDERS[PRIMARY].baseUrl, PRIMARY };

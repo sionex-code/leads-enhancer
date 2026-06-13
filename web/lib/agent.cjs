@@ -13,8 +13,41 @@ const db = require("./db.cjs");
 const siteReport = require("./site-report.cjs");
 
 const SESSIONS_DIR = path.join(process.cwd(), "output", "agent", "sessions");
-const MAX_STEPS = 8;
-const TOOL_RESULT_CHARS = 2200;
+const MAX_STEPS = 12;
+const TOOL_RESULT_CHARS = 1400;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Block until a project's background runner finishes the given stages (or times
+// out / is stopped), polling its state file. This is what makes the agent
+// autonomous: instead of firing a scrape and telling the user to "check status",
+// a tool can await completion and then return the actual results in the same turn.
+async function waitForProject(project, { ctx = {}, stages = ["scrape"], label = "working", timeoutMs = 10 * 60 * 1000, pollMs = 2500 } = {}) {
+  const start = Date.now();
+  let seenAlive = false;
+  while (Date.now() - start < timeoutMs) {
+    if (ctx.shouldStop && ctx.shouldStop()) return { finished: false, stopped: true };
+    let s;
+    try { s = store.loadStatus(project); } catch { s = null; }
+    const state = s?.state || {};
+    const alive = !!state.activeAlive;
+    if (alive) seenAlive = true;
+    const stageStates = state.stages || {};
+    const rawCount = s?.counts?.raw || 0;
+    const msg = state.message || "";
+    if (ctx.setStatus) ctx.setStatus(`${label} ${project}… ${rawCount} leads so far`);
+    const anyFailed = stages.some((name) => stageStates[name]?.status === "failed");
+    // Wait for the runner PROCESS to actually exit — the runner syncs the leads
+    // into the global DB AFTER a stage flips to "done", so returning on the stage
+    // flag alone races that sync and yields empty results. Process-exit (message
+    // Done/Failed, or pid no longer alive after we saw it) means the sync ran.
+    const runnerDone = !alive && /^(Done|Failed|Stopped|Nothing)/i.test(msg);
+    if (runnerDone || (seenAlive && !alive)) {
+      return { finished: !anyFailed, failed: anyFailed, rawCount, message: msg, stages: Object.fromEntries(Object.entries(stageStates).map(([k, v]) => [k, v.status])) };
+    }
+    await sleep(pollMs);
+  }
+  return { finished: false, timedOut: true };
+}
 
 // Stop requests for in-flight turns. The stop action arrives via the same
 // /api/agent route module that runs processTurn, so an in-memory set is safe.
@@ -90,6 +123,21 @@ function compactLead(r) {
   };
 }
 
+// A lead row straight from a project's scraped CSV (loadStatus.leads), for
+// showing the results of a fresh scrape without a DB round-trip.
+function compactCsvLead(r) {
+  return {
+    name: r.name || "",
+    phone: r.phone || "",
+    domain: r.domain || "",
+    website: r.website || "",
+    rating: r.rating || "",
+    category: r.category || "",
+    email: r.email || "",
+    address: r.address ? String(r.address).slice(0, 120) : "",
+  };
+}
+
 const TOOLS = {
   list_projects: {
     description: "List all scraping projects with lead counts and running state. No args.",
@@ -107,9 +155,14 @@ const TOOLS = {
   },
   get_leads: {
     description: "Query leads from the global database. All args optional.",
-    args: { project: "filter by project name", search: "text search (name/domain/phone/email/category/notes)", workflow: "optional: watchlist, contacts, email-ready, queued, sent, complete, skipped, needs-action", has_email: "true to only return leads with an email", limit: "max rows, default 20 (keep small!)" },
-    run: async ({ project = "", search = "", workflow = "", has_email = false, limit = 20 } = {}) => {
-      const { total, rows } = db.queryLeads({ project, search, workflow, hasEmail: has_email === true || has_email === "true", limit: Math.min(Number(limit) || 20, 50) });
+    args: { project: "filter by project name", search: "text search (name/domain/phone/email/category/notes)", workflow: "optional: watchlist, contacts, email-ready, queued, sent, complete, skipped, needs-action", has_email: "true to only return leads that have an email", has_phone: "true to only return leads that have a phone number", limit: "max rows, default 20 (keep small!)" },
+    run: async ({ project = "", search = "", workflow = "", has_email = false, has_phone = false, limit = 20 } = {}) => {
+      const { total, rows } = db.queryLeads({
+        project, search, workflow,
+        hasEmail: has_email === true || has_email === "true",
+        hasPhone: has_phone === true || has_phone === "true",
+        limit: Math.min(Number(limit) || 20, 50),
+      });
       return { total, shown: rows.length, leads: rows.map(compactLead) };
     },
   },
@@ -177,30 +230,94 @@ const TOOLS = {
     },
   },
   capture_leads: {
-    description: "Start a NEW Google Maps scrape (background). Scrape ONLY by default — does NOT enrich. Returns immediately; check project_status for progress.",
-    args: { project: "project name (new or existing)", query: "Maps search, e.g. 'plumbers in Austin TX'", max: "number of leads, e.g. 20", enrich: "true to also run email/social enrichment after the scrape (only when the user explicitly asks)" },
-    run: async ({ project, query, max = 20, enrich = false }) => {
-      if (!project || !query) throw new Error("project and query are required");
-      const withEnrich = enrich === true || enrich === "true";
+    description: "Scrape a NEW batch of Google Maps leads and WAIT for it to finish, then return the leads directly. Scrape ONLY by default (no email enrichment). This is autonomous — by default it blocks until done and hands back the leads, so you can show them immediately in the same turn. Use has_phone/has_email to return only matching leads.",
+    args: {
+      project: "project name (new or existing — auto-named from the query if omitted)",
+      query: "Maps search, e.g. 'dentists in Miami FL'",
+      max: "number of leads, e.g. 30",
+      enrich: "true to also run email/social enrichment after the scrape (only when the user explicitly asks for emails/socials)",
+      has_phone: "true to return only the scraped leads that have a phone number",
+      has_email: "true to return only the scraped leads that have an email (implies enrich)",
+      wait: "default true — block until the scrape finishes and return the leads. Set false only for a huge scrape the user wants to run in the background.",
+    },
+    run: async ({ project, query, max = 20, enrich = false, has_phone = false, has_email = false, wait = true }, ctx = {}) => {
+      if (!query) throw new Error("query is required");
+      // Use a per-query project so a fresh scrape never mixes into an unrelated
+      // existing project's leads. Slugified to a stable, collision-light name.
+      const name = project || `${query.replace(/\s+in\s+/i, " ").replace(/[^a-z0-9 ]/gi, "").trim().slice(0, 40) || "leads"} leads`;
+      const wantPhone = has_phone === true || has_phone === "true";
+      const wantEmail = has_email === true || has_email === "true";
+      const withEnrich = enrich === true || enrich === "true" || wantEmail;
       const stages = withEnrich ? ["scrape", "enrich"] : ["scrape"];
-      const r = store.spawnRunner({ name: project, query, max: String(max), stages, enrichConcurrency: 16, auditConcurrency: 2, headless: true, network: true });
-      return { started: true, slug: r.slug, note: `${withEnrich ? "Scrape+enrich" : "Scrape (no enrichment)"} running in background. Poll project_status.` };
+      const r = store.spawnRunner({ name, query, max: String(max), stages, enrichConcurrency: 16, auditConcurrency: 2, headless: true, network: true });
+      const canonical = r.name || name;
+      const shouldWait = wait !== false && wait !== "false";
+      if (!shouldWait) {
+        return { started: true, project: canonical, note: "Scrape running in background (wait=false). Poll project_status, or call wait_for_project to block until it's done." };
+      }
+      const w = await waitForProject(canonical, { ctx, stages, label: withEnrich ? "scraping+enriching" : "scraping" });
+      if (w.stopped) return { stopped: true, project: canonical, note: "Stopped before the scrape finished." };
+      // Make sure the just-scraped CSV is in the global DB for later tools, then
+      // read THIS run's leads straight from the project (avoids the sync race and
+      // case-sensitive DB project matching that returned empty before).
+      try { store.syncProjectToDb(canonical); } catch {}
+      let leads = [];
+      try { leads = store.loadStatus(canonical).leads || []; } catch {}
+      if (wantPhone) leads = leads.filter((l) => l.phone && String(l.phone).trim());
+      if (wantEmail) leads = leads.filter((l) => l.email && String(l.email).trim());
+      const shown = leads.slice(0, Math.min(Number(max) || 20, 50)).map(compactCsvLead);
+      return {
+        project: canonical,
+        finished: w.finished,
+        timed_out: !!w.timedOut,
+        filtered_by: [wantPhone && "has_phone", wantEmail && "has_email"].filter(Boolean).join(",") || "none",
+        captured: leads.length,
+        shown: shown.length,
+        leads: shown,
+        note: shown.length
+          ? "These are the ACTUAL scraped leads. Present ONLY these rows as a markdown table — do NOT add, rename, or invent any rows or businesses."
+          : "The scrape returned 0 matching leads — the location may not have geocoded to the city the user meant, or nothing matched. Tell the user plainly that no leads were found and suggest a more specific area or query. NEVER invent leads.",
+      };
+    },
+  },
+  wait_for_project: {
+    description: "Block until a project's running background job (scrape/enrich/whatsapp/audit) finishes, then return its final status. Use this to follow up on a background task instead of telling the user to check later.",
+    args: { project: "project name or slug", stages: "optional comma list of stages to wait for (default: whatever is running)" },
+    run: async ({ project, stages = "" }, ctx = {}) => {
+      if (!project) throw new Error("project required");
+      let wanted = String(stages).split(/[,\s]+/).filter(Boolean);
+      if (!wanted.length) {
+        const st = store.loadStatus(project);
+        wanted = Object.entries(st.state?.stages || {}).filter(([, v]) => v.status === "running").map(([k]) => k);
+        if (!wanted.length) wanted = ["scrape"];
+      }
+      const w = await waitForProject(project, { ctx, stages: wanted, label: "running" });
+      return { project, ...w };
     },
   },
   enrich_leads: {
-    description: "Re-run email/social enrichment for an existing project's leads (background).",
-    args: { project: "project name or slug" },
-    run: async ({ project }) => {
-      const r = store.spawnRunner({ name: project, stages: ["enrich"], enrichConcurrency: 16 });
-      return { started: true, slug: r.slug };
+    description: "Find emails + social links for an existing project's leads by crawling their websites, and WAIT for it to finish (default), then report how many now have an email. Use get_leads with has_email after.",
+    args: { project: "project name or slug", wait: "default true — block until enrichment finishes" },
+    run: async ({ project, wait = true }, ctx = {}) => {
+      if (!project) throw new Error("project required");
+      store.spawnRunner({ name: project, stages: ["enrich"], enrichConcurrency: 16 });
+      if (wait === false || wait === "false") return { started: true, project, note: "Enriching in background. Call wait_for_project to block until done." };
+      const w = await waitForProject(project, { ctx, stages: ["enrich"], label: "enriching" });
+      if (w.stopped) return { stopped: true, project };
+      const withEmail = db.queryLeads({ project, hasEmail: true, limit: 1 }).total;
+      return { project, finished: w.finished, timed_out: !!w.timedOut, leads_with_email: withEmail, note: "Enrichment done." };
     },
   },
   check_whatsapp: {
-    description: "Check which of a project's lead phone numbers are on WhatsApp (background).",
-    args: { project: "project name or slug" },
-    run: async ({ project }) => {
-      const r = store.spawnRunner({ name: project, stages: ["whatsapp"] });
-      return { started: true, slug: r.slug };
+    description: "Check which of a project's lead phone numbers are on WhatsApp and WAIT for it to finish (default), then report results.",
+    args: { project: "project name or slug", wait: "default true — block until the check finishes" },
+    run: async ({ project, wait = true }, ctx = {}) => {
+      if (!project) throw new Error("project required");
+      store.spawnRunner({ name: project, stages: ["whatsapp"] });
+      if (wait === false || wait === "false") return { started: true, project, note: "Checking in background. Call wait_for_project to block until done." };
+      const w = await waitForProject(project, { ctx, stages: ["whatsapp"], label: "checking WhatsApp" });
+      if (w.stopped) return { stopped: true, project };
+      return { project, finished: w.finished, timed_out: !!w.timedOut, note: "WhatsApp check done — use get_leads to see the whatsapp column." };
     },
   },
   inspect_website: {
@@ -285,13 +402,17 @@ HOW TO CALL A TOOL — reply with ONLY a fenced json block, nothing else:
 One tool call per reply. After you receive the TOOL RESULT, either call another tool or give your final answer as plain text (no json block).
 
 RULES:
-- YOU are the only one who can run tools. NEVER tell the user to call a tool or describe which tool could be used — emit the json block and run it yourself, immediately.
-- Never invent data; always read it via tools.
-- Scraping is scrape-ONLY by default: never pass enrich=true to capture_leads and never call enrich_leads unless the user explicitly asks to enrich. When a scrape finishes, show the leads (get_leads) right away.
+- YOU are the only one who can run tools. NEVER tell the user to "check status", "let me know", or describe which tool could be used — emit the json block and run it yourself, immediately. You are an autonomous agent: finish the job in this turn.
+- When the user asks to scrape/get/find leads, call capture_leads and let it WAIT (default) — it returns the actual leads in its result. Then present them right away as a short markdown table (name, phone, domain, rating). Do NOT just say a scrape started.
+- CRITICAL — NEVER fabricate leads. Show ONLY the exact rows present in the tool result's "leads" array, with their exact names/phones/domains. Do NOT add rows, invent businesses, autocomplete a list, or reuse names from earlier examples. If "leads" is empty or "shown" is 0, tell the user plainly that no leads were found (suggest a more specific area) — do NOT make any up. A made-up table is a serious failure.
+- Geocoding note: some city names are ambiguous (e.g. "Islamabad" can resolve to Anantnag in Kashmir, India). If the returned leads' addresses are clearly in the wrong country/region, say so and suggest a more specific query like "restaurants in Islamabad, Pakistan" or a sector like "F-6 Islamabad Pakistan".
+- Interpret the request and set the args: "get 30 leads from Miami with phone numbers" → capture_leads {query:"<business type> in Miami", max:30, has_phone:true}. If the business type is missing, infer it from context or ask one short question. "with emails"/"that have email" → has_email:true (this also enriches). "on whatsapp" → after scraping, call check_whatsapp then get_leads.
+- Scraping is scrape-ONLY by default: do NOT enrich (no emails) unless the user explicitly asks for emails/socials.
+- capture_leads, enrich_leads, check_whatsapp, and wait_for_project block until the work is done and hand back results — use them; don't fire-and-forget. Only set wait:false if the user explicitly wants a big scrape to run in the background, and then offer to check back.
+- Reports (generate_reports) run minutes-long as a job: start it, then you MAY poll report_job_status once; if not done, give the job id and tell the user it's generating. When done, give links: /api/agent/reports/<file>.
 - Lead workflow fields are real CRM state. Use update_lead_workflow, mark_message_sent, and complete_lead when the user asks to watch, contact, note, mark sent, skip, or complete leads.
-- Background tasks (scrape/enrich/whatsapp/reports) return immediately — report the started state and job/project to poll; do not loop on status checks more than twice in one turn. Tell the user to ask "check status" later.
-- When reports finish, give the user links: /api/agent/reports/<file>.
-- Keep answers short and concrete. Use markdown lists/tables sparingly.
+- Never invent data; always read it via tools. Keep answers short and concrete.
+- BE FAST: take the fewest steps possible. If a question needs no data (greetings, "what can you do", clarifying), answer directly with NO tool call. Don't call list_projects/project_status just to confirm something you already know — the selected project is given above. Use exactly the one tool the task needs, then answer.
 - Deleting leads is permanent — only delete what the user explicitly asked for, and confirm what was deleted.`;
 }
 
@@ -314,8 +435,8 @@ function parseToolCall(text) {
 // Build the LLM message window: system + recent turns, with old tool output trimmed.
 function buildMessages(session) {
   const msgs = [{ role: "system", content: systemPrompt(session) }];
-  const recent = (session.messages || []).slice(-24);
-  let budget = 26000;
+  const recent = (session.messages || []).slice(-16);
+  let budget = 12000;
   const rendered = [];
   for (let i = recent.length - 1; i >= 0; i--) {
     const m = recent[i];
@@ -349,7 +470,7 @@ async function processTurn(sessionId) {
       }
       session.statusDetail = step === 0 ? "planning" : "reviewing tool result";
       writeSession(session);
-      const reply = await llm.chat(buildMessages(session), { model: session.model || "fast", maxTokens: 1600, temperature: 0.2 });
+      const reply = await llm.chat(buildMessages(session), { model: session.model || "fast", maxTokens: 1200, temperature: 0.2 });
       if (stopRequests.has(sessionId)) {
         push(session, { role: "assistant", content: "Stopped. Tell me how to continue." });
         break;
@@ -378,8 +499,17 @@ async function processTurn(sessionId) {
       } else {
         session.statusDetail = `running ${call.tool}`;
         writeSession(session);
+        // ctx lets long-running tools stream live status into the session file
+        // (the UI polls it) and notice a stop request mid-wait.
+        const ctx = {
+          shouldStop: () => stopRequests.has(sessionId),
+          setStatus: (detail) => {
+            const s = readSession(sessionId);
+            if (s) { s.statusDetail = detail; writeSession(s); }
+          },
+        };
         try {
-          result = await tool.run(call.args || {});
+          result = await tool.run(call.args || {}, ctx);
         } catch (err) {
           result = { error: String(err && err.message || err).slice(0, 400) };
         }

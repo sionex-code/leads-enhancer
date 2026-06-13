@@ -7,6 +7,8 @@ export async function GET(request) {
     hasEmail: searchParams.get("hasEmail") === "1",
     minScore: Number(searchParams.get("minScore") || 0),
     project: searchParams.get("project") || "",
+    country: searchParams.get("country") || "",
+    city: searchParams.get("city") || "",
     workflow: searchParams.get("workflow") || "",
     emailStatus: searchParams.get("emailStatus") || "",
     outreachStatus: searchParams.get("outreachStatus") || "",
@@ -15,7 +17,13 @@ export async function GET(request) {
     limit: Number(searchParams.get("limit") || 2000),
     offset: Number(searchParams.get("offset") || 0),
   });
-  return Response.json({ ...result, stats: db.statsLeads(), projects: db.listProjectNames() });
+  return Response.json({
+    ...result,
+    stats: db.statsLeads(),
+    projects: db.listProjectNames(),
+    countries: db.listCountries(),
+    cities: db.listCities(searchParams.get("country") || ""),
+  });
 }
 
 export async function POST(request) {

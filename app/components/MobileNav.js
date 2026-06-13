@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Bot, Database, LayoutGrid } from "lucide-react";
+import { Bot, Database, LayoutGrid, Star } from "lucide-react";
 
 // App-style bottom tab bar, shown on small screens only (see globals.css).
 export default function MobileNav({ active }) {
   const tabs = [
     { key: "projects", href: "/", label: "Projects", Icon: LayoutGrid },
     { key: "leads", href: "/leads", label: "Leads", Icon: Database },
+    { key: "watchlist", href: "/watchlist", label: "Watch", Icon: Star },
     { key: "agent", href: "/agent", label: "Agent", Icon: Bot },
   ];
   return (

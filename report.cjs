@@ -243,8 +243,8 @@ function average(rows, col) {
       </ul>
       ${socials.length ? `<div class="social">${socials.map(([k, v]) => `<a href="${esc(v)}" target="_blank">${k}</a>`).join("")}</div>` : ""}
       <div class="links">
-        ${dHref ? `<a href="${esc(dHref)}" target="_blank">Desktop Lighthouse report</a>` : ""}
-        ${mHref ? `<a href="${esc(mHref)}" target="_blank">Mobile Lighthouse report</a>` : ""}
+        ${dHref ? `<a href="${esc(dHref)}" target="_blank">Desktop audit report</a>` : ""}
+        ${mHref ? `<a href="${esc(mHref)}" target="_blank">Mobile audit report</a>` : ""}
       </div>
     </article>`;
   });

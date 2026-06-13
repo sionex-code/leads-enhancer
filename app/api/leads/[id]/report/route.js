@@ -3,8 +3,9 @@ import siteReport from "../../../../../web/lib/site-report.cjs";
 
 export const dynamic = "force-dynamic";
 
-// Kick off an independent report (inspection + Lighthouse + AI analysis) for this
-// lead's website. Returns a jobId the client polls at /api/agent/jobs/<id>.
+// Kick off an independent report (inspection + fast real-Chrome audit on desktop
+// + mobile + AI analysis) for this lead's website. Returns a jobId the client
+// polls at /api/agent/jobs/<id>.
 export async function POST(_request, context) {
   const { id } = await context.params;
   const lead = db.getLead(id);

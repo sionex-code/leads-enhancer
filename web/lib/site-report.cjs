@@ -1,16 +1,19 @@
 // Independent per-website report generator. For each website (max 5 per batch):
 //   1. Inspect the live site (title, meta, socials, emails, tech stack hints)
-//   2. Run Google Lighthouse (desktop + mobile) via the existing analyze.cjs CLI
-//   3. Ask the reasoning model to write a human analysis + outreach angle
-//   4. Render a standalone dark HTML report under output/agent/reports/
+//   2. Run the fast patchright audit (desktop + mobile) — speed, layout, mobile,
+//      SEO, security, accessibility, support-chat detection (no slow Lighthouse)
+//   3. Ask the reasoning model to summarize the issues + write an outreach angle
+//   4. Render a standalone dark HTML report (AI summary + the raw audit) under
+//      output/agent/reports/
 //
-// Batches run as background jobs (Lighthouse takes ~1min/site/device) tracked in
-// output/agent/report-jobs.json; the UI/agent polls getJob(id).
+// Batches run as background jobs tracked in output/agent/report-jobs.json; the
+// UI/agent polls getJob(id).
 
 const fs = require("fs");
 const path = require("path");
-const { spawn } = require("child_process");
 const llm = require("./llm.cjs");
+const { auditUrl } = require("./web-audit.cjs");
+const { chromium } = require("patchright");
 
 const ROOT = process.cwd();
 const AGENT_DIR = path.join(ROOT, "output", "agent");
@@ -128,102 +131,62 @@ async function inspectWebsite(website) {
   return out;
 }
 
-// ---- Lighthouse (reuses analyze.cjs) -------------------------------------------
-function parseCsvObjects(text) {
-  if (!text) return [];
-  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
-  const lines = [];
-  let field = "", row = [], inQ = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (inQ) {
-      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false; }
-      else field += c;
-    } else if (c === '"') inQ = true;
-    else if (c === ",") { row.push(field); field = ""; }
-    else if (c === "\n" || c === "\r") {
-      if (c === "\r" && text[i + 1] === "\n") i++;
-      row.push(field); field = "";
-      if (row.length > 1 || row[0] !== "") lines.push(row);
-      row = [];
-    } else field += c;
-  }
-  if (field !== "" || row.length) { row.push(field); lines.push(row); }
-  if (!lines.length) return [];
-  const headers = lines[0];
-  return lines.slice(1).map((r) => Object.fromEntries(headers.map((h, i) => [h, r[i] || ""])));
+// ---- fast patchright audit (desktop + mobile) ----------------------------------
+// Audits every site on both devices using one shared real-Chrome browser, then
+// shapes the result into the { performance, seo, accessibility, best-practices,
+// metrics, failingAudits, raw } form the report + AI consume. `best-practices`
+// maps to the engine's security score (kept for backward-compatible display).
+function shapeAudit(report) {
+  const p = report.performance || {};
+  const s = report.scores || {};
+  return {
+    performance: s.performance ?? null,
+    seo: s.seo ?? null,
+    accessibility: s.accessibility ?? null,
+    "best-practices": s.security ?? null,
+    overall: report.score ?? null,
+    metrics: {
+      "TTFB": p.ttfbMs != null ? `${p.ttfbMs} ms` : "",
+      "First Contentful Paint": p.fcpMs != null ? `${p.fcpMs} ms` : "",
+      "Full Load": p.loadMs != null ? `${(p.loadMs / 1000).toFixed(2)} s` : "",
+      "Page Weight": p.totalTransferKB != null ? `${p.totalTransferKB} KB` : "",
+      "Requests": p.requestCount != null ? String(p.requestCount) : "",
+    },
+    failingAudits: (report.issues || []).filter((i) => i.severity !== "low").slice(0, 8).map((i) => i.message),
+    chat: report.chat || { hasSupportChat: false, providers: [] },
+    raw: report,
+  };
 }
 
-function csvEsc(v) {
-  return `"${String(v ?? "").replace(/"/g, '""')}"`;
-}
-
-async function runLighthouseBatch(sites, device, workDir, log, jobId) {
-  const csvFile = path.join(workDir, `sites-${device}.csv`);
-  const outDir = path.join(workDir, `lh-${device}`);
-  const summaryFile = path.join(workDir, `summary-${device}.csv`);
-  fs.mkdirSync(outDir, { recursive: true });
-  const lines = ["name,website\r\n"];
-  for (const s of sites) lines.push(`${csvEsc(s.name)},${csvEsc(normUrl(s.website))}\r\n`);
-  fs.writeFileSync(csvFile, lines.join(""), "utf8");
-
-  log(`Lighthouse ${device}: auditing ${sites.length} site(s)…`);
-  await new Promise((resolve) => {
-    const child = spawn(process.execPath, [
-      path.join(ROOT, "analyze.js"), csvFile,
-      "--device", device, "--concurrency", "2", "--timeout", "120000",
-      "--outDir", outDir, "--summary", summaryFile, "--force",
-    ], { cwd: ROOT, stdio: "ignore", windowsHide: true });
-    // record the worker pid so cancelJob can kill the in-flight Lighthouse run
-    if (jobId) patchJob(jobId, { activePid: child.pid });
-    child.on("close", resolve);
-    child.on("error", resolve);
-  });
-  if (jobId) patchJob(jobId, { activePid: null });
-
-  const summary = parseCsvObjects(fs.existsSync(summaryFile) ? fs.readFileSync(summaryFile, "utf8") : "");
+async function runAuditBatch(sites, device, browser, log, jobId) {
+  log(`Audit ${device}: scanning ${sites.length} site(s)…`);
   const byDomain = {};
-  for (const row of summary) {
-    const domain = row.domain || hostOf(row.website);
-    const detail = readLighthouseDetail(outDir, domain);
-    byDomain[domain] = { ...row, ...detail };
+  // Light concurrency (2) over the shared browser; each audit gets its own context.
+  let idx = 0;
+  async function worker() {
+    while (idx < sites.length) {
+      if ((getJob(jobId) || {}).cancelRequested) return;
+      const site = sites[idx++];
+      const domain = hostOf(site.website);
+      try {
+        const report = await auditUrl(normUrl(site.website), { mobile: device === "mobile", headless: true, browser });
+        byDomain[domain] = shapeAudit(report);
+      } catch (err) {
+        byDomain[domain] = { error: String(err.message || err).slice(0, 150) };
+      }
+    }
   }
+  await Promise.all([worker(), worker()]);
   return byDomain;
 }
 
-// Pull the headline metrics out of the Lighthouse JSON so the report can show
-// real numbers (LCP, CLS…) instead of just the 0-100 category scores.
-function readLighthouseDetail(outDir, domain) {
-  try {
-    // analyze.cjs saves reports as safeName(domain): non [a-z0-9-] chars → "_"
-    const safe = domain.replace(/[^a-z0-9-]+/gi, "_").slice(0, 80);
-    const file = fs.readdirSync(outDir).find((f) => f.endsWith(".report.json") && f.toLowerCase().startsWith(safe.toLowerCase()));
-    if (!file) return {};
-    const lhr = JSON.parse(fs.readFileSync(path.join(outDir, file), "utf8"));
-    const a = lhr.audits || {};
-    const metric = (id) => a[id]?.displayValue || "";
-    const failing = Object.values(a)
-      .filter((x) => x && x.score !== null && x.score < 0.5 && x.details && ["opportunity", "table"].includes(x.details.type))
-      .slice(0, 8)
-      .map((x) => x.title);
-    return {
-      metrics: {
-        "First Contentful Paint": metric("first-contentful-paint"),
-        "Largest Contentful Paint": metric("largest-contentful-paint"),
-        "Total Blocking Time": metric("total-blocking-time"),
-        "Cumulative Layout Shift": metric("cumulative-layout-shift"),
-        "Speed Index": metric("speed-index"),
-      },
-      failingAudits: failing,
-      lhHtml: file.replace(/\.report\.json$/, ".report.html"),
-    };
-  } catch {
-    return {};
-  }
-}
-
 // ---- AI analysis ----------------------------------------------------------------
-async function aiAnalysis(site, inspection, lighthouse) {
+async function aiAnalysis(site, inspection, audit) {
+  const deviceFacts = (a) => a && !a.error ? {
+    overall: a.overall, performance: a.performance, seo: a.seo, accessibility: a.accessibility,
+    bestPractices: a["best-practices"], metrics: a.metrics, issues: a.raw?.issues || a.failingAudits,
+    supportChat: a.chat, security: a.raw?.security, layout: a.raw?.layout?.horizontalOverflow ? "has horizontal overflow" : "ok",
+  } : (a?.error ? { error: a.error } : null);
   const facts = {
     business: { name: site.name || "", category: site.category || "", phone: site.phone || "", address: site.address || "",
       rating: site.rating || "", email: site.email || "", whatsapp: site.whatsapp_status || site.whatsappExists || "" },
@@ -238,19 +201,12 @@ async function aiAnalysis(site, inspection, lighthouse) {
       return acc;
     }, {}),
     emailsFound: inspection.emails,
-    lighthouse: {
-      desktop: lighthouse.desktop ? { performance: lighthouse.desktop.performance, seo: lighthouse.desktop.seo,
-        accessibility: lighthouse.desktop.accessibility, bestPractices: lighthouse.desktop["best-practices"],
-        metrics: lighthouse.desktop.metrics, topIssues: lighthouse.desktop.failingAudits } : null,
-      mobile: lighthouse.mobile ? { performance: lighthouse.mobile.performance, seo: lighthouse.mobile.seo,
-        accessibility: lighthouse.mobile.accessibility, bestPractices: lighthouse.mobile["best-practices"],
-        metrics: lighthouse.mobile.metrics, topIssues: lighthouse.mobile.failingAudits } : null,
-    },
+    audit: { desktop: deviceFacts(audit.desktop), mobile: deviceFacts(audit.mobile) },
   };
   try {
     return await llm.chat(
       [
-        { role: "system", content: "You are a senior web/marketing auditor writing a client-ready website report. Be specific, factual, and concise. Use ONLY the data provided — never invent scores or facts. Output markdown with exactly these sections: ## Executive Summary (3-4 sentences), ## Website Quality (performance + technical findings), ## SEO & Visibility, ## Social Media Presence (which channels exist, which are missing), ## Top Recommendations (numbered, max 6, most impactful first), ## Outreach Angle (2-3 sentences: how a web agency could pitch this business)." },
+        { role: "system", content: "You are a senior web auditor writing a client-ready website report. Be specific, factual, and concise. Use ONLY the data provided — never invent scores or facts. The 'audit' data is from a real-browser scan (desktop + mobile) listing concrete issues (performance, layout, mobile-friendliness, SEO, security, accessibility, support-chat). Output markdown with exactly these sections: ## Executive Summary (3-4 sentences naming the biggest problems), ## Key Issues Found (bulleted, group by severity high→low, quote the concrete findings — load time, broken images, missing viewport, no support chat, etc.), ## SEO & Visibility, ## Social Media Presence (which channels exist, which are missing), ## Top Recommendations (numbered, max 6, most impactful first), ## Outreach Angle (2-3 sentences: how a web agency could pitch this business based on the issues)." },
         { role: "user", content: "Audit data:\n```json\n" + JSON.stringify(facts) + "\n```" },
       ],
       { model: "reasoning", maxTokens: 1800, temperature: 0.3 }
@@ -303,17 +259,19 @@ function donut(label, value) {
 
 function deviceBlock(name, lh) {
   if (!lh) return "";
+  if (lh.error) return `<div class="device"><h3>${name}</h3><p style="color:#f87171;font-size:13px">Audit failed: ${lh.error}</p></div>`;
   const metrics = lh.metrics || {};
   const rows = Object.entries(metrics).filter(([, v]) => v).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("");
   const issues = (lh.failingAudits || []).map((t) => `<li>${t}</li>`).join("");
+  const chat = lh.chat || {};
   return `<div class="device">
     <h3>${name}</h3>
     <div class="donuts">
-      ${donut("Performance", lh.performance)}${donut("SEO", lh.seo)}${donut("Accessibility", lh.accessibility)}${donut("Best Practices", lh["best-practices"])}
+      ${donut("Overall", lh.overall)}${donut("Performance", lh.performance)}${donut("SEO", lh.seo)}${donut("Accessibility", lh.accessibility)}${donut("Security", lh["best-practices"])}
     </div>
     ${rows ? `<table class="metrics"><tbody>${rows}</tbody></table>` : ""}
+    <p style="font-size:13px;color:#9fb0e0;margin:8px 0 0">Support chat: ${chat.hasSupportChat ? `<strong style="color:#4ade80">${chat.providers.join(", ")}</strong>` : '<span style="color:#f87171">none detected</span>'}</p>
     ${issues ? `<div class="issues"><strong>Top issues</strong><ul>${issues}</ul></div>` : ""}
-    ${lh.lhHtmlRel ? `<a class="lh-link" href="${lh.lhHtmlRel}" target="_blank">Open full Lighthouse report →</a>` : ""}
   </div>`;
 }
 
@@ -324,6 +282,7 @@ function chip(label, url) {
 function renderReportHtml({ site, inspection, lighthouse, analysisHtml, generatedAt }) {
   const domain = hostOf(site.website);
   const soc = (k) => inspection.socials[k] || site[k] || "";
+  const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${site.name || domain} — Website Report</title>
 <style>
@@ -385,10 +344,10 @@ function renderReportHtml({ site, inspection, lighthouse, analysisHtml, generate
     </dl>
   </div>
 
-  <div class="card"><h2>Lighthouse audit</h2>
+  <div class="card"><h2>Performance &amp; technical audit</h2>
     ${deviceBlock("Desktop", lighthouse.desktop)}
     ${deviceBlock("Mobile", lighthouse.mobile)}
-    ${!lighthouse.desktop && !lighthouse.mobile ? '<p style="color:#8fa0c8">Lighthouse could not audit this site.</p>' : ""}
+    ${!lighthouse.desktop && !lighthouse.mobile ? '<p style="color:#8fa0c8">The audit engine could not scan this site.</p>' : ""}
   </div>
 
   <div class="card"><h2>Social media presence</h2>
@@ -399,7 +358,14 @@ function renderReportHtml({ site, inspection, lighthouse, analysisHtml, generate
     </div>
   </div>
 
-  <div class="card ai"><h2>Analysis & recommendations</h2>${analysisHtml}</div>
+  <div class="card ai"><h2>AI analysis &amp; recommendations</h2>${analysisHtml}</div>
+
+  <div class="card"><h2>Raw audit data</h2>
+    <details><summary style="cursor:pointer;color:#8ab0ff">Show full machine-readable report (desktop + mobile)</summary>
+    <pre style="background:#0d1117;color:#9fb0e0;padding:14px;border-radius:10px;overflow:auto;max-height:60vh;font-size:12px;margin-top:12px">${
+      esc(JSON.stringify({ desktop: lighthouse.desktop?.raw || lighthouse.desktop || null, mobile: lighthouse.mobile?.raw || lighthouse.mobile || null }, null, 2))
+    }</pre></details>
+  </div>
   <footer>Generated ${generatedAt} · Lead Ops AI agent</footer>
 </div></body></html>`;
 }
@@ -466,6 +432,7 @@ function startReportJob(sites, { devices = ["desktop", "mobile"], onLog } = {}) 
     const assertNotCancelled = () => {
       if ((getJob(id) || {}).cancelRequested) throw Object.assign(new Error("cancelled"), { cancelled: true });
     };
+    let browser = null;
     try {
       const workDir = path.join(AGENT_DIR, "work", id);
       fs.mkdirSync(workDir, { recursive: true });
@@ -474,9 +441,11 @@ function startReportJob(sites, { devices = ["desktop", "mobile"], onLog } = {}) 
       const inspections = await Promise.all(valid.map((s) => inspectWebsite(s.website)));
       assertNotCancelled();
 
+      // One shared real-Chrome browser drives every audit (desktop + mobile).
+      browser = await chromium.launch({ channel: "chrome", headless: true, args: ["--disable-dev-shm-usage"] });
       const lhByDevice = {};
       for (const device of devices) {
-        lhByDevice[device] = await runLighthouseBatch(valid, device, workDir, log, id);
+        lhByDevice[device] = await runAuditBatch(valid, device, browser, log, id);
         assertNotCancelled();
       }
 
@@ -488,18 +457,7 @@ function startReportJob(sites, { devices = ["desktop", "mobile"], onLog } = {}) 
         const lighthouse = {};
         for (const device of devices) {
           const row = lhByDevice[device]?.[domain];
-          if (row) {
-            // copy the full Lighthouse HTML next to the report so links survive cleanup
-            if (row.lhHtml) {
-              const src = path.join(workDir, `lh-${device}`, row.lhHtml);
-              const destName = `${domain}-${device}-lighthouse.html`;
-              try {
-                fs.copyFileSync(src, path.join(REPORTS_DIR, destName));
-                row.lhHtmlRel = destName;
-              } catch {}
-            }
-            lighthouse[device] = row;
-          }
+          if (row) lighthouse[device] = row;
         }
         log(`Writing AI analysis for ${domain}…`);
         const analysis = await aiAnalysis(site, inspections[i], lighthouse);
@@ -519,7 +477,7 @@ function startReportJob(sites, { devices = ["desktop", "mobile"], onLog } = {}) 
         log(`Report ready: ${fileName}`);
       }
 
-      // clean the heavy lighthouse work dir, keep the reports
+      // keep the reports, drop the (now-empty) work dir
       try { fs.rmSync(workDir, { recursive: true, force: true }); } catch {}
       patchJob(id, { status: "done", finishedAt: new Date().toISOString() });
       log("All reports generated.");
@@ -531,6 +489,8 @@ function startReportJob(sites, { devices = ["desktop", "mobile"], onLog } = {}) 
       } else {
         patchJob(id, { status: "failed", error: String(err && err.message || err).slice(0, 400) });
       }
+    } finally {
+      if (browser) await browser.close().catch(() => {});
     }
   })();
 

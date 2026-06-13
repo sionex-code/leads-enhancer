@@ -203,7 +203,14 @@ function loadState(stateFile) {
   return map;
 }
 
+// ---- reusable export ---------------------------------------------------------
+// checkNumber(number) -> { exists, whatsappId, status } and normalizePhone() are
+// driven by the web app for on-demand single-lead WhatsApp checks. Only run the
+// CLI batch pipeline below when this file is executed directly.
+module.exports = { checkNumber, normalizePhone };
+
 // ---- main --------------------------------------------------------------------
+if (require.main === module)
 (async () => {
   // Resolve input: explicit path, else most recent CSV in ./output (prefer enriched).
   let input = positionals[0];

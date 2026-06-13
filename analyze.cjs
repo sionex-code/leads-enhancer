@@ -1,21 +1,22 @@
 #!/usr/bin/env node
-// Website auditor: runs Google Lighthouse against each lead's website (headless
-// Chrome), saving a full HTML + JSON report per site plus a scores summary CSV.
+// Website auditor: fast patchright (real Chrome) audit of each lead's website,
+// saving a full HTML report per site plus a scores summary CSV. Replaces the old
+// Google Lighthouse runner (which took ~60s/site) — this loads each page once
+// (~5-20s) and scores performance, layout, mobile, SEO, security, accessibility.
 //
 // Usage:
 //   node analyze.js                                 # latest CSV in ./output (enriched preferred)
 //   node analyze.js output/leads-enriched.csv       # specific file
-//   node analyze.js output/leads.csv --concurrency 1 --device desktop --outDir output/projects/x/lighthouse/desktop
+//   node analyze.js output/leads.csv --concurrency 2 --device desktop --outDir output/projects/x/lighthouse/desktop
 //
 // Resume: every audited site is appended to <outDir>/.analyze-state.jsonl, so
 // re-running skips sites already done (use --force to redo). Duplicate domains
 // are audited once.
-//
-// Requires Lighthouse locally or on PATH: npm install
 
 const fs = require("fs");
 const path = require("path");
-const { spawn } = require("child_process");
+const { chromium } = require("patchright");
+const { auditUrl, renderAuditHtml } = require("./web/lib/web-audit.cjs");
 
 // ---- CLI args ----------------------------------------------------------------
 const VALUE_FLAGS = new Set(["--concurrency", "--timeout", "--outDir", "--summary", "--categories", "--device", "--maxSites"]);
@@ -130,74 +131,37 @@ const normalizeUrl = (u) => {
 const siteKey = (website) => hostOf(website) || (website || "").trim().toLowerCase();
 const safeName = (s) => s.replace(/[^a-z0-9-]+/gi, "_").slice(0, 80) || "site";
 
-// ---- Lighthouse runner -------------------------------------------------------
-// Prefer a project-local Lighthouse install; fall back to a global command on PATH.
-function lighthouseCommand() {
-  const local = path.join(__dirname, "node_modules", ".bin", process.platform === "win32" ? "lighthouse.cmd" : "lighthouse");
-  return fs.existsSync(local) ? local : process.platform === "win32" ? "lighthouse.cmd" : "lighthouse";
-}
-const LH_CMD = lighthouseCommand();
-
-function runLighthouse(url, outBase) {
-  return new Promise((resolve) => {
-    const chromeFlags = ["--headless=new", "--no-sandbox", "--disable-gpu"].join(" ");
-    const args = [
-      url,
-      "--quiet",
-      `--chrome-flags=${chromeFlags}`,
-      "--output=json",
-      "--output=html",
-      `--output-path=${outBase}`,
-      `--only-categories=${CATEGORIES}`,
-      "--max-wait-for-load=45000",
-      ...(MOBILE ? [] : ["--preset=desktop"]),
-    ];
-    let stderr = "";
-    let done = false;
-    const child = spawn(LH_CMD, args, { shell: true, windowsHide: true });
-    const killer = setTimeout(() => {
-      if (!done) {
-        done = true;
-        child.kill();
-        resolve({ ok: false, error: "timeout" });
-      }
-    }, TIMEOUT);
-    child.stderr.on("data", (d) => (stderr += d.toString()));
-    child.on("error", (err) => {
-      if (done) return;
-      done = true;
-      clearTimeout(killer);
-      resolve({ ok: false, error: err.message });
-    });
-    child.on("close", (code) => {
-      if (done) return;
-      done = true;
-      clearTimeout(killer);
-      if (code === 0) resolve({ ok: true });
-      else resolve({ ok: false, error: (stderr.trim().split("\n").pop() || `exit ${code}`).slice(0, 120) });
-    });
-  });
-}
-
-// Lighthouse writes <base>.report.json / <base>.report.html for an extension-less path.
-function readScores(outBase, summaryFile) {
-  const jsonPath = `${outBase}.report.json`;
-  const htmlPath = `${outBase}.report.html`;
-  const lhr = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
-  const cats = lhr.categories || {};
-  const scores = {};
-  for (const col of SCORE_COLS) {
-    const c = cats[col];
-    scores[col] = c && typeof c.score === "number" ? Math.round(c.score * 100) : "";
+// ---- patchright audit runner -------------------------------------------------
+// Run the fast in-process audit engine and map its rich result onto the summary
+// CSV's score columns (kept identical so report.cjs + the DB ingestion are
+// unchanged): best-practices is populated from the engine's "security" score.
+async function runAudit(url, outBase, summaryFile, browser) {
+  try {
+    const report = await auditUrl(url, { mobile: MOBILE, headless: true, timeout: TIMEOUT, browser });
+    const s = report.scores || {};
+    const scores = {
+      performance: s.performance ?? "",
+      accessibility: s.accessibility ?? "",
+      "best-practices": s.security ?? "",
+      seo: s.seo ?? "",
+      pwa: "",
+    };
+    // Save a standalone HTML report next to the summary so report.cjs can link to it.
+    const htmlPath = `${outBase}.report.html`;
+    try {
+      fs.writeFileSync(htmlPath, renderAuditHtml(report), "utf8");
+      fs.writeFileSync(`${outBase}.report.json`, JSON.stringify(report), "utf8");
+    } catch {}
+    return {
+      ok: true,
+      scores,
+      finalUrl: report.url || url,
+      fetchTime: report.fetchedAt || "",
+      reportHtml: fs.existsSync(htmlPath) ? path.relative(path.dirname(summaryFile), htmlPath).replace(/\\/g, "/") : "",
+    };
+  } catch (err) {
+    return { ok: false, error: String(err.message || err).slice(0, 120) };
   }
-  return {
-    scores,
-    finalUrl: lhr.finalDisplayedUrl || lhr.finalUrl || lhr.requestedUrl || "",
-    fetchTime: lhr.fetchTime || "",
-    reportHtml: fs.existsSync(htmlPath)
-      ? path.relative(path.dirname(summaryFile), htmlPath).replace(/\\/g, "/")
-      : "",
-  };
 }
 
 // ---- state (resume) ----------------------------------------------------------
@@ -310,6 +274,11 @@ function loadState(stateFile) {
   let processed = 0;
   let ok = 0;
 
+  // One shared real-Chrome browser; each worker audits in its own context.
+  const browser = queue.length
+    ? await chromium.launch({ channel: "chrome", headless: true, args: ["--disable-dev-shm-usage"] })
+    : null;
+
   async function worker() {
     while (true) {
       const job = queue.shift();
@@ -317,10 +286,9 @@ function loadState(stateFile) {
       const outBase = path.join(outDir, safeName(job.key));
       let result = { name: job.name, website: job.website, device: DEVICE };
       try {
-        const run = await runLighthouse(job.website, outBase);
+        const run = await runAudit(job.website, outBase, summaryFile, browser);
         if (run.ok) {
-          const data = readScores(outBase, summaryFile);
-          result = { ...result, ...data, analyzeStatus: "ok" };
+          result = { ...result, scores: run.scores, finalUrl: run.finalUrl, fetchTime: run.fetchTime, reportHtml: run.reportHtml, analyzeStatus: "ok" };
         } else {
           result.analyzeStatus = "error: " + run.error;
         }
@@ -338,6 +306,7 @@ function loadState(stateFile) {
   }
 
   await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+  if (browser) await browser.close().catch(() => {});
   flushSummary();
 
   console.log(`\n  Done. ${processed} sites audited this run, ${ok} succeeded.`);
