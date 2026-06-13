@@ -102,7 +102,7 @@ const csvEsc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
 // Turn a human phone string ("+1 425-537-4728", "(0327) 866 7097", "tel:+92…")
 // into the digits-only E.164-style id WhatsApp expects (country code + number,
 // no leading +). Returns "" when there are no usable digits.
-function normalizePhone(raw) {
+function normalizePhone(raw, defaultCc = DEFAULT_CC) {
   let s = String(raw || "").trim();
   if (!s) return "";
   // Some sources prefix tel:/callto:; drop anything before the first digit/plus.
@@ -110,15 +110,50 @@ function normalizePhone(raw) {
   const hadPlus = /^\s*\+/.test(s) || /^\s*00/.test(s.replace(/[^\d+]/g, ""));
   let digits = s.replace(/\D/g, "");
   if (!digits) return "";
+  const cc = String(defaultCc || "").replace(/\D/g, "");
   // International "00" prefix means a +country number — strip the 00.
   if (digits.startsWith("00")) {
     digits = digits.slice(2);
-  } else if (!hadPlus && DEFAULT_CC) {
-    // A bare local number with a configured default country code: drop a single
-    // leading trunk "0" then prepend the country code (e.g. 0327… -> 92327…).
-    digits = DEFAULT_CC + digits.replace(/^0+/, "");
+  } else if (!hadPlus && cc) {
+    // A bare local number with a known country code: drop a leading trunk "0"
+    // (e.g. UK "020…" -> "20…") then prepend the country code, unless the number
+    // already starts with it (so US "1 866…" isn't doubled to "11866…").
+    const local = digits.replace(/^0+/, "");
+    digits = local.startsWith(cc) ? local : cc + local;
   }
   return digits;
+}
+
+// Map a (possibly German-localized) country name to its international dialing
+// code, so a bare local number can be made WhatsApp-checkable when we know the
+// lead's country. Returns "" for unknown names (number is left as-is).
+const COUNTRY_DIAL_CODES = {
+  "united states": "1", "united states of america": "1", usa: "1", us: "1",
+  "vereinigte staaten": "1", "vereinigte staaten von amerika": "1",
+  canada: "1", kanada: "1",
+  "united kingdom": "44", uk: "44", "great britain": "44", "vereinigtes königreich": "44",
+  pakistan: "92",
+  india: "91", indien: "91",
+  "united arab emirates": "971", uae: "971", "vereinigte arabische emirate": "971",
+  qatar: "974", katar: "974",
+  oman: "968",
+  "saudi arabia": "966", "saudi-arabien": "966",
+  germany: "49", deutschland: "49",
+  france: "33", frankreich: "33",
+  italy: "39", italien: "39",
+  spain: "34", spanien: "34",
+  netherlands: "31", niederlande: "31",
+  australia: "61", australien: "61",
+  ireland: "353", irland: "353",
+  "new zealand": "64", neuseeland: "64",
+  "south africa": "27", südafrika: "27",
+  kuwait: "965", bahrain: "973",
+  belgium: "32", belgien: "32",
+  switzerland: "41", schweiz: "41",
+  austria: "43", österreich: "43",
+};
+function dialingCode(country) {
+  return COUNTRY_DIAL_CODES[String(country || "").trim().toLowerCase()] || "";
 }
 
 // ---- rate limiter ------------------------------------------------------------
@@ -207,7 +242,7 @@ function loadState(stateFile) {
 // checkNumber(number) -> { exists, whatsappId, status } and normalizePhone() are
 // driven by the web app for on-demand single-lead WhatsApp checks. Only run the
 // CLI batch pipeline below when this file is executed directly.
-module.exports = { checkNumber, normalizePhone };
+module.exports = { checkNumber, normalizePhone, dialingCode };
 
 // ---- main --------------------------------------------------------------------
 if (require.main === module)

@@ -518,14 +518,15 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
     const key = `${lead.id}:whatsapp`;
     setBusyKey(key, true);
     try {
-      const data = await jsonFetch(`/api/leads/${lead.id}/whatsapp`, { method: "POST" });
+      const qs = country ? `?country=${encodeURIComponent(country)}` : "";
+      const data = await jsonFetch(`/api/leads/${lead.id}/whatsapp${qs}`, { method: "POST" });
       if (data.lead) mergeLead(data.lead);
     } catch (err) {
       alert(err.message);
     } finally {
       setBusyKey(key, false);
     }
-  }, [mergeLead, setBusyKey]);
+  }, [country, mergeLead, setBusyKey]);
 
   // Context-aware remove: in a watch/custom-list view drop the lead from that
   // list only (it stays in the full leads database); in the full view delete it.

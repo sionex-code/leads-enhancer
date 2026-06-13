@@ -6,13 +6,18 @@ export const dynamic = "force-dynamic";
 // On-demand single-lead WhatsApp check: normalize this lead's phone and ask the
 // OpenWA instance whether it's registered, then persist the result. Returns the
 // updated lead so the table can refresh that one row in place.
-export async function POST(_request, context) {
+export async function POST(request, context) {
   const { id } = await context.params;
   const lead = db.getLead(id);
   if (!lead) return Response.json({ error: "Lead not found" }, { status: 404 });
   if (!lead.phone) return Response.json({ error: "This lead has no phone to check" }, { status: 400 });
 
-  const number = waLib.normalizePhone(lead.phone);
+  // A bare local number (e.g. US "(866) 432-3187") needs a country code before
+  // WhatsApp can resolve it. Prefer an explicit country (the active filter the
+  // user picked in the UI), then fall back to the lead's own parsed country.
+  const overrideCountry = new URL(request.url).searchParams.get("country") || "";
+  const cc = waLib.dialingCode(overrideCountry) || waLib.dialingCode(lead.country);
+  const number = waLib.normalizePhone(lead.phone, cc);
   if (!number) {
     const updated = db.updateLeadFields(id, { whatsapp_status: "no phone" });
     return Response.json({ lead: updated });
