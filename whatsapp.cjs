@@ -120,6 +120,11 @@ function normalizePhone(raw, defaultCc = DEFAULT_CC) {
     // already starts with it (so US "1 866…" isn't doubled to "11866…").
     const local = digits.replace(/^0+/, "");
     digits = local.startsWith(cc) ? local : cc + local;
+  } else if (!hadPlus && /^[2-9]\d{2}[2-9]\d{6}$/.test(digits)) {
+    // No country code known (US/Canada addresses usually omit the country), but
+    // this is a valid 10-digit North American number per NANP rules — default
+    // its country code to 1 so the WhatsApp lookup works.
+    digits = "1" + digits;
   }
   return digits;
 }
