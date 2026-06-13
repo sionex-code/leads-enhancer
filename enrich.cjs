@@ -665,7 +665,11 @@ const siteKey = (website) => {
         result = { ...EXTRA_HEADERS.reduce((o, h) => ((o[h] = ""), o), {}), enrichStatus: "error: " + err.message };
       }
       state.set(job.key, result);
-      fs.appendFileSync(stateFile, JSON.stringify({ key: job.key, website: job.website, result }) + "\n", "utf8");
+      fs.appendFileSync(
+        stateFile,
+        JSON.stringify({ ts: new Date().toISOString(), key: job.key, website: job.website, result }) + "\n",
+        "utf8"
+      );
       processed++;
       if (result.email) withEmail++;
       const tag = result.email || result.enrichStatus;

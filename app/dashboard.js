@@ -4,16 +4,22 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import MobileNav from "./components/MobileNav";
 import AnimatedNumber from "./components/AnimatedNumber";
+import useSidebarCollapse from "./components/useSidebarCollapse";
 import {
   BarChart3,
   Bot,
   Brush,
+  Clock3,
   Database,
   FileText,
+  FolderOpen,
   Globe2,
   KeyRound,
+  ListPlus,
   MessageCircle,
   PauseCircle,
+  PanelLeftClose,
+  PanelLeftOpen,
   Play,
   OctagonX,
   Plus,
@@ -131,6 +137,45 @@ function Stage({ title, stage }) {
   );
 }
 
+function formatDuration(seconds) {
+  const n = Number(seconds);
+  if (!Number.isFinite(n) || n <= 0) return "calculating";
+  const minutes = Math.ceil(n / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const rem = minutes % 60;
+  return rem ? `${hours}h ${rem}m` : `${hours}h`;
+}
+
+function EnrichProgress({ progress, stage }) {
+  const status = stage?.status || progress?.status || "idle";
+  if (!progress || (!progress.totalSites && status !== "running")) return null;
+  if (status === "idle" && !progress.processedSites) return null;
+  const eta = status === "running" ? formatDuration(progress.etaSeconds) : progress.remaining ? "not running" : "done";
+  return (
+    <section className="panel enrich-progress">
+      <div className="enrich-progress-head">
+        <div>
+          <strong>Enrichment progress</strong>
+          <span className="subtle">
+            {progress.runDone}/{progress.runTotal || progress.totalSites} sites this run
+          </span>
+        </div>
+        <span className={`badge ${status}`}>{status}</span>
+      </div>
+      <div className="progress-track" aria-label="Enrichment progress">
+        <span style={{ width: `${Math.max(0, Math.min(100, progress.percent || 0))}%` }} />
+      </div>
+      <div className="progress-meta">
+        <span><Clock3 size={13} /> ETA {eta}</span>
+        <span>{progress.remaining} remaining</span>
+        <span>{progress.withEmail} with email</span>
+        <span>{progress.processedSites}/{progress.totalSites} processed overall</span>
+      </div>
+    </section>
+  );
+}
+
 function AccountsPanel({ accounts, onAdd, onDelete, onToggle, busy }) {
   const [name, setName] = useState("");
   const [cookies, setCookies] = useState("");
@@ -193,6 +238,7 @@ function AccountsPanel({ accounts, onAdd, onDelete, onToggle, busy }) {
 }
 
 export default function Dashboard() {
+  const [sidebarCollapsed, toggleSidebar] = useSidebarCollapse();
   const [projects, setProjects] = useState([]);
   const [selected, setSelected] = useState("");
   const [status, setStatus] = useState(null);
@@ -370,6 +416,51 @@ export default function Dashboard() {
     }
   }
 
+  async function addCapturedLead(lead, target) {
+    const notes =
+      target === "contact_list"
+        ? prompt("Notes for this custom list item", lead.notes || "")
+        : "";
+    if (notes === null) return;
+    setBusy(target === "watchlist" ? "Adding watch" : "Adding list");
+    setError("");
+    try {
+      await jsonFetch("/api/leads", {
+        method: "POST",
+        body: JSON.stringify({
+          name: lead.name,
+          category: lead.category,
+          rating: lead.rating,
+          reviews: lead.reviews,
+          website: lead.website,
+          phone: lead.phone,
+          address: lead.address,
+          maps_url: lead.mapsUrl || lead.maps_url,
+          email: lead.email,
+          all_emails: lead.allEmails || lead.all_emails,
+          facebook: lead.facebook,
+          instagram: lead.instagram,
+          linkedin: lead.linkedin,
+          twitter: lead.twitter,
+          youtube: lead.youtube,
+          tiktok: lead.tiktok,
+          pinterest: lead.pinterest,
+          whatsapp: lead.whatsapp,
+          telegram: lead.telegram,
+          project: status?.name || selectedProject?.name || form.name,
+          query: status?.query || form.query,
+          watchlist: target === "watchlist",
+          contact_list: target === "contact_list",
+          notes,
+        }),
+      });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
   const stages = status?.state?.stages || {};
   const leads = status?.leads || [];
   // Trust either source: the projects list (authoritative, refreshed every tick)
@@ -379,19 +470,28 @@ export default function Dashboard() {
   const runningCount = projects.filter((p) => p.running).length;
 
   return (
-    <main className="shell">
-      <aside className="sidebar">
+    <main className={`shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+      <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
         <div className="brand">
           <ShieldCheck size={22} />
-          <span>Lead Ops</span>
+          <span className="brand-text">Lead Ops</span>
+          <button
+            className="icon sidebar-toggle"
+            onClick={toggleSidebar}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+          </button>
         </div>
         <nav className="nav">
-          <span className="nav-link active">Projects</span>
+          <span className="nav-link active" title="Projects">
+            <FolderOpen size={15} /> <span className="nav-text">Projects</span>
+          </span>
           <Link className="nav-link" href="/leads">
-            <Database size={15} /> Leads
+            <Database size={15} /> <span className="nav-text">Leads</span>
           </Link>
           <Link className="nav-link" href="/agent">
-            <Bot size={15} /> Agent
+            <Bot size={15} /> <span className="nav-text">Agent</span>
           </Link>
         </nav>
         {runningCount > 1 && <div className="running-note">{runningCount} projects running</div>}
@@ -471,7 +571,7 @@ export default function Dashboard() {
 
         <div className="work">
           <section className="panel">
-            <div className="form-grid">
+            <div className="form-grid compact-run-form">
               <div className="field">
                 <label>Project</label>
                 <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -483,49 +583,6 @@ export default function Dashboard() {
               <div className="field">
                 <label>Leads</label>
                 <input value={form.max} onChange={(e) => setForm({ ...form, max: e.target.value })} />
-              </div>
-              <div className="field">
-                <label>Enrich speed</label>
-                <input value={form.enrichConcurrency} onChange={(e) => setForm({ ...form, enrichConcurrency: e.target.value })} />
-              </div>
-              <div className="field">
-                <label>Audit workers</label>
-                <input value={form.auditConcurrency} onChange={(e) => setForm({ ...form, auditConcurrency: e.target.value })} />
-              </div>
-              <div className="field">
-                <label>Scrape mode</label>
-                <label className="check" title="Read leads off the Maps network responses (fast). Uncheck for the slower, more resilient click-each-card mode.">
-                  <input
-                    type="checkbox"
-                    checked={!!form.network}
-                    onChange={(e) => setForm({ ...form, network: e.target.checked })}
-                  />
-                  Fast network mode
-                </label>
-                <label className="check" title="Run Chrome with no visible window. Lighter, and required on servers without a display.">
-                  <input
-                    type="checkbox"
-                    checked={!!form.headless}
-                    onChange={(e) => setForm({ ...form, headless: e.target.checked })}
-                  />
-                  Headless
-                </label>
-                <label className="check" title="Stop the map pane from painting at all (canvas getContext is stubbed out + tile downloads blocked). Big CPU saving; the lead feed and capture are unaffected.">
-                  <input
-                    type="checkbox"
-                    checked={!!form.blockCanvas}
-                    onChange={(e) => setForm({ ...form, blockCanvas: e.target.checked })}
-                  />
-                  Block canvas
-                </label>
-                <label className="check" title="Skip downloading images, media and fonts. Lighter and faster; lead photos still come through as URLs in the CSV.">
-                  <input
-                    type="checkbox"
-                    checked={!!form.blockImages}
-                    onChange={(e) => setForm({ ...form, blockImages: e.target.checked })}
-                  />
-                  Block images
-                </label>
               </div>
             </div>
             {formRunning && <div className="form-note">“{form.name}” is already running. Change the project name to launch another in parallel.</div>}
@@ -615,10 +672,11 @@ export default function Dashboard() {
             <Stage title="Report" stage={stages.report} />
           </section>
 
+          <EnrichProgress progress={status?.enrichProgress} stage={stages.enrich} />
+
           <ScoreLegend />
 
-          <section className="split">
-            <div className="panel table-wrap">
+          <section className="panel table-wrap captured-leads-table">
               {!leads.length ? (
                 <div className="empty">No leads loaded</div>
               ) : (
@@ -643,6 +701,14 @@ export default function Dashboard() {
                         <Score label="M-Perf" value={lead.mobile?.performance} />
                       </div>
                       <div className="lead-card-row socials"><Socials lead={lead} /></div>
+                      <div className="lead-card-row lead-row-actions">
+                        <button className="ghost" onClick={() => addCapturedLead(lead, "watchlist")} title="Add to watch list">
+                          <Star size={14} /> Watch
+                        </button>
+                        <button className="ghost" onClick={() => addCapturedLead(lead, "contact_list")} title="Add to custom list with notes">
+                          <ListPlus size={14} /> List
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -656,6 +722,7 @@ export default function Dashboard() {
                       <th>Socials</th>
                       <th>Desktop health</th>
                       <th>Mobile health</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -710,16 +777,22 @@ export default function Dashboard() {
                           <Score label="Perf" value={lead.mobile?.performance} />
                           <Score label="SEO" value={lead.mobile?.seo} />
                         </td>
+                        <td>
+                          <div className="lead-row-actions">
+                            <button className="ghost" onClick={() => addCapturedLead(lead, "watchlist")} title="Add to watch list">
+                              <Star size={14} /> Watch
+                            </button>
+                            <button className="ghost" onClick={() => addCapturedLead(lead, "contact_list")} title="Add to custom list with notes">
+                              <ListPlus size={14} /> List
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
                 </>
               )}
-            </div>
-            <div className="panel">
-              <div className="mono-log">{status?.logs || "Waiting for activity..."}</div>
-            </div>
           </section>
         </div>
       </section>

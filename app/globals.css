@@ -142,6 +142,10 @@ a:hover {
   grid-template-columns: 280px minmax(0, 1fr);
 }
 
+.shell.sidebar-collapsed {
+  grid-template-columns: 76px minmax(0, 1fr);
+}
+
 .sidebar {
   background: rgba(10, 14, 28, 0.85);
   backdrop-filter: blur(10px);
@@ -152,6 +156,11 @@ a:hover {
   position: sticky;
   top: 0;
   max-height: 100vh;
+}
+
+.sidebar.collapsed {
+  padding: 18px 10px;
+  overflow: hidden;
 }
 
 .brand {
@@ -173,6 +182,42 @@ a:hover {
 
 .brand svg {
   color: var(--accent-2);
+}
+
+.sidebar-toggle {
+  margin-left: auto;
+  min-width: 30px;
+}
+
+.sidebar.collapsed .brand {
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.sidebar.collapsed .brand-text,
+.sidebar.collapsed .nav-text,
+.sidebar.collapsed .running-note,
+.sidebar.collapsed .project-list,
+.sidebar.collapsed .db-stats,
+.sidebar.collapsed .new-chat {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-toggle {
+  margin-left: 0;
+}
+
+.sidebar.collapsed .nav {
+  align-items: center;
+  flex-direction: column;
+  flex-wrap: nowrap;
+}
+
+.sidebar.collapsed .nav-link {
+  width: 44px;
+  height: 44px;
+  justify-content: center;
+  padding: 0;
 }
 
 .project-list {
@@ -321,9 +366,9 @@ button.ghost.contact-on {
 
 /* ---- forms / toolbar ---- */
 .form-grid {
-  padding: 16px;
+  padding: 12px 14px;
   display: grid;
-  grid-template-columns: minmax(180px, 1.1fr) minmax(260px, 2fr) 90px 130px 130px;
+  grid-template-columns: minmax(180px, 1.1fr) minmax(260px, 2fr) 90px;
   gap: 12px;
   align-items: end;
 }
@@ -497,6 +542,76 @@ tr.row-click {
   color: #b9c9e8;
   border-radius: var(--radius);
   padding: 14px;
+}
+
+.captured-leads-table {
+  max-height: 72vh;
+}
+
+.captured-leads-table table {
+  min-width: 1120px;
+}
+
+.lead-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.lead-row-actions button {
+  min-height: 31px;
+  padding: 0 9px;
+}
+
+.enrich-progress {
+  padding: 13px 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.enrich-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.enrich-progress-head > div {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.progress-track {
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #0a0e1c;
+  border: 1px solid var(--line-soft);
+}
+
+.progress-track span {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  background: var(--accent-grad);
+  transition: width 0.25s ease;
+}
+
+.progress-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.progress-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .empty {
@@ -1373,6 +1488,10 @@ button.icon {
     grid-template-columns: 1fr;
   }
 
+  .shell.sidebar-collapsed {
+    grid-template-columns: 1fr;
+  }
+
   /* the sidebar becomes the bottom tab bar + chip rows */
   .sidebar {
     display: none;
@@ -1592,6 +1711,15 @@ button.icon {
     padding: 10px 12px;
   }
 
+  .manual-add-row {
+    grid-template-columns: 1fr;
+    padding: 10px 12px;
+  }
+
+  .manual-add-row button {
+    width: 100%;
+  }
+
   .search-field {
     min-width: 100%;
   }
@@ -1682,6 +1810,23 @@ button.icon {
 
 .crm-toolbar {
   overflow: hidden;
+}
+
+.manual-add-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) minmax(140px, 0.8fr) minmax(180px, 1fr) auto auto;
+  gap: 8px;
+  padding: 10px;
+  border-bottom: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.manual-add-row .search-field {
+  min-width: 0;
+}
+
+.manual-add-row input {
+  min-height: 36px;
 }
 
 .workflow-tabs {

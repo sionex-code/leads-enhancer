@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import MobileNav from "../components/MobileNav";
 import AnimatedNumber from "../components/AnimatedNumber";
+import useSidebarCollapse from "../components/useSidebarCollapse";
 import {
   Ban,
   Bot,
@@ -13,18 +14,22 @@ import {
   Download,
   ExternalLink,
   FileText,
+  FolderOpen,
+  Globe2,
   Loader2,
+  ListPlus,
   Mail,
   MailCheck,
   MapPin,
   MessageSquare,
+  PanelLeftClose,
+  PanelLeftOpen,
   Phone,
   Search,
   Send,
   ShieldCheck,
   Star,
   Trash2,
-  UserPlus,
   Users,
   X,
 } from "lucide-react";
@@ -35,7 +40,7 @@ const WORKFLOWS = [
   { key: "", label: "All" },
   { key: "needs-action", label: "Needs action" },
   { key: "watchlist", label: "Watch" },
-  { key: "contacts", label: "Contacts" },
+  { key: "contacts", label: "Custom list" },
   { key: "email-ready", label: "Email ready" },
   { key: "queued", label: "Queued" },
   { key: "sent", label: "Sent" },
@@ -140,10 +145,10 @@ function QuickLeadActions({ lead, onPatch, compact = false }) {
         className={`ghost ${lead.contact_list ? "contact-on" : ""}`}
         disabled={busy}
         onClick={() => onPatch(lead.id, { contact_list: !lead.contact_list })}
-        title={lead.contact_list ? "Remove from contact list" : "Add to contact list"}
+        title={lead.contact_list ? "Remove from custom list" : "Add to custom list"}
       >
-        <UserPlus size={iconSize} />
-        {!compact && "Contact"}
+        <ListPlus size={iconSize} />
+        {!compact && "List"}
       </button>
       <button
         className="ghost"
@@ -272,7 +277,7 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch }) {
               <WorkflowBadge lead={lead} />
               <EmailBadge status={lead.email_status} />
               {lead.watchlist ? <span className="workflow-badge watch"><Star size={12} fill="currentColor" /> Watch</span> : null}
-              {lead.contact_list ? <span className="workflow-badge contact"><Users size={12} /> Contact</span> : null}
+              {lead.contact_list ? <span className="workflow-badge contact"><Users size={12} /> List</span> : null}
             </div>
           </div>
           <button className="icon" onClick={onClose} title="Close"><X size={17} /></button>
@@ -287,8 +292,8 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch }) {
                 <span>Watch list</span>
               </button>
               <button className={lead.contact_list ? "toggle-card on" : "toggle-card"} onClick={() => patch({ contact_list: !lead.contact_list })}>
-                <UserPlus size={16} />
-                <span>Contact list</span>
+                <ListPlus size={16} />
+                <span>Custom list</span>
               </button>
             </div>
             <div className="drawer-field-grid">
@@ -410,6 +415,7 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch }) {
 }
 
 export default function LeadsPage() {
+  const [sidebarCollapsed, toggleSidebar] = useSidebarCollapse();
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [stats, setStats] = useState(null);
@@ -421,6 +427,10 @@ export default function LeadsPage() {
   const [minScore, setMinScore] = useState(0);
   const [loading, setLoading] = useState(false);
   const [active, setActive] = useState(null);
+  const [manualSite, setManualSite] = useState("");
+  const [manualName, setManualName] = useState("");
+  const [manualNotes, setManualNotes] = useState("");
+  const [adding, setAdding] = useState("");
 
   const mergeLead = useCallback((lead) => {
     setRows((current) => current.map((row) => (row.id === lead.id ? lead : row)));
@@ -458,6 +468,33 @@ export default function LeadsPage() {
     }
   }, [active?.id, hasEmail, minScore, project, search, workflow]);
 
+  async function addManualLead(target) {
+    const website = manualSite.trim();
+    if (!website || adding) return;
+    setAdding(target);
+    try {
+      const data = await jsonFetch("/api/leads", {
+        method: "POST",
+        body: JSON.stringify({
+          website,
+          name: manualName.trim(),
+          notes: manualNotes.trim(),
+          watchlist: target === "watchlist",
+          contact_list: target === "contact_list",
+        }),
+      });
+      setManualSite("");
+      setManualName("");
+      setManualNotes("");
+      if (data.lead) setActive(data.lead);
+      await load();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setAdding("");
+    }
+  }
+
   useEffect(() => {
     const id = setTimeout(load, 250);
     return () => clearTimeout(id);
@@ -466,7 +503,7 @@ export default function LeadsPage() {
   const statTiles = [
     ["Total", stats?.total || 0],
     ["Watch", stats?.watchlist || 0],
-    ["Contacts", stats?.contactList || 0],
+    ["Custom list", stats?.contactList || 0],
     ["Email ready", stats?.emailReady || 0],
     ["Queued", stats?.queued || 0],
     ["Sent", stats?.sent || 0],
@@ -474,23 +511,32 @@ export default function LeadsPage() {
   ];
 
   return (
-    <main className="shell">
-      <aside className="sidebar">
+    <main className={`shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+      <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
         <div className="brand">
           <ShieldCheck size={22} />
-          <span>Lead Ops</span>
+          <span className="brand-text">Lead Ops</span>
+          <button
+            className="icon sidebar-toggle"
+            onClick={toggleSidebar}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+          </button>
         </div>
         <nav className="nav">
-          <Link className="nav-link" href="/">Projects</Link>
-          <span className="nav-link active"><Database size={15} /> Leads</span>
-          <Link className="nav-link" href="/agent"><Bot size={15} /> Agent</Link>
+          <Link className="nav-link" href="/" title="Projects">
+            <FolderOpen size={15} /> <span className="nav-text">Projects</span>
+          </Link>
+          <span className="nav-link active" title="Leads"><Database size={15} /> <span className="nav-text">Leads</span></span>
+          <Link className="nav-link" href="/agent" title="Agent"><Bot size={15} /> <span className="nav-text">Agent</span></Link>
         </nav>
         {stats && (
           <div className="db-stats crm-stats">
             {statTiles.map(([label, value]) => (
               <button key={label} className="stat-mini" onClick={() => {
                 if (label === "Watch") setWorkflow("watchlist");
-                if (label === "Contacts") setWorkflow("contacts");
+                if (label === "Custom list") setWorkflow("contacts");
                 if (label === "Email ready") setWorkflow("email-ready");
                 if (label === "Queued") setWorkflow("queued");
                 if (label === "Sent") setWorkflow("sent");
@@ -510,7 +556,7 @@ export default function LeadsPage() {
           <div>
             <h1>Lead manager</h1>
             <div className="subtle">
-              <AnimatedNumber value={total} /> lead{total === 1 ? "" : "s"} match. Manage watch lists, contacts, email intent, outreach status, and notes.
+              <AnimatedNumber value={total} /> lead{total === 1 ? "" : "s"} match. Manage watch lists, custom lists, email intent, outreach status, and notes.
             </div>
           </div>
           <div className="topbar-actions">
@@ -522,6 +568,34 @@ export default function LeadsPage() {
 
         <div className="work leads-work">
           <section className="panel crm-toolbar">
+            <div className="manual-add-row">
+              <div className="field search-field manual-site">
+                <Globe2 size={15} />
+                <input
+                  placeholder="Add single site or domain..."
+                  value={manualSite}
+                  onChange={(e) => setManualSite(e.target.value)}
+                />
+              </div>
+              <input
+                className="manual-name"
+                placeholder="Lead name"
+                value={manualName}
+                onChange={(e) => setManualName(e.target.value)}
+              />
+              <input
+                className="manual-notes"
+                placeholder="Notes"
+                value={manualNotes}
+                onChange={(e) => setManualNotes(e.target.value)}
+              />
+              <button disabled={!manualSite.trim() || !!adding} onClick={() => addManualLead("watchlist")}>
+                <Star size={15} /> Watch
+              </button>
+              <button className="primary" disabled={!manualSite.trim() || !!adding} onClick={() => addManualLead("contact_list")}>
+                <ListPlus size={15} /> List
+              </button>
+            </div>
             <div className="workflow-tabs">
               {WORKFLOWS.map((item) => (
                 <button key={item.key || "all"} className={workflow === item.key ? "active" : ""} onClick={() => setWorkflow(item.key)}>
@@ -616,7 +690,7 @@ export default function LeadsPage() {
                           <div className="lead-meta-line">
                             <WorkflowBadge lead={lead} />
                             {lead.watchlist ? <span className="workflow-badge watch"><Star size={12} fill="currentColor" /> Watch</span> : null}
-                            {lead.contact_list ? <span className="workflow-badge contact"><Users size={12} /> Contact</span> : null}
+                            {lead.contact_list ? <span className="workflow-badge contact"><Users size={12} /> List</span> : null}
                           </div>
                         </td>
                         <td><EmailBadge status={lead.email_status} /></td>

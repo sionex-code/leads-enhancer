@@ -364,6 +364,77 @@ function projectLogFiles(dir) {
   ];
 }
 
+function siteKeyForProgress(lead) {
+  const website = String(lead?.website || "").trim();
+  return hostOf(website) || website.toLowerCase();
+}
+
+function readEnrichProgress(input, stage = {}) {
+  if (!input) {
+    return {
+      totalSites: 0,
+      processedSites: 0,
+      withEmail: 0,
+      runTotal: 0,
+      runDone: 0,
+      remaining: 0,
+      percent: 0,
+      etaSeconds: null,
+      elapsedSeconds: 0,
+      status: stage?.status || "idle",
+    };
+  }
+
+  const siteKeys = new Set(readCsvObjects(input).map(siteKeyForProgress).filter(Boolean));
+  const totalSites = siteKeys.size;
+  const stateFile = input.replace(/\.csv$/i, ".enrich-state.jsonl");
+  const startMs = Date.parse(stage?.startedAt || "") || 0;
+  const processedKeys = new Set();
+  const withEmailKeys = new Set();
+  const previousEmailKeys = new Set();
+  const runKeys = new Set();
+
+  if (fs.existsSync(stateFile)) {
+    for (const line of fs.readFileSync(stateFile, "utf8").split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      try {
+        const rec = JSON.parse(line);
+        const key = String(rec.key || siteKeyForProgress({ website: rec.website }) || "").trim();
+        if (!key || !siteKeys.has(key)) continue;
+        processedKeys.add(key);
+        if (rec.result?.email) withEmailKeys.add(key);
+        const tsMs = Date.parse(rec.ts || rec.timestamp || "") || 0;
+        if (startMs && tsMs >= startMs) {
+          runKeys.add(key);
+        } else if (rec.result?.email) {
+          previousEmailKeys.add(key);
+        }
+      } catch {}
+    }
+  }
+
+  const runTotal = startMs ? Math.max(0, totalSites - previousEmailKeys.size) : totalSites;
+  const runDone = startMs ? Math.min(runTotal, runKeys.size) : Math.min(totalSites, processedKeys.size);
+  const remaining = Math.max(0, runTotal - runDone);
+  const elapsedSeconds = startMs ? Math.max(1, Math.round((Date.now() - startMs) / 1000)) : 0;
+  const rate = elapsedSeconds > 0 && runDone > 0 ? runDone / elapsedSeconds : 0;
+  const etaSeconds = stage?.status === "running" && rate > 0 ? Math.round(remaining / rate) : null;
+  const percent = runTotal ? Math.min(100, Math.round((runDone / runTotal) * 100)) : totalSites ? 100 : 0;
+
+  return {
+    totalSites,
+    processedSites: Math.min(totalSites, processedKeys.size),
+    withEmail: withEmailKeys.size,
+    runTotal,
+    runDone,
+    remaining,
+    percent,
+    etaSeconds,
+    elapsedSeconds,
+    status: stage?.status || "idle",
+  };
+}
+
 function loadStatus(slugOrName) {
   const dir = safeProjectDir(slugOrName);
   const meta = readMeta(dir);
@@ -420,6 +491,7 @@ function loadStatus(slugOrName) {
       desktopAudits: desktopRows.filter((r) => r.analyzeStatus === "ok").length,
       mobileAudits: mobileRows.filter((r) => r.analyzeStatus === "ok").length,
     },
+    enrichProgress: readEnrichProgress(raw || input, state.stages?.enrich),
     leads,
     logs,
   };

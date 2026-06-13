@@ -382,7 +382,7 @@ function loadState(stateFile) {
 
   function persist(key, website, result) {
     state.set(key, result);
-    fs.appendFileSync(stateFile, JSON.stringify({ key, website, result }) + "\n", "utf8");
+    fs.appendFileSync(stateFile, JSON.stringify({ ts: new Date().toISOString(), key, website, result }) + "\n", "utf8");
   }
 
   // Build the work list: unique sites not already captured with an email.

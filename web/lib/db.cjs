@@ -389,6 +389,29 @@ function updateLeadWorkflow(id, patch = {}) {
   return getLead(id);
 }
 
+function createOrUpdateLead(raw = {}) {
+  const prepared = normalizeLead(raw);
+  const key = dedupKey({ ...raw, ...prepared });
+  if (!key) throw new Error("Add a website, phone, or lead name first");
+
+  upsertLeads([{ ...raw, ...prepared }]);
+  let lead = db().prepare("SELECT * FROM leads WHERE dedup_key = ?").get(key);
+  if (!lead) throw new Error("Lead was not saved");
+
+  const patch = {};
+  if (raw.watchlist !== undefined) patch.watchlist = raw.watchlist;
+  if (raw.contact_list !== undefined) patch.contact_list = raw.contact_list;
+  if (raw.contactList !== undefined) patch.contact_list = raw.contactList;
+  if (raw.email_status !== undefined) patch.email_status = raw.email_status;
+  if (raw.emailStatus !== undefined) patch.email_status = raw.emailStatus;
+  if (raw.outreach_status !== undefined) patch.outreach_status = raw.outreach_status;
+  if (raw.outreachStatus !== undefined) patch.outreach_status = raw.outreachStatus;
+  if (raw.notes !== undefined) patch.notes = raw.notes;
+
+  if (Object.keys(patch).length) lead = updateLeadWorkflow(lead.id, patch);
+  return lead;
+}
+
 // Delete by domain/name match — used by the agent ("delete the lead for x.com").
 function deleteLeadsWhere({ domain = "", search = "" } = {}) {
   if (domain) return db().prepare("DELETE FROM leads WHERE domain = ?").run(String(domain).toLowerCase()).changes;
@@ -445,6 +468,7 @@ module.exports = {
   getLead,
   deleteLead,
   updateLeadWorkflow,
+  createOrUpdateLead,
   deleteLeadsWhere,
   listProjectNames,
   statsLeads,

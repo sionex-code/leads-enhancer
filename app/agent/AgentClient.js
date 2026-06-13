@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { marked } from "marked";
 import MobileNav from "../components/MobileNav";
-import { Bot, Brain, ChevronDown, Database, FolderOpen, Plus, Send, ShieldCheck, Sparkles, Square, Trash2, Wrench, Zap } from "lucide-react";
+import useSidebarCollapse from "../components/useSidebarCollapse";
+import { Bot, Brain, ChevronDown, Database, FolderOpen, PanelLeftClose, PanelLeftOpen, Plus, Send, ShieldCheck, Sparkles, Square, Trash2, Wrench, Zap } from "lucide-react";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
@@ -86,6 +87,7 @@ function ThinkingBlock({ steps, live }) {
 }
 
 export default function AgentClient() {
+  const [sidebarCollapsed, toggleSidebar] = useSidebarCollapse();
   const [sessions, setSessions] = useState([]);
   const [sessionId, setSessionId] = useState("");
   const [session, setSession] = useState(null);
@@ -212,19 +214,28 @@ export default function AgentClient() {
   });
 
   return (
-    <main className="shell">
-      <aside className="sidebar">
+    <main className={`shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+      <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
         <div className="brand">
           <ShieldCheck size={22} />
-          <span>Lead Ops</span>
+          <span className="brand-text">Lead Ops</span>
+          <button
+            className="icon sidebar-toggle"
+            onClick={toggleSidebar}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+          </button>
         </div>
         <nav className="nav">
-          <Link className="nav-link" href="/">Projects</Link>
-          <Link className="nav-link" href="/leads"><Database size={15} /> Leads</Link>
-          <span className="nav-link active"><Bot size={15} /> Agent</span>
+          <Link className="nav-link" href="/" title="Projects">
+            <FolderOpen size={15} /> <span className="nav-text">Projects</span>
+          </Link>
+          <Link className="nav-link" href="/leads" title="Leads"><Database size={15} /> <span className="nav-text">Leads</span></Link>
+          <span className="nav-link active" title="Agent"><Bot size={15} /> <span className="nav-text">Agent</span></span>
         </nav>
         <button className="primary new-chat" onClick={() => { setSessionId(""); setSession(null); }}>
-          <Plus size={15} /> New chat
+          <Plus size={15} /> <span className="nav-text">New chat</span>
         </button>
         <div className="project-list">
           {sessions.map((s) => (
