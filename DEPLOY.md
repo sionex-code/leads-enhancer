@@ -53,6 +53,24 @@ basePath/`/leads` rewrite and the HTTP Basic auth.
 - Fire a test Whop webhook → `memberships` row created (matched by email); dashboard unlocks.
 - Start a scrape → appears queued, runs (max 6 globally), notifies on completion.
 
+## 8. Scaling a capability onto another VPS (optional)
+The four heavy capabilities (scraper / enrich / whatsapp / audit) are pluggable
+modules — in-process by default, offloadable to a worker on another box to balance
+load. To move e.g. the **map scraper** to a second VPS:
+
+1. On the new VPS: clone the repo, `npm ci`, `npm run install-chrome` (scraper/audit
+   need Chrome). Set `.env` with the **same `DATABASE_URL`** (shared leads DB) and a
+   `WORKER_SECRET`. The box only needs network access to Postgres + an open port.
+2. Run the worker: `npm run worker -- --modules=scraper` (or `WORKER_MODULES=scraper`).
+   It listens on `WORKER_PORT` (default 8787) and logs `[worker] listening …`.
+3. On the main app's `.env`, set `SCRAPER_WORKER_URL=http://<new-vps>:8787` and the
+   same `WORKER_SECRET` (or a per-module `SCRAPER_WORKER_SECRET`). Restart the app.
+
+Now every scrape runs on the worker, which upserts leads into the shared DB in
+realtime (they still appear live in `/leads`). Repeat per capability with
+`ENRICH_WORKER_URL` / `WHATSAPP_WORKER_URL` / `AUDIT_WORKER_URL`. Leave a URL unset to
+keep that capability in-process. Full details in `modules/README.md`.
+
 ## Notes / known follow-ups
 - `project.cjs` (legacy CLI) and `web/lib/agent.cjs` (hidden AI agent) still call the
   old synchronous SQLite-era DB API; they are NOT used by the web app. Update them

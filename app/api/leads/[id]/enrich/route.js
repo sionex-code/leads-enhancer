@@ -1,5 +1,5 @@
 import db from "../../../../../web/lib/db.cjs";
-import enrichLib from "../../../../../enrich.cjs";
+import enrichLib from "../../../../../modules/enrich/index.cjs";
 import { requireUser } from "../../../../../web/lib/session.js";
 
 export const dynamic = "force-dynamic";

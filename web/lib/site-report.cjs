@@ -12,7 +12,9 @@
 const fs = require("fs");
 const path = require("path");
 const llm = require("./llm.cjs");
-const { auditUrl } = require("./web-audit.cjs");
+// auditUrl goes through the audit module so the heavy real-Chrome scan can be
+// offloaded to a worker VPS (AUDIT_WORKER_URL); report HTML is still built here.
+const { auditUrl } = require("../../modules/audit/index.cjs");
 const { chromium } = require("patchright");
 
 const ROOT = process.cwd();

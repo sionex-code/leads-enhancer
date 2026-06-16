@@ -1,5 +1,5 @@
 import db from "../../../../../web/lib/db.cjs";
-import waLib from "../../../../../whatsapp.cjs";
+import waLib from "../../../../../modules/whatsapp/index.cjs";
 import { requireUser } from "../../../../../web/lib/session.js";
 
 export const dynamic = "force-dynamic";

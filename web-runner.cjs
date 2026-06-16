@@ -1,9 +1,13 @@
 #!/usr/bin/env node
-// Background runner used by the Next.js web UI.
+// Background runner used by the Next.js web UI. Each pipeline stage is delegated to
+// its capability module under modules/<name>, which runs the work in-process by
+// default or on a remote worker VPS when that module's *_WORKER_URL is configured
+// (see modules/README.md). This file stays a thin orchestrator: parse args, decide
+// which stages to run, build the shared context, loop, and keep the leads DB synced.
 
 const fs = require("fs");
 const path = require("path");
-const { spawn } = require("child_process");
+const store = require("./web/lib/store.cjs");
 const {
   ROOT,
   slugify,
@@ -12,13 +16,17 @@ const {
   readMeta,
   readState,
   writeState,
-  setStage,
   latestRawCsv,
   latestEnrichedCsv,
   latestInputCsv,
   summaryPath,
   syncProjectToDb,
-} = require("./web/lib/store.cjs");
+} = store;
+
+const scraper = require("./modules/scraper/index.cjs");
+const enrich = require("./modules/enrich/index.cjs");
+const whatsapp = require("./modules/whatsapp/index.cjs");
+const audit = require("./modules/audit/index.cjs");
 
 const VALUE_FLAGS = new Set([
   "--project",
@@ -60,6 +68,20 @@ function log(line) {
   fs.appendFileSync(runnerLog, `[${stamp}] ${line}\n`, "utf8");
 }
 
+// Shared context handed to every module's runBatch/runReport. Modules read project
+// state through `store` + `dir`, CLI knobs through `value`/`flags`, and report
+// progress through `log`. `userId` tags realtime DB upserts (set by the queue).
+const ctx = {
+  ROOT,
+  dir,
+  projectName,
+  userId: process.env.GMAPS_USER_ID || null,
+  flags,
+  value,
+  log,
+  store,
+};
+
 function parseStages() {
   const raw = value("--stages", "scrape,enrich,whatsapp,audit").toLowerCase();
   if (raw === "resume") return stagesForResume();
@@ -69,13 +91,6 @@ function parseStages() {
     .filter(Boolean);
   if (stages.includes("all")) return ["scrape", "enrich", "whatsapp", "audit", "report"];
   return stages;
-}
-
-function requestedDevices() {
-  const raw = value("--device", "all").toLowerCase();
-  if (raw === "all" || raw === "both") return ["desktop", "mobile"];
-  if (raw === "desktop" || raw === "mobile") return [raw];
-  return ["desktop", "mobile"];
 }
 
 function stagesForResume() {
@@ -99,10 +114,6 @@ function stagesForResume() {
   return [];
 }
 
-function appendTo(file, chunk) {
-  fs.appendFileSync(file, chunk.toString(), "utf8");
-}
-
 // Merge this project's latest CSVs into the global deduped leads DB. Never let a
 // sync error abort the run — the CSVs remain the source of truth.
 async function syncDb(stage) {
@@ -119,165 +130,6 @@ async function syncDb(stage) {
   } catch (err) {
     log(`DB sync failed: ${err.message}`);
   }
-}
-
-function commandExists(cmd) {
-  const paths = (process.env.PATH || "").split(path.delimiter);
-  return paths.some((p) => fs.existsSync(path.join(p, cmd)));
-}
-
-function runProcess(stage, logFile, args, options = {}) {
-  return new Promise((resolve, reject) => {
-    fs.appendFileSync(logFile, `\n$ ${options.label || [process.execPath, ...args].join(" ")}\n`, "utf8");
-    const child = spawn(options.command || process.execPath, options.command ? args : args, {
-      cwd: ROOT,
-      windowsHide: true,
-      env: { ...process.env, FORCE_COLOR: "0" },
-    });
-    child.stdout.on("data", (d) => appendTo(logFile, d));
-    child.stderr.on("data", (d) => appendTo(logFile, d));
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${stage} exited with code ${code}`));
-    });
-  });
-}
-
-async function runNode(stage, script, stageLog, args) {
-  setStage(dir, stage, { status: "running", startedAt: new Date().toISOString(), error: "" });
-  await runProcess(stage, stageLog, [path.join(ROOT, script), ...args]);
-  setStage(dir, stage, { status: "done", finishedAt: new Date().toISOString() });
-}
-
-async function runScrape() {
-  const meta = readMeta(dir);
-  const query = value("--query", meta.query || "");
-  const max = value("--max", meta.max || "");
-  if (!query) throw new Error("Scrape needs a query");
-  writeMeta(dir, { name: projectName, slug: slugify(projectName), query, max });
-
-  // Default path: the HTTP grid scraper (no browser). It tiles the geocoded
-  // area and hits Maps' internal endpoint directly — far faster, and it appends
-  // to the CSV + upserts the leads DB in realtime so counts grow live in the UI.
-  // Falls back to the browser scraper for direct Maps URLs, --dom mode, or when
-  // the query has no geocodable "<service> in <location>" shape (exit code 3).
-  if (!flags.has("--dom") && !/^https?:\/\//i.test(query)) {
-    const stageLog = path.join(dir, "scrape.log");
-    setStage(dir, "scrape", { status: "running", startedAt: new Date().toISOString(), error: "" });
-    const gridArgs = [path.join(ROOT, "gridscrape.js"), query, "--outDir", dir, "--project", projectName];
-    if (max) gridArgs.push("--max", max);
-    try {
-      await runProcess("scrape", stageLog, gridArgs, {
-        label: `node gridscrape.js "${query}" --max ${max || "unlimited"}`,
-      });
-      setStage(dir, "scrape", { status: "done", finishedAt: new Date().toISOString() });
-      return;
-    } catch (err) {
-      if (!/exited with code 3/.test(err.message)) throw err;
-      log("Grid scrape can't geocode this query — falling back to browser scraper");
-    }
-  }
-
-  const args = [path.join(ROOT, "scrape.js"), query, "--outDir", dir, "--profileDir", path.join(dir, "browser-profile")];
-  if (max) args.push("--max", max);
-  // Forward the capture mode chosen by the UI/caller (defaults to fast network mode).
-  if (flags.has("--dom")) args.push("--dom");
-  else args.push("--network");
-  // Skip map rendering when asked — saves CPU/GPU, harmless to feed + RPC capture.
-  if (flags.has("--blockCanvas")) args.push("--blockCanvas");
-  // Images are blocked by default; only forward the opt-out.
-  if (flags.has("--allowImages")) args.push("--allowImages");
-
-  const stageLog = path.join(dir, "scrape.log");
-  setStage(dir, "scrape", { status: "running", startedAt: new Date().toISOString(), error: "" });
-
-  const useHeadless = flags.has("--headless") || (process.platform !== "win32" && !commandExists("xvfb-run"));
-  if (useHeadless) args.push("--headless");
-
-  if (process.platform !== "win32" && !useHeadless && commandExists("xvfb-run")) {
-    await runProcess("scrape", stageLog, ["-a", process.execPath, ...args], {
-      command: "xvfb-run",
-      label: `xvfb-run -a node scrape.js "${query}" --max ${max || "unlimited"}`,
-    });
-  } else {
-    await runProcess("scrape", stageLog, args, {
-      command: process.execPath,
-      label: `node scrape.js "${query}" --max ${max || "unlimited"}${useHeadless ? " --headless" : ""}`,
-    });
-  }
-
-  setStage(dir, "scrape", { status: "done", finishedAt: new Date().toISOString() });
-}
-
-async function runEnrich() {
-  const input = latestRawCsv(dir);
-  if (!input) throw new Error("No scraped CSV found to enrich");
-  // Two enrichment engines share the same input/output/state contract:
-  //   patchright (default) — enrich.cjs, HTTP first + headless-Chrome fallback
-  //   crawlee               — enrich-crawlee.js, CheerioCrawler + a Playwright
-  //                           scroll-to-load fallback; faster on big batches.
-  const engine = value("--enrichEngine", "patchright").toLowerCase();
-  if (engine === "crawlee") {
-    const concurrency = value("--enrichConcurrency", "30");
-    const args = [input, "--concurrency", concurrency, "--timeout", "15000"];
-    await runNode("enrich", "enrich-crawlee.js", path.join(dir, "enrich.log"), args);
-    return;
-  }
-  const concurrency = value("--enrichConcurrency", "16");
-  // 15s timeout (plus the in-enricher retry) is far more forgiving of slow
-  // small-business sites than the old 10s, which surfaced a lot of "AbortError".
-  const args = [input, "--concurrency", concurrency, "--maxPages", "4", "--timeout", "15000"];
-  await runNode("enrich", "enrich.js", path.join(dir, "enrich.log"), args);
-}
-
-async function runWhatsapp() {
-  // Check every lead's phone against WhatsApp. Runs on the enriched CSV (falls
-  // back to the raw scrape) and writes the whatsapp columns back in place so the
-  // dashboard, DB sync and report all pick them up.
-  const input = latestInputCsv(dir);
-  if (!input) throw new Error("No CSV found to check on WhatsApp");
-  const concurrency = value("--whatsappConcurrency", "2");
-  const args = [input, "--inplace", "--concurrency", concurrency];
-  // OpenWA connection is taken from env (set in the runner's environment / pm2
-  // config); whatsapp.js falls back to its built-in defaults when unset.
-  await runNode("whatsapp", "whatsapp.js", path.join(dir, "whatsapp.log"), args);
-}
-
-async function runAudit() {
-  const input = latestInputCsv(dir);
-  if (!input) throw new Error("No CSV found to audit");
-  const concurrency = value("--auditConcurrency", "2");
-  for (const device of requestedDevices()) {
-    const stage = `audit-${device}`;
-    const args = [
-      input,
-      "--device",
-      device,
-      "--outDir",
-      path.join(dir, "lighthouse", device),
-      "--summary",
-      summaryPath(input, device),
-      "--concurrency",
-      concurrency,
-      "--timeout",
-      "120000",
-    ];
-    await runNode(stage, "analyze.js", path.join(dir, `${stage}.log`), args);
-  }
-}
-
-async function runReport() {
-  const input = latestInputCsv(dir);
-  if (!input) throw new Error("No CSV found for report");
-  const meta = readMeta(dir);
-  const out = path.join(dir, `${slugify(meta.name || projectName)}-report.html`);
-  const args = [input, "--out", out, "--title", meta.name || projectName];
-  const desktop = summaryPath(input, "desktop");
-  const mobile = summaryPath(input, "mobile");
-  if (fs.existsSync(desktop)) args.push("--desktopLighthouse", desktop);
-  if (fs.existsSync(mobile)) args.push("--mobileLighthouse", mobile);
-  await runNode("report", "report.js", path.join(dir, "report.log"), args);
 }
 
 (async () => {
@@ -304,11 +156,11 @@ async function runReport() {
 
   for (const stage of stages) {
     log(`Starting stage ${stage}`);
-    if (stage === "scrape") await runScrape();
-    else if (stage === "enrich") await runEnrich();
-    else if (stage === "whatsapp" || stage === "wa") await runWhatsapp();
-    else if (stage === "audit" || stage === "lighthouse") await runAudit();
-    else if (stage === "report") await runReport();
+    if (stage === "scrape") await scraper.runBatch(ctx);
+    else if (stage === "enrich") await enrich.runBatch(ctx);
+    else if (stage === "whatsapp" || stage === "wa") await whatsapp.runBatch(ctx);
+    else if (stage === "audit" || stage === "lighthouse") await audit.runBatch(ctx);
+    else if (stage === "report") await audit.runReport(ctx);
     else log(`Skipping unknown stage ${stage}`);
     log(`Finished stage ${stage}`);
     await syncDb(stage); // keep the global leads DB current after every stage

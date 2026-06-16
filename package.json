@@ -15,6 +15,7 @@
     "audit": "node analyze.js",
     "audit:mobile": "node analyze.js --mobile",
     "report": "node report.js",
+    "worker": "node worker.cjs",
     "project": "node project.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
