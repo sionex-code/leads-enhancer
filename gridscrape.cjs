@@ -64,6 +64,28 @@ function slugify(q) {
 // ---- query -> keyword + geocoded bbox -------------------------------------------
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Business-level dedup key — MUST mirror web/lib/db.cjs#dedupKey so the scraper's
+// unique count matches how the database dedupes leads. Chain listings that share a
+// website/phone (e.g. KeyMe's many kiosks all on key.me) collapse to one business.
+// This is what --max counts: N means N unique businesses, not N raw Maps results.
+function hostOf(url) {
+  try {
+    return new URL(/^https?:\/\//i.test(url) ? url : "http://" + url).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return "";
+  }
+}
+function leadKey(p) {
+  const domain = hostOf(p.website || "");
+  if (domain) return "d:" + domain;
+  const phone = String(p.phone || "").replace(/[^\d]/g, "");
+  if (phone.length >= 7) return "p:" + phone;
+  const name = String(p.name || "").trim().toLowerCase();
+  const addr = String(p.address || "").trim().toLowerCase();
+  if (name) return "n:" + name + "|" + addr;
+  return "";
+}
+
 async function geocode(location, { strict = false } = {}) {
   const url =
     "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=" +
@@ -263,7 +285,7 @@ const FETCH_HEADERS = {
       const res = await db.upsertLeads(OWNER_ID, batch);
       dbInserted += res.inserted;
       dbUpdated += res.updated;
-      console.log(`  DB: +${res.inserted} new, ${res.updated} updated (total ${seen.size})`);
+      console.log(`  DB: +${res.inserted} new, ${res.updated} updated (total ${seenKeys.size})`);
       if (store) {
         try {
           store.writeState(OUT_DIR, { dbSync: { inserted: dbInserted, updated: dbUpdated, at: new Date().toISOString() } });
@@ -277,7 +299,8 @@ const FETCH_HEADERS = {
   }
   const dbTimer = db ? setInterval(() => flushDb(true), 2500) : null;
 
-  const seen = new Set(); // placeIds
+  const seen = new Set(); // placeIds — cheap per-listing dedup (one Maps result)
+  const seenKeys = new Set(); // business dedup keys — what --max counts (mirrors DB)
   let requestsDone = 0;
   let blocked = 0;
   let tilesDone = 0;
@@ -291,8 +314,14 @@ const FETCH_HEADERS = {
         p.lat < bbox.latMin - 0.05 || p.lat > bbox.latMax + 0.05 ||
         p.lng < bbox.lngMin - 0.05 || p.lng > bbox.lngMax + 0.05
       ) continue;
-      if (MAX_LEADS && seen.size >= MAX_LEADS) { stopped = true; break; }
-      seen.add(p.placeId);
+      seen.add(p.placeId); // this Maps listing is now processed
+      // Collapse chain listings that resolve to the same business (KeyMe's kiosks
+      // all share key.me): record only the first per dedup key, and count --max by
+      // unique businesses so "30" yields 30 distinct leads, not 30 raw rows.
+      const key = leadKey(p) || ("pid:" + p.placeId);
+      if (seenKeys.has(key)) continue;
+      if (MAX_LEADS && seenKeys.size >= MAX_LEADS) { stopped = true; break; }
+      seenKeys.add(key);
       rows.push(p);
     }
     if (!rows.length) return 0;
@@ -349,7 +378,7 @@ const FETCH_HEADERS = {
       blocked++;
       console.warn(`  tile(${task.lat},${task.lng}) page=${task.offset / 20} failed: ${err.message}`);
       // All-blocked early abort: template expired or Google is rate limiting.
-      if (blocked >= 8 && seen.size === 0) {
+      if (blocked >= 8 && seenKeys.size === 0) {
         stopped = true;
         throw new Error("Every request is blocked — pb template likely expired (run: node bootstrap-pb.js)");
       }
@@ -360,7 +389,7 @@ const FETCH_HEADERS = {
     const fresh = recordFresh(places);
     if (task.offset === 0) tilesDone++;
     console.log(
-      `  tile(${task.lat},${task.lng}) page=${task.offset / 20} got=${places.length} new=${fresh} | leads=${seen.size} tiles=${tilesDone}/${centers.length}`
+      `  tile(${task.lat},${task.lng}) page=${task.offset / 20} got=${places.length} new=${fresh} | leads=${seenKeys.size} tiles=${tilesDone}/${centers.length}`
     );
     // Paginate while pages come back full AND still yield new places.
     if (!stopped && places.length === 20 && fresh > 0 && task.offset / 20 + 1 < MAX_PAGES_PER_TILE) {
@@ -393,8 +422,8 @@ const FETCH_HEADERS = {
     process.exit(1);
   }
 
-  console.log(`\n  Finished. ${seen.size} leads saved to:\n  ${outFile}\n`);
-  console.log(`  (${requestsDone} requests, ${blocked} failed${MAX_LEADS && seen.size >= MAX_LEADS ? ", max reached" : ""})`);
+  console.log(`\n  Finished. ${seenKeys.size} leads saved to:\n  ${outFile}\n`);
+  console.log(`  (${requestsDone} requests, ${blocked} failed${MAX_LEADS && seenKeys.size >= MAX_LEADS ? ", max reached" : ""})`);
 })().catch((err) => {
   console.error(`ERROR: ${err.message}`);
   process.exit(1);
