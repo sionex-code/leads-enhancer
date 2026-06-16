@@ -637,6 +637,14 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
   const [lists, setLists] = useState([]);
   const [listFilter, setListFilter] = useState("");
   const [listDialog, setListDialog] = useState(null);
+  // Tiny self-dismissing toast for quick confirmations (favorite, mark sent, …).
+  const [toast, setToast] = useState("");
+  const toastTimer = useRef(null);
+  const showToast = useCallback((message) => {
+    setToast(message);
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(""), 2600);
+  }, []);
 
   const toggleSelect = useCallback((id) => {
     setSelected((s) => {
@@ -653,10 +661,24 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
   }, []);
 
   const patchLead = useCallback(async (id, patch) => {
-    const data = await jsonFetch(`/api/leads/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
-    if (data.lead) mergeLead(data.lead);
-    return data.lead;
-  }, [mergeLead]);
+    // Apply the change immediately so the UI responds on click; the PATCH is a
+    // ~half-second DB round-trip and waiting for it felt like nothing happened.
+    setRows((cur) => cur.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+    setActive((cur) => (cur?.id === id ? { ...cur, ...patch } : cur));
+    if (patch.watchlist !== undefined) {
+      showToast(patch.watchlist ? "★ Added to favorites" : "Removed from favorites");
+    }
+    try {
+      const data = await jsonFetch(`/api/leads/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+      if (data.lead) mergeLead(data.lead);
+      return data.lead;
+    } catch (err) {
+      // Revert to the server's truth and surface the failure.
+      jsonFetch(`/api/leads/${id}`).then((d) => d.lead && mergeLead(d.lead)).catch(() => {});
+      showToast(err.message || "Couldn't save — try again");
+      return null;
+    }
+  }, [mergeLead, showToast]);
 
   const setBusyKey = useCallback((key, val) => {
     setBusy((b) => ({ ...b, [key]: val }));
@@ -1261,6 +1283,12 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
             setRows((r) => r.filter((x) => x.id !== id));
           }}
         />
+      )}
+
+      {toast && (
+        <div className="pointer-events-none fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-border bg-foreground px-4 py-2.5 text-sm font-medium text-background shadow-lg">
+          {toast}
+        </div>
       )}
 
       {/* Live bulk-report progress: a fixed card that polls every job to completion. */}
