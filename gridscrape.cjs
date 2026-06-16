@@ -273,29 +273,37 @@ const FETCH_HEADERS = {
     console.warn("  DB skipped: no GMAPS_USER_ID owner set — CSV only");
   }
   let pendingDb = [];
-  let flushing = false;
   let dbInserted = 0; // cumulative leads new to the account (charged) this run
   let dbUpdated = 0; // cumulative duplicates merged for free this run
-  async function flushDb(force = false) {
-    if (!db || flushing || (!force && pendingDb.length < 20) || !pendingDb.length) return;
-    flushing = true;
-    const batch = pendingDb;
-    pendingDb = [];
-    try {
-      const res = await db.upsertLeads(OWNER_ID, batch);
-      dbInserted += res.inserted;
-      dbUpdated += res.updated;
-      console.log(`  DB: +${res.inserted} new, ${res.updated} updated (total ${seenKeys.size})`);
-      if (store) {
+  // Flushes are serialized through a promise chain so a forced end-of-run flush
+  // ALWAYS drains the final partial batch. The old `flushing` guard made a forced
+  // flush a no-op when one was already in flight, so the last <20 leads were never
+  // saved live — the redundant post-scrape sync then "rediscovered" them as new and
+  // re-counted the live-saved ones as duplicates, misreporting brand-new leads as
+  // "already in your leads". Draining here keeps the realtime totals authoritative.
+  let flushChain = Promise.resolve();
+  function flushDb(force = false) {
+    if (!db) return Promise.resolve();
+    flushChain = flushChain.then(async () => {
+      while (pendingDb.length && (force || pendingDb.length >= 20)) {
+        const batch = pendingDb.splice(0, 500);
         try {
-          store.writeState(OUT_DIR, { dbSync: { inserted: dbInserted, updated: dbUpdated, at: new Date().toISOString() } });
-        } catch {}
+          const res = await db.upsertLeads(OWNER_ID, batch);
+          dbInserted += res.inserted;
+          dbUpdated += res.updated;
+          console.log(`  DB: +${res.inserted} new, ${res.updated} updated (total ${seenKeys.size})`);
+          if (store) {
+            try {
+              store.writeState(OUT_DIR, { dbSync: { inserted: dbInserted, updated: dbUpdated, at: new Date().toISOString() } });
+            } catch {}
+          }
+        } catch (err) {
+          console.warn(`  DB upsert failed: ${err.message}`);
+          break; // don't spin on a persistent failure
+        }
       }
-    } catch (err) {
-      console.warn(`  DB upsert failed: ${err.message}`);
-    } finally {
-      flushing = false;
-    }
+    });
+    return flushChain;
   }
   const dbTimer = db ? setInterval(() => flushDb(true), 2500) : null;
 
