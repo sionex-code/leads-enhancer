@@ -1,21 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import MobileNav from "../components/MobileNav";
+import AppShell from "../components/app/AppShell";
 import AnimatedNumber from "../components/AnimatedNumber";
 import ReportModal from "../components/ReportModal";
-import useSidebarCollapse from "../components/useSidebarCollapse";
 import {
   Ban,
   Bot,
   CheckCircle2,
-  Clock3,
-  Database,
   Download,
   ExternalLink,
   FileText,
-  FolderOpen,
   Globe2,
   Loader2,
   ListPlus,
@@ -24,23 +19,28 @@ import {
   MapPin,
   MessageCircle,
   MessageSquare,
-  PanelLeftClose,
-  PanelLeftOpen,
   Phone,
   Search,
   Send,
-  ShieldCheck,
   Star,
   Trash2,
   Users,
-  X,
 } from "lucide-react";
+import { Button } from "../components/ui/button";
+import { Card, CardContent } from "../components/ui/card";
+import { Input } from "../components/ui/input";
+import { Select } from "../components/ui/select";
+import { Textarea } from "../components/ui/textarea";
+import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { Sheet, SheetContent } from "../components/ui/sheet";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/table";
+import { cn } from "../lib/utils";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 const PAGE_SIZE = 120;
 
 const WORKFLOWS = [
-  { key: "", label: "All" },
+  // "All leads" tab intentionally hidden for the SaaS launch.
   { key: "needs-action", label: "Needs action" },
   { key: "watchlist", label: "Watch" },
   { key: "contacts", label: "Custom list" },
@@ -64,6 +64,27 @@ const OUTREACH_STATUS = {
   complete: "Complete",
   skipped: "Skipped",
 };
+
+const PILL = {
+  good: "bg-emerald-500/15 text-emerald-600",
+  avg: "bg-amber-500/15 text-amber-600",
+  bad: "bg-red-500/15 text-red-600",
+  sent: "bg-sky-500/15 text-sky-600",
+  watch: "bg-amber-500/15 text-amber-600",
+  contact: "bg-primary/15 text-primary",
+  muted: "bg-muted/60 text-muted-foreground",
+};
+
+function Pill({ tone = "muted", className, children, ...props }) {
+  return (
+    <span
+      className={cn("inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium", PILL[tone] || PILL.muted, className)}
+      {...props}
+    >
+      {children}
+    </span>
+  );
+}
 
 // whatsapp_status holds the descriptive outcome from the checker ("on whatsapp",
 // "not on whatsapp", "no phone", "error: ...") — normalize it to a badge state.
@@ -90,28 +111,57 @@ function scoreClass(value) {
   if (!Number.isFinite(n)) return "";
   if (n >= 90) return "good";
   if (n >= 50) return "avg";
-  return "poor";
+  return "bad";
 }
 
 function Score({ label, value }) {
-  if (value === "" || value === null || value === undefined) return <span className="score-pill empty">{label} -</span>;
-  return (
-    <span className={`score-pill ${scoreClass(value)}`} title={`${label}: ${value}/100`}>
-      {label} {value}
-    </span>
-  );
+  if (value === "" || value === null || value === undefined) return <Pill tone="muted">{label} -</Pill>;
+  return <Pill tone={scoreClass(value)} title={`${label}: ${value}/100`}>{label} {value}</Pill>;
+}
+
+// HTTP status pill for a lead's website (200 ok / 3xx redirect / 4xx-5xx error /
+// 0 unreachable). null status = never checked.
+function StatusPill({ lead }) {
+  const code = lead.http_status;
+  if (code === null || code === undefined || code === "") return null;
+  const n = Number(code);
+  let tone = "muted", label;
+  if (!n) {
+    tone = "bad";
+    label = "down";
+  } else if (n >= 200 && n < 300) {
+    tone = "good";
+    label = n;
+  } else if (n >= 300 && n < 400) {
+    tone = "avg";
+    label = n;
+  } else {
+    tone = "bad";
+    label = n;
+  }
+  const title = `HTTP ${n || "?"}${lead.http_status_text ? ` ${lead.http_status_text}` : ""}${lead.http_checked_at ? ` · checked ${new Date(lead.http_checked_at).toLocaleString()}` : ""}`;
+  return <Pill tone={tone} title={title}>{label}</Pill>;
+}
+
+// Chatbot/live-chat verdict badge. "" = never scanned.
+function ChatbotBadge({ lead }) {
+  const v = lead.chatbot;
+  if (!v) return null;
+  const yes = v === "yes";
+  const title = `${yes ? "Chatbot detected" : "No chatbot"}${lead.chatbot_vendors ? `: ${lead.chatbot_vendors}` : ""}${lead.chatbot_method ? ` (${lead.chatbot_method})` : ""}`;
+  return <Pill tone={yes ? "good" : "muted"} title={title}><Bot size={12} /> {yes ? "Bot" : "No bot"}</Pill>;
 }
 
 function WorkflowBadge({ lead }) {
   const status = lead.outreach_status || "new";
-  const cls = status === "complete" ? "good" : status === "sent" ? "sent" : status === "queued" ? "avg" : status === "skipped" ? "muted" : "";
-  return <span className={`workflow-badge ${cls}`}>{OUTREACH_STATUS[status] || status}</span>;
+  const tone = status === "complete" ? "good" : status === "sent" ? "sent" : status === "queued" ? "avg" : status === "skipped" ? "muted" : "muted";
+  return <Pill tone={tone}>{OUTREACH_STATUS[status] || status}</Pill>;
 }
 
 function EmailBadge({ status }) {
   const value = status || "unset";
-  const cls = value === "send" ? "good" : value === "do_not_send" ? "bad" : value === "later" ? "avg" : "muted";
-  return <span className={`workflow-badge ${cls}`}>{EMAIL_STATUS[value] || value}</span>;
+  const tone = value === "send" ? "good" : value === "do_not_send" ? "bad" : value === "later" ? "avg" : "muted";
+  return <Pill tone={tone}>{EMAIL_STATUS[value] || value}</Pill>;
 }
 
 const SOCIAL_FIELDS = [
@@ -128,68 +178,45 @@ const SOCIAL_FIELDS = [
 
 function Socials({ lead, full = false }) {
   const present = SOCIAL_FIELDS.filter(([key]) => lead[key]);
-  if (!present.length) return <span className="subtle">-</span>;
+  if (!present.length) return <span className="text-xs text-muted-foreground">-</span>;
   return (
-    <>
+    <div className="flex flex-wrap gap-1">
       {present.map(([key, label]) => (
-        <a key={key} href={lead[key]} target="_blank" rel="noreferrer" title={lead[key]} className={full ? "chip-link" : ""}>
+        <a
+          key={key}
+          href={lead[key]}
+          target="_blank"
+          rel="noreferrer"
+          title={lead[key]}
+          className="inline-flex items-center rounded-md border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+        >
           {full ? label : label.slice(0, 2).toUpperCase()}
         </a>
       ))}
-    </>
+    </div>
   );
 }
 
 function QuickLeadActions({ lead, onPatch, compact = false }) {
   const busy = false;
-  const iconSize = compact ? 14 : 15;
+  const iconSize = 15;
   return (
-    <div className={compact ? "quick-actions compact" : "quick-actions"} onClick={(e) => e.stopPropagation()}>
-      <button
-        className={`ghost ${lead.watchlist ? "watch-on" : ""}`}
-        disabled={busy}
-        onClick={() => onPatch(lead.id, { watchlist: !lead.watchlist })}
-        title={lead.watchlist ? "Remove from watch list" : "Add to watch list"}
-      >
+    <div className="flex flex-wrap items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+      <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.watchlist && "text-amber-600")} disabled={busy} onClick={() => onPatch(lead.id, { watchlist: !lead.watchlist })} title={lead.watchlist ? "Remove from watch list" : "Add to watch list"}>
         <Star size={iconSize} fill={lead.watchlist ? "currentColor" : "none"} />
-        {!compact && "Watch"}
-      </button>
-      <button
-        className={`ghost ${lead.contact_list ? "contact-on" : ""}`}
-        disabled={busy}
-        onClick={() => onPatch(lead.id, { contact_list: !lead.contact_list })}
-        title={lead.contact_list ? "Remove from custom list" : "Add to custom list"}
-      >
+      </Button>
+      <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.contact_list && "text-primary")} disabled={busy} onClick={() => onPatch(lead.id, { contact_list: !lead.contact_list })} title={lead.contact_list ? "Remove from custom list" : "Add to custom list"}>
         <ListPlus size={iconSize} />
-        {!compact && "List"}
-      </button>
-      <button
-        className="ghost"
-        disabled={busy}
-        onClick={() => onPatch(lead.id, { email_status: lead.email_status === "send" ? "unset" : "send", contact_list: true })}
-        title="Toggle send email"
-      >
+      </Button>
+      <Button variant="ghost" size="icon" className="h-8 w-8" disabled={busy} onClick={() => onPatch(lead.id, { email_status: lead.email_status === "send" ? "unset" : "send", contact_list: true })} title="Toggle send email">
         <MailCheck size={iconSize} />
-        {!compact && "Email"}
-      </button>
-      <button
-        className="ghost"
-        disabled={busy}
-        onClick={() => onPatch(lead.id, { outreach_status: "sent", contact_list: true })}
-        title="Mark message sent"
-      >
+      </Button>
+      <Button variant="ghost" size="icon" className="h-8 w-8" disabled={busy} onClick={() => onPatch(lead.id, { outreach_status: "sent", contact_list: true })} title="Mark message sent">
         <Send size={iconSize} />
-        {!compact && "Sent"}
-      </button>
-      <button
-        className="ghost"
-        disabled={busy}
-        onClick={() => onPatch(lead.id, { outreach_status: "complete", contact_list: true })}
-        title="Mark complete"
-      >
+      </Button>
+      <Button variant="ghost" size="icon" className="h-8 w-8" disabled={busy} onClick={() => onPatch(lead.id, { outreach_status: "complete", contact_list: true })} title="Mark complete">
         <CheckCircle2 size={iconSize} />
-        {!compact && "Done"}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -198,43 +225,62 @@ function QuickLeadActions({ lead, onPatch, compact = false }) {
 // website report, and remove. Remove is context-aware (see removeLead in parent):
 // in a watch/custom-list view it just drops the lead from that view; in the full
 // leads view it deletes permanently.
-function RowActions({ lead, busy = {}, onEnrich, onWhatsapp, onReport, onRemove, removeTitle }) {
+function RowActions({ lead, busy = {}, onEnrich, onWhatsapp, onReport, onRemove, onStatus, onChatbot, removeTitle }) {
   const wa = waState(lead);
   return (
-    <div className="row-actions" onClick={(e) => e.stopPropagation()}>
-      <button
-        className="ghost"
-        title={lead.email ? "Re-grab email + socials" : "Grab email + socials"}
-        disabled={!lead.website || busy.enrich}
-        onClick={() => onEnrich(lead)}
-      >
-        {busy.enrich ? <Loader2 size={14} className="spin" /> : <Mail size={14} />}
-      </button>
-      <button
-        className={`ghost ${wa === "yes" ? "watch-on" : ""}`}
-        title={lead.phone ? (wa ? `WhatsApp: ${lead.whatsapp_status}` : "Check WhatsApp") : "No phone to check"}
-        disabled={!lead.phone || busy.whatsapp}
-        onClick={() => onWhatsapp(lead)}
-      >
-        {busy.whatsapp ? <Loader2 size={14} className="spin" /> : <MessageCircle size={14} />}
-      </button>
-      <button className="ghost" title="Website report" disabled={!lead.website} onClick={() => onReport(lead)}>
+    <div className="flex flex-wrap items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+      <Button variant="ghost" size="icon" className="h-8 w-8" title={lead.email ? "Re-grab email + socials" : "Grab email + socials"} disabled={!lead.website || busy.enrich} onClick={() => onEnrich(lead)}>
+        {busy.enrich ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
+      </Button>
+      <Button variant="ghost" size="icon" className="h-8 w-8" title={lead.website ? `Check website status${lead.http_status ? ` (last: ${lead.http_status || "down"})` : ""}` : "No website to check"} disabled={!lead.website || busy.status} onClick={() => onStatus(lead)}>
+        {busy.status ? <Loader2 size={14} className="animate-spin" /> : <Globe2 size={14} />}
+      </Button>
+      <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.chatbot === "yes" && "text-emerald-600")} title={lead.website ? `Scan for chatbot${lead.chatbot ? ` (last: ${lead.chatbot})` : ""}` : "No website to scan"} disabled={!lead.website || busy.chatbot} onClick={() => onChatbot(lead)}>
+        {busy.chatbot ? <Loader2 size={14} className="animate-spin" /> : <Bot size={14} />}
+      </Button>
+      <Button variant="ghost" size="icon" className={cn("h-8 w-8", wa === "yes" && "text-emerald-600")} title={lead.phone ? (wa ? `WhatsApp: ${lead.whatsapp_status}` : "Check WhatsApp") : "No phone to check"} disabled={!lead.phone || busy.whatsapp} onClick={() => onWhatsapp(lead)}>
+        {busy.whatsapp ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />}
+      </Button>
+      <Button variant="ghost" size="icon" className="h-8 w-8" title="Website report" disabled={!lead.website} onClick={() => onReport(lead)}>
         <FileText size={14} />
-      </button>
-      <button className="ghost danger-ghost" title={removeTitle} disabled={busy.remove} onClick={() => onRemove(lead)}>
-        {busy.remove ? <Loader2 size={14} className="spin" /> : <Trash2 size={14} />}
-      </button>
+      </Button>
+      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" title={removeTitle} disabled={busy.remove} onClick={() => onRemove(lead)}>
+        {busy.remove ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+      </Button>
     </div>
   );
 }
 
-function LeadDrawer({ lead, onClose, onDeleted, onPatch }) {
+function DrawerCard({ title, children }) {
+  return (
+    <section className="rounded-xl border border-border bg-card/60 p-4">
+      <h3 className="mb-3 text-sm font-semibold">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot }) {
   const [reports, setReports] = useState([]);
   const [job, setJob] = useState(null);
   const [error, setError] = useState("");
   const [notes, setNotes] = useState(lead.notes || "");
   const [saving, setSaving] = useState(false);
+  const [scanning, setScanning] = useState("");
   const pollRef = useRef(null);
+
+  async function runScan(kind) {
+    setScanning(kind);
+    setError("");
+    try {
+      if (kind === "status") await onStatus(lead);
+      else await onChatbot(lead);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setScanning("");
+    }
+  }
 
   const loadReports = useCallback(async () => {
     try {
@@ -315,138 +361,148 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch }) {
   const generating = job?.status === "running";
 
   return (
-    <div className="drawer-backdrop" onClick={onClose}>
-      <aside className="drawer lead-drawer" onClick={(e) => e.stopPropagation()}>
-        <header className="drawer-head">
+    <Sheet open onOpenChange={(v) => !v && onClose()}>
+      <SheetContent side="right" className="w-full max-w-lg p-0">
+        <header className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-border/60 bg-card/95 px-5 py-4 pr-12 backdrop-blur">
           <div>
-            <h2>{lead.name || "Unknown"}</h2>
-            <div className="lead-meta-line">
+            <h2 className="text-lg font-semibold leading-tight">{lead.name || "Unknown"}</h2>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <WorkflowBadge lead={lead} />
               <EmailBadge status={lead.email_status} />
-              {lead.watchlist ? <span className="workflow-badge watch"><Star size={12} fill="currentColor" /> Watch</span> : null}
-              {lead.contact_list ? <span className="workflow-badge contact"><Users size={12} /> List</span> : null}
+              {lead.watchlist ? <Pill tone="watch"><Star size={12} fill="currentColor" /> Watch</Pill> : null}
+              {lead.contact_list ? <Pill tone="contact"><Users size={12} /> List</Pill> : null}
             </div>
           </div>
-          <button className="icon" onClick={onClose} title="Close"><X size={17} /></button>
         </header>
 
-        <div className="drawer-body">
-          <section className="drawer-card workflow-card">
-            <h3>Workflow</h3>
-            <div className="workflow-grid">
-              <button className={lead.watchlist ? "toggle-card on" : "toggle-card"} onClick={() => patch({ watchlist: !lead.watchlist })}>
+        <div className="space-y-4 p-5">
+          <DrawerCard title="Workflow">
+            <div className="grid grid-cols-2 gap-2">
+              <button className={cn("flex flex-col items-center gap-1 rounded-lg border p-3 text-sm transition-colors", lead.watchlist ? "border-amber-500/50 bg-amber-500/10 text-amber-600" : "border-border hover:bg-accent")} onClick={() => patch({ watchlist: !lead.watchlist })}>
                 <Star size={16} fill={lead.watchlist ? "currentColor" : "none"} />
                 <span>Watch list</span>
               </button>
-              <button className={lead.contact_list ? "toggle-card on" : "toggle-card"} onClick={() => patch({ contact_list: !lead.contact_list })}>
+              <button className={cn("flex flex-col items-center gap-1 rounded-lg border p-3 text-sm transition-colors", lead.contact_list ? "border-primary/50 bg-primary/10 text-primary" : "border-border hover:bg-accent")} onClick={() => patch({ contact_list: !lead.contact_list })}>
                 <ListPlus size={16} />
                 <span>Custom list</span>
               </button>
             </div>
-            <div className="drawer-field-grid">
-              <label className="field">
-                <span>Email decision</span>
-                <select value={lead.email_status || "unset"} onChange={(e) => patch({ email_status: e.target.value })}>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <label className="space-y-1">
+                <span className="text-xs text-muted-foreground">Email decision</span>
+                <Select value={lead.email_status || "unset"} onChange={(e) => patch({ email_status: e.target.value })}>
                   {Object.entries(EMAIL_STATUS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-                </select>
+                </Select>
               </label>
-              <label className="field">
-                <span>Outreach status</span>
-                <select value={lead.outreach_status || "new"} onChange={(e) => patch({ outreach_status: e.target.value, contact_list: e.target.value !== "new" })}>
+              <label className="space-y-1">
+                <span className="text-xs text-muted-foreground">Outreach status</span>
+                <Select value={lead.outreach_status || "new"} onChange={(e) => patch({ outreach_status: e.target.value, contact_list: e.target.value !== "new" })}>
                   {Object.entries(OUTREACH_STATUS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-                </select>
+                </Select>
               </label>
             </div>
-            <textarea
-              className="notes-box"
+            <Textarea
+              className="mt-3"
               placeholder="Notes about outreach, objection, next step, owner, or email copy..."
               value={notes}
               rows={5}
               onChange={(e) => setNotes(e.target.value)}
             />
-            <div className="drawer-actions">
-              <button className="primary" disabled={saving} onClick={saveNotes}>
-                <MessageSquare size={15} /> Save notes
-              </button>
-              <button disabled={saving} onClick={() => patch({ outreach_status: "sent", contact_list: true })}>
-                <Send size={15} /> Mark sent
-              </button>
-              <button disabled={saving} onClick={() => patch({ outreach_status: "complete", contact_list: true })}>
-                <CheckCircle2 size={15} /> Complete
-              </button>
-              <button disabled={saving} onClick={() => patch({ outreach_status: "skipped", email_status: "do_not_send" })}>
-                <Ban size={15} /> Skip
-              </button>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button size="sm" disabled={saving} onClick={saveNotes}><MessageSquare size={15} /> Save notes</Button>
+              <Button size="sm" variant="outline" disabled={saving} onClick={() => patch({ outreach_status: "sent", contact_list: true })}><Send size={15} /> Mark sent</Button>
+              <Button size="sm" variant="outline" disabled={saving} onClick={() => patch({ outreach_status: "complete", contact_list: true })}><CheckCircle2 size={15} /> Complete</Button>
+              <Button size="sm" variant="outline" disabled={saving} onClick={() => patch({ outreach_status: "skipped", email_status: "do_not_send" })}><Ban size={15} /> Skip</Button>
             </div>
-          </section>
+          </DrawerCard>
 
-          <section className="drawer-card">
-            <h3>Contact</h3>
-            <div className="drawer-rows">
-              {lead.phone && <div><Phone size={13} /> {lead.phone} {waState(lead) === "yes" && <span className="wa-badge">WA yes</span>}{waState(lead) === "no" && <span className="wa-badge wa-no">WA no</span>}</div>}
-              {lead.email && <div><Mail size={13} /> <a href={`mailto:${lead.email}`}>{lead.email}</a></div>}
-              {lead.all_emails && lead.all_emails !== lead.email && <div className="subtle">Also: {lead.all_emails}</div>}
-              {lead.address && <div><MapPin size={13} /> {lead.address}</div>}
-              {lead.website && (
-                <div><ExternalLink size={13} /> <a href={lead.website} target="_blank" rel="noreferrer">{lead.domain || lead.website}</a></div>
-              )}
-              {lead.maps_url && <div><a href={lead.maps_url} target="_blank" rel="noreferrer">Open on Google Maps</a></div>}
+          <DrawerCard title="Contact">
+            <div className="space-y-1.5 text-sm">
+              {lead.phone && <div className="flex items-center gap-2"><Phone size={13} className="text-muted-foreground" /> {lead.phone} {waState(lead) === "yes" && <Pill tone="good">WA yes</Pill>}{waState(lead) === "no" && <Pill tone="bad">WA no</Pill>}</div>}
+              {lead.email && <div className="flex items-center gap-2"><Mail size={13} className="text-muted-foreground" /> <a className="text-primary hover:underline" href={`mailto:${lead.email}`}>{lead.email}</a></div>}
+              {lead.all_emails && lead.all_emails !== lead.email && <div className="text-xs text-muted-foreground">Also: {lead.all_emails}</div>}
+              {lead.address && <div className="flex items-center gap-2"><MapPin size={13} className="text-muted-foreground" /> {lead.address}</div>}
+              {lead.website && <div className="flex items-center gap-2"><ExternalLink size={13} className="text-muted-foreground" /> <a className="text-primary hover:underline" href={lead.website} target="_blank" rel="noreferrer">{lead.domain || lead.website}</a></div>}
+              {lead.maps_url && <div><a className="text-primary hover:underline" href={lead.maps_url} target="_blank" rel="noreferrer">Open on Google Maps</a></div>}
             </div>
-          </section>
+          </DrawerCard>
 
-          <section className="drawer-card">
-            <h3>Socials</h3>
-            <div className="chips"><Socials lead={lead} full /></div>
-          </section>
+          <DrawerCard title="Socials">
+            <Socials lead={lead} full />
+          </DrawerCard>
 
-          <section className="drawer-card">
-            <h3>Website health</h3>
-            <div className="drawer-scores">
-              <div>
-                <span className="subtle">Desktop</span>
+          <DrawerCard title="Website status & chatbot">
+            <div className="space-y-1.5 text-sm">
+              <div className="flex items-center gap-2">
+                Status: {lead.http_status === null || lead.http_status === undefined || lead.http_status === ""
+                  ? <span className="text-xs text-muted-foreground">not checked</span>
+                  : <><StatusPill lead={lead} /> {lead.http_status_text ? <span className="text-xs text-muted-foreground">{lead.http_status_text}</span> : null}</>}
+              </div>
+              <div className="flex items-center gap-2">
+                Chatbot: {lead.chatbot
+                  ? <><ChatbotBadge lead={lead} /> {lead.chatbot_vendors ? <span className="text-xs text-muted-foreground">{lead.chatbot_vendors}</span> : null}</>
+                  : <span className="text-xs text-muted-foreground">not scanned</span>}
+              </div>
+              {lead.chatbot_checked_at && <div className="text-xs text-muted-foreground">Scanned: {new Date(lead.chatbot_checked_at).toLocaleString()}</div>}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" disabled={!lead.website || !!scanning} onClick={() => runScan("status")}>
+                {scanning === "status" ? <Loader2 size={15} className="animate-spin" /> : <Globe2 size={15} />} Check status
+              </Button>
+              <Button size="sm" variant="outline" disabled={!lead.website || !!scanning} onClick={() => runScan("chatbot")}>
+                {scanning === "chatbot" ? <Loader2 size={15} className="animate-spin" /> : <Bot size={15} />} Scan chatbot
+              </Button>
+            </div>
+            {!lead.website && <div className="mt-2 text-xs text-muted-foreground">No website on this lead.</div>}
+          </DrawerCard>
+
+          <DrawerCard title="Website health">
+            <div className="space-y-2 text-sm">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">Desktop</span>
                 <Score label="Perf" value={lead.desktop_performance} />
                 <Score label="SEO" value={lead.desktop_seo} />
                 <Score label="A11y" value={lead.desktop_accessibility} />
               </div>
-              <div>
-                <span className="subtle">Mobile</span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">Mobile</span>
                 <Score label="Perf" value={lead.mobile_performance} />
                 <Score label="SEO" value={lead.mobile_seo} />
                 <Score label="A11y" value={lead.mobile_accessibility} />
               </div>
             </div>
-          </section>
+          </DrawerCard>
 
-          <section className="drawer-card">
-            <h3>Independent report</h3>
-            <p className="subtle">Fast real-Chrome audit (desktop + mobile): speed, layout, mobile, SEO, security, support-chat — summarized by AI, with the raw report attached.</p>
-            {reports.map((r) => (
-              <a key={r.file} className="report-link" href={`${BASE_PATH}/api/agent/reports/${r.file}`} target="_blank" rel="noreferrer">
-                <FileText size={14} /> {r.file} <span className="subtle">{new Date(r.createdAt).toLocaleString()}</span>
-              </a>
-            ))}
+          <DrawerCard title="Independent report">
+            <p className="text-xs text-muted-foreground">Fast real-Chrome audit (desktop + mobile): speed, layout, mobile, SEO, security, support-chat, summarized by AI, with the raw report attached.</p>
+            <div className="mt-2 space-y-1.5">
+              {reports.map((r) => (
+                <a key={r.file} className="flex items-center gap-2 text-sm text-primary hover:underline" href={`${BASE_PATH}/api/agent/reports/${r.file}`} target="_blank" rel="noreferrer">
+                  <FileText size={14} /> {r.file} <span className="text-xs text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</span>
+                </a>
+              ))}
+            </div>
             {generating && (
-              <div className="job-progress">
-                <Loader2 size={14} className="spin" /> {job.cancelRequested ? "Stopping..." : "Generating..."}
-                <button className="job-stop" onClick={cancelJob} title="Stop this report job" disabled={!!job.cancelRequested}>Stop</button>
-                <div className="subtle">{(job.log || []).slice(-2).join(" | ")}</div>
+              <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 size={14} className="animate-spin" /> {job.cancelRequested ? "Stopping..." : "Generating..."}
+                <button className="text-red-600 hover:underline" onClick={cancelJob} title="Stop this report job" disabled={!!job.cancelRequested}>Stop</button>
+                <div className="text-xs text-muted-foreground">{(job.log || []).slice(-2).join(" | ")}</div>
               </div>
             )}
-            {job?.status === "failed" && <div className="chat-error">Report failed: {job.error}</div>}
-            {job?.status === "cancelled" && <div className="subtle">Report job cancelled.</div>}
-            {error && <div className="chat-error">{error}</div>}
-            <div className="drawer-actions">
-              <button className="primary" disabled={!lead.website || generating} onClick={generate}>
+            {job?.status === "failed" && <div className="mt-2 text-sm text-red-600">Report failed: {job.error}</div>}
+            {job?.status === "cancelled" && <div className="mt-2 text-xs text-muted-foreground">Report job cancelled.</div>}
+            {error && <div className="mt-2 text-sm text-red-600">{error}</div>}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button size="sm" disabled={!lead.website || generating} onClick={generate}>
                 <FileText size={15} /> {reports.length ? "Regenerate report" : "Generate report"}
-              </button>
-              <button className="danger" onClick={remove}><Trash2 size={15} /> Delete lead</button>
+              </Button>
+              <Button size="sm" variant="destructive" onClick={remove}><Trash2 size={15} /> Delete lead</Button>
             </div>
-            {!lead.website && <div className="subtle">No website on this lead. Reports need a website.</div>}
-          </section>
+            {!lead.website && <div className="mt-2 text-xs text-muted-foreground">No website on this lead. Reports need a website.</div>}
+          </DrawerCard>
 
-          <section className="drawer-card">
-            <h3>Meta</h3>
-            <div className="drawer-rows subtle">
+          <DrawerCard title="Meta">
+            <div className="space-y-1 text-xs text-muted-foreground">
               <div>Project: {lead.project || "-"}</div>
               <div>Query: {lead.query || "-"}</div>
               {lead.hours && <div>Hours: {lead.hours}</div>}
@@ -454,15 +510,14 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch }) {
               {lead.message_sent_at && <div>Sent: {new Date(lead.message_sent_at).toLocaleString()}</div>}
               {lead.completed_at && <div>Completed: {new Date(lead.completed_at).toLocaleString()}</div>}
             </div>
-          </section>
+          </DrawerCard>
         </div>
-      </aside>
-    </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
 export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead manager", activeNav = "leads" }) {
-  const [sidebarCollapsed, toggleSidebar] = useSidebarCollapse();
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [stats, setStats] = useState(null);
@@ -513,6 +568,54 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
       setBusyKey(key, false);
     }
   }, [mergeLead, setBusyKey]);
+
+  const checkStatusOne = useCallback(async (lead) => {
+    const key = `${lead.id}:status`;
+    setBusyKey(key, true);
+    try {
+      const data = await jsonFetch(`/api/leads/${lead.id}/status`, { method: "POST" });
+      if (data.lead) mergeLead(data.lead);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setBusyKey(key, false);
+    }
+  }, [mergeLead, setBusyKey]);
+
+  const scanChatbotOne = useCallback(async (lead) => {
+    const key = `${lead.id}:chatbot`;
+    setBusyKey(key, true);
+    try {
+      const data = await jsonFetch(`/api/leads/${lead.id}/chatbot`, { method: "POST" });
+      if (data.lead) mergeLead(data.lead);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setBusyKey(key, false);
+    }
+  }, [mergeLead, setBusyKey]);
+
+  const [batchBusy, setBatchBusy] = useState("");
+  const batchScan = useCallback(async (action) => {
+    const ids = rows.filter((r) => r.website).map((r) => r.id);
+    if (!ids.length) {
+      alert("No leads with a website on this page.");
+      return;
+    }
+    const label = action === "chatbot" ? "chatbot scan" : "status check";
+    if (action === "chatbot" && !confirm(`Run a ${label} on ${ids.length} lead(s)? This opens Chrome and can take a while.`)) return;
+    setBatchBusy(action);
+    try {
+      const data = await jsonFetch(`/api/leads/scan`, { method: "POST", body: JSON.stringify({ ids, action }) });
+      for (const lead of data.leads || []) {
+        if (lead && lead.id && !lead.error) mergeLead(lead);
+      }
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setBatchBusy("");
+    }
+  }, [rows, mergeLead]);
 
   const checkWhatsapp = useCallback(async (lead) => {
     const key = `${lead.id}:whatsapp`;
@@ -631,304 +734,266 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
   }, [load]);
 
   const statTiles = [
-    ["Total", stats?.total || 0],
-    ["Watch", stats?.watchlist || 0],
-    ["Custom list", stats?.contactList || 0],
-    ["Email ready", stats?.emailReady || 0],
-    ["Queued", stats?.queued || 0],
-    ["Sent", stats?.sent || 0],
-    ["Done", stats?.completed || 0],
+    ["Total", stats?.total || 0, ""],
+    ["Watch", stats?.watchlist || 0, "watchlist"],
+    ["Custom list", stats?.contactList || 0, "contacts"],
+    ["Email ready", stats?.emailReady || 0, "email-ready"],
+    ["Queued", stats?.queued || 0, "queued"],
+    ["Sent", stats?.sent || 0, "sent"],
+    ["Done", stats?.completed || 0, "complete"],
   ];
   const pageStart = total && rows.length ? page * PAGE_SIZE + 1 : 0;
   const pageEnd = total && rows.length ? page * PAGE_SIZE + rows.length : 0;
   const hasNextPage = rows.length > 0 && pageEnd < total;
 
-  return (
-    <main className={`shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
-      <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
-        <div className="brand">
-          <ShieldCheck size={22} />
-          <span className="brand-text">Lead Ops</span>
+  // Stat tiles rendered into the sidebar (AppShell sidebarExtra slot).
+  const sidebarStats = stats ? (
+    <div className="pb-4">
+      <div className="mb-2 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Pipeline</div>
+      <div className="grid grid-cols-2 gap-1.5">
+        {statTiles.map(([label, value, wf]) => (
           <button
-            className="icon sidebar-toggle"
-            onClick={toggleSidebar}
-            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            key={label}
+            onClick={() => setWorkflow(wf)}
+            className={cn(
+              "rounded-lg border px-2.5 py-2 text-left transition-colors",
+              workflow === wf ? "border-primary/50 bg-primary/10" : "border-border hover:bg-accent"
+            )}
           >
-            {sidebarCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+            <div className="text-base font-bold"><AnimatedNumber value={value} /></div>
+            <div className="text-[11px] text-muted-foreground">{label}</div>
           </button>
-        </div>
-        <nav className="nav">
-          <Link className="nav-link" href="/" title="Projects">
-            <FolderOpen size={15} /> <span className="nav-text">Projects</span>
-          </Link>
-          <Link className={`nav-link ${activeNav === "leads" ? "active" : ""}`} href="/leads" title="Leads">
-            <Database size={15} /> <span className="nav-text">Leads</span>
-          </Link>
-          <Link className={`nav-link ${activeNav === "watchlist" ? "active" : ""}`} href="/watchlist" title="Watch list">
-            <Star size={15} /> <span className="nav-text">Watch</span>
-          </Link>
-          <Link className="nav-link" href="/agent" title="Agent"><Bot size={15} /> <span className="nav-text">Agent</span></Link>
-        </nav>
-        {stats && (
-          <div className="db-stats crm-stats">
-            {statTiles.map(([label, value]) => (
-              <button key={label} className="stat-mini" onClick={() => {
-                if (label === "Watch") setWorkflow("watchlist");
-                if (label === "Custom list") setWorkflow("contacts");
-                if (label === "Email ready") setWorkflow("email-ready");
-                if (label === "Queued") setWorkflow("queued");
-                if (label === "Sent") setWorkflow("sent");
-                if (label === "Done") setWorkflow("complete");
-                if (label === "Total") setWorkflow("");
-              }}>
-                <strong><AnimatedNumber value={value} /></strong>
-                <span>{label}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </aside>
+        ))}
+      </div>
+    </div>
+  ) : null;
 
-      <section className="project-main">
-        <header className="topbar lead-topbar">
-          <div>
-            <h1>{pageTitle}</h1>
-            <div className="subtle">
-              <AnimatedNumber value={total} /> lead{total === 1 ? "" : "s"} match. Manage watch lists, custom lists, email intent, outreach status, and notes.
-            </div>
-          </div>
-          <div className="topbar-actions">
-            <a href={`${BASE_PATH}/api/leads/export`}>
-              <button className="primary"><Download size={16} /> Export CSV</button>
-            </a>
-          </div>
-        </header>
+  const actions = (
+    <>
+      <Button variant="outline" size="sm" disabled={!!batchBusy || loading} onClick={() => batchScan("status")} title="Check website status for all leads on this page">
+        {batchBusy === "status" ? <Loader2 size={16} className="animate-spin" /> : <Globe2 size={16} />} <span className="hidden lg:inline">Check status</span>
+      </Button>
+      <Button variant="outline" size="sm" disabled={!!batchBusy || loading} onClick={() => batchScan("chatbot")} title="Scan all leads on this page for a chatbot">
+        {batchBusy === "chatbot" ? <Loader2 size={16} className="animate-spin" /> : <Bot size={16} />} <span className="hidden lg:inline">Scan chatbots</span>
+      </Button>
+      <Button asChild size="sm">
+        <a href={`${BASE_PATH}/api/leads/export`}><Download size={16} /> <span className="hidden sm:inline">Export CSV</span></a>
+      </Button>
+    </>
+  );
 
-        <div className="work leads-work">
-          <section className="panel crm-toolbar">
-            <div className="manual-add-row">
-              <div className="field search-field manual-site">
-                <Globe2 size={15} />
-                <input
-                  placeholder="Add single site or domain..."
-                  value={manualSite}
-                  onChange={(e) => setManualSite(e.target.value)}
-                />
+  const subtitle = `${total.toLocaleString()} lead${total === 1 ? "" : "s"} match · manage watch lists, email intent, outreach status & notes`;
+
+  return (
+    <AppShell active={activeNav} title={pageTitle} subtitle={subtitle} actions={actions} sidebarExtra={sidebarStats}>
+      <div className="space-y-4 p-4 sm:p-6">
+        {/* Toolbar */}
+        <Card>
+          <CardContent className="space-y-3 p-4">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+              <div className="relative flex-1">
+                <Globe2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input placeholder="Add single site or domain..." value={manualSite} onChange={(e) => setManualSite(e.target.value)} className="pl-9" />
               </div>
-              <input
-                className="manual-name"
-                placeholder="Lead name"
-                value={manualName}
-                onChange={(e) => setManualName(e.target.value)}
-              />
-              <input
-                className="manual-notes"
-                placeholder="Notes"
-                value={manualNotes}
-                onChange={(e) => setManualNotes(e.target.value)}
-              />
-              <button disabled={!manualSite.trim() || !!adding} onClick={() => addManualLead("watchlist")}>
-                <Star size={15} /> Watch
-              </button>
-              <button className="primary" disabled={!manualSite.trim() || !!adding} onClick={() => addManualLead("contact_list")}>
-                <ListPlus size={15} /> List
-              </button>
+              <Input className="lg:w-40" placeholder="Lead name" value={manualName} onChange={(e) => setManualName(e.target.value)} />
+              <Input className="lg:w-40" placeholder="Notes" value={manualNotes} onChange={(e) => setManualNotes(e.target.value)} />
+              <Button variant="outline" disabled={!manualSite.trim() || !!adding} onClick={() => addManualLead("watchlist")}><Star size={15} /> Watch</Button>
+              <Button disabled={!manualSite.trim() || !!adding} onClick={() => addManualLead("contact_list")}><ListPlus size={15} /> List</Button>
             </div>
-            <div className="workflow-tabs">
-              {WORKFLOWS.map((item) => (
-                <button key={item.key || "all"} className={workflow === item.key ? "active" : ""} onClick={() => setWorkflow(item.key)}>
-                  {item.label}
-                </button>
-              ))}
-            </div>
-            <div className="filters lead-filters">
-              <div className="field search-field">
-                <Search size={15} />
-                <input placeholder="Search name, domain, phone, email, category, notes..." value={search} onChange={(e) => setSearch(e.target.value)} />
+
+            <Tabs value={workflow} onValueChange={setWorkflow}>
+              <TabsList className="flex-wrap">
+                {WORKFLOWS.map((item) => (
+                  <TabsTrigger key={item.key || "all"} value={item.key}>{item.label}</TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative min-w-[220px] flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input placeholder="Search name, domain, phone, email, category, notes..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
               </div>
-              <label className="filter-select">
-                Project
-                <select value={project} onChange={(e) => setProject(e.target.value)}>
-                  <option value="">All projects</option>
-                  {projects.map((name) => <option key={name} value={name}>{name}</option>)}
-                </select>
+              <Select value={project} onChange={(e) => setProject(e.target.value)} className="w-auto min-w-[140px]">
+                <option value="">All projects</option>
+                {projects.map((name) => <option key={name} value={name}>{name}</option>)}
+              </Select>
+              <Select value={country} onChange={(e) => { setCountry(e.target.value); setCity(""); }} className="w-auto min-w-[140px]">
+                <option value="">All countries</option>
+                {countries.map((c) => <option key={c.name} value={c.name}>{c.name} ({c.count})</option>)}
+              </Select>
+              <Select value={city} onChange={(e) => setCity(e.target.value)} className="w-auto min-w-[120px]">
+                <option value="">All cities</option>
+                {cities.map((c) => <option key={c.name} value={c.name}>{c.name} ({c.count})</option>)}
+              </Select>
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <input type="checkbox" checked={hasEmail} onChange={(e) => setHasEmail(e.target.checked)} className="accent-[hsl(var(--primary))]" /> Has email
               </label>
-              <label className="filter-select">
-                Country
-                <select value={country} onChange={(e) => { setCountry(e.target.value); setCity(""); }}>
-                  <option value="">All countries</option>
-                  {countries.map((c) => <option key={c.name} value={c.name}>{c.name} ({c.count})</option>)}
-                </select>
-              </label>
-              <label className="filter-select">
-                City
-                <select value={city} onChange={(e) => setCity(e.target.value)}>
-                  <option value="">All cities</option>
-                  {cities.map((c) => <option key={c.name} value={c.name}>{c.name} ({c.count})</option>)}
-                </select>
-              </label>
-              <label className="check">
-                <input type="checkbox" checked={hasEmail} onChange={(e) => setHasEmail(e.target.checked)} /> Has email
-              </label>
-              <label className="filter-select">
-                Min perf
-                <select value={minScore} onChange={(e) => setMinScore(Number(e.target.value))}>
-                  <option value={0}>Any</option>
-                  <option value={50}>50+</option>
-                  <option value={90}>90+</option>
-                </select>
-              </label>
-              <span className="subtle">
+              <Select value={minScore} onChange={(e) => setMinScore(Number(e.target.value))} className="w-auto min-w-[100px]">
+                <option value={0}>Any perf</option>
+                <option value={50}>Perf 50+</option>
+                <option value={90}>Perf 90+</option>
+              </Select>
+              <span className="ml-auto text-xs text-muted-foreground">
                 {loading ? "Loading..." : total ? `${pageStart}-${pageEnd} of ${total}` : "0 shown"}
               </span>
             </div>
-          </section>
+          </CardContent>
+        </Card>
 
-          <div className="panel table-wrap tall leads-table">
-            {!rows.length ? (
-              <div className="empty">{loading ? "Loading..." : "No leads match this view."}</div>
-            ) : (
-              <>
-                <div className="lead-cards only-mobile">
-                  {rows.map((lead) => (
-                    <div className="lead-card tappable crm-lead-card" key={`m-${lead.id}`} onClick={() => setActive(lead)}>
-                      <div className="lead-card-head">
-                        <strong>{lead.name || "Unknown"}</strong>
-                        <span className="subtle">{lead.category || lead.address || lead.project || ""}</span>
-                      </div>
-                      <div className="lead-meta-line">
-                        <WorkflowBadge lead={lead} />
-                        <EmailBadge status={lead.email_status} />
-                        {lead.watchlist ? <span className="workflow-badge watch"><Star size={12} fill="currentColor" /> Watch</span> : null}
-                      </div>
-                      <div className="lead-card-row">
-                        {lead.phone && <span>{lead.phone}</span>}
-                        {waState(lead) === "yes" && <span className="wa-badge">WA yes</span>}
-                        {lead.domain && <span className="subtle">{lead.domain}</span>}
-                      </div>
-                      {lead.email && <div className="lead-card-row email-row">{lead.email}</div>}
-                      {lead.notes && <div className="lead-note-preview">{lead.notes}</div>}
+        {/* Table / cards */}
+        <Card className="overflow-hidden">
+          {!rows.length ? (
+            <div className="p-10 text-center text-sm text-muted-foreground">{loading ? "Loading..." : "No leads match this view."}</div>
+          ) : (
+            <>
+              {/* Mobile cards */}
+              <div className="space-y-3 p-3 md:hidden">
+                {rows.map((lead) => (
+                  <div className="cursor-pointer rounded-lg border border-border bg-card/60 p-3" key={`m-${lead.id}`} onClick={() => setActive(lead)}>
+                    <div className="flex items-start justify-between gap-2">
+                      <strong className="text-sm font-medium">{lead.name || "Unknown"}</strong>
+                      <span className="text-xs text-muted-foreground">{lead.category || lead.address || lead.project || ""}</span>
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <WorkflowBadge lead={lead} />
+                      <EmailBadge status={lead.email_status} />
+                      {lead.watchlist ? <Pill tone="watch"><Star size={12} fill="currentColor" /> Watch</Pill> : null}
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
+                      {lead.phone && <span>{lead.phone}</span>}
+                      {waState(lead) === "yes" && <Pill tone="good">WA yes</Pill>}
+                      {lead.domain && <span className="text-xs text-muted-foreground">{lead.domain}</span>}
+                    </div>
+                    {lead.email && <div className="mt-1 truncate text-sm text-primary">{lead.email}</div>}
+                    {lead.notes && <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{lead.notes}</div>}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <StatusPill lead={lead} />
+                      <ChatbotBadge lead={lead} />
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-border/60 pt-2">
                       <QuickLeadActions lead={lead} onPatch={patchLead} compact />
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
                       <RowActions
                         lead={lead}
-                        busy={{
-                          enrich: busy[`${lead.id}:enrich`],
-                          whatsapp: busy[`${lead.id}:whatsapp`],
-                          remove: busy[`${lead.id}:remove`],
-                        }}
+                        busy={{ enrich: busy[`${lead.id}:enrich`], whatsapp: busy[`${lead.id}:whatsapp`], remove: busy[`${lead.id}:remove`], status: busy[`${lead.id}:status`], chatbot: busy[`${lead.id}:chatbot`] }}
                         onEnrich={enrichOne}
                         onWhatsapp={checkWhatsapp}
                         onReport={setReportLead}
                         onRemove={removeLead}
+                        onStatus={checkStatusOne}
+                        onChatbot={scanChatbotOne}
                         removeTitle={removeTitle}
                       />
                     </div>
-                  ))}
-                </div>
-                <table className="only-desktop crm-table">
-                  <thead>
-                    <tr>
-                      <th>Lead</th>
-                      <th>Contact</th>
-                      <th>Workflow</th>
-                      <th>Email</th>
-                      <th>Website</th>
-                      <th>Health</th>
-                      <th>Location</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop table */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Lead</TableHead>
+                      <TableHead>Contact</TableHead>
+                      <TableHead>Workflow</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Website</TableHead>
+                      <TableHead>Health</TableHead>
+                      <TableHead>Location</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {rows.map((lead) => (
-                      <tr key={lead.id} className="row-click" onClick={() => setActive(lead)}>
-                        <td className="name-cell">
-                          {lead.name || "Unknown"}
-                          <br />
-                          <span className="subtle">{lead.category || lead.address || ""}</span>
-                          {lead.notes && <div className="lead-note-preview">{lead.notes}</div>}
-                        </td>
-                        <td>
-                          {lead.phone || "-"}
-                          {waState(lead) === "yes" && <> <span className="wa-badge">WA yes</span></>}
-                          {waState(lead) === "no" && <> <span className="wa-badge wa-no">WA no</span></>}
-                          <br />
-                          {lead.email ? <a onClick={(e) => e.stopPropagation()} href={`mailto:${lead.email}`}>{lead.email}</a> : <span className="subtle">{lead.enrich_status || "no email"}</span>}
-                        </td>
-                        <td>
-                          <div className="lead-meta-line">
-                            <WorkflowBadge lead={lead} />
-                            {lead.watchlist ? <span className="workflow-badge watch"><Star size={12} fill="currentColor" /> Watch</span> : null}
-                            {lead.contact_list ? <span className="workflow-badge contact"><Users size={12} /> List</span> : null}
+                      <TableRow key={lead.id} className="cursor-pointer" onClick={() => setActive(lead)}>
+                        <TableCell>
+                          <div className="font-medium">{lead.name || "Unknown"}</div>
+                          <div className="text-xs text-muted-foreground">{lead.category || lead.address || ""}</div>
+                          {lead.notes && <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{lead.notes}</div>}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5">
+                            {lead.phone || "-"}
+                            {waState(lead) === "yes" && <Pill tone="good">WA yes</Pill>}
+                            {waState(lead) === "no" && <Pill tone="bad">WA no</Pill>}
                           </div>
-                        </td>
-                        <td><EmailBadge status={lead.email_status} /></td>
-                        <td onClick={(e) => e.stopPropagation()}>
-                          {lead.website ? (
-                            <a href={lead.website} target="_blank" rel="noreferrer">{lead.domain || lead.website}</a>
-                          ) : (
-                            <span className="subtle">none</span>
-                          )}
-                          <div className="socials"><Socials lead={lead} /></div>
-                        </td>
-                        <td className="score-cell">
-                          <Score label="D" value={lead.desktop_performance} />
-                          <Score label="M" value={lead.mobile_performance} />
-                          <Score label="SEO" value={lead.desktop_seo || lead.mobile_seo} />
-                        </td>
-                        <td className="subtle">
+                          {lead.email ? <a onClick={(e) => e.stopPropagation()} className="text-xs text-primary hover:underline" href={`mailto:${lead.email}`}>{lead.email}</a> : <span className="text-xs text-muted-foreground">{lead.enrich_status || "no email"}</span>}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap items-center gap-1">
+                            <WorkflowBadge lead={lead} />
+                            {lead.watchlist ? <Pill tone="watch"><Star size={12} fill="currentColor" /> Watch</Pill> : null}
+                            {lead.contact_list ? <Pill tone="contact"><Users size={12} /> List</Pill> : null}
+                          </div>
+                        </TableCell>
+                        <TableCell><EmailBadge status={lead.email_status} /></TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {lead.website ? <a className="text-primary hover:underline" href={lead.website} target="_blank" rel="noreferrer">{lead.domain || lead.website}</a> : <span className="text-xs text-muted-foreground">none</span>}
+                            <StatusPill lead={lead} />
+                            <ChatbotBadge lead={lead} />
+                          </div>
+                          <div className="mt-1"><Socials lead={lead} /></div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            <Score label="D" value={lead.desktop_performance} />
+                            <Score label="M" value={lead.mobile_performance} />
+                            <Score label="SEO" value={lead.desktop_seo || lead.mobile_seo} />
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
                           {lead.city || "-"}
-                          {lead.country ? <><br /><span className="subtle">{lead.country}</span></> : null}
-                        </td>
-                        <td>
+                          {lead.country ? <div>{lead.country}</div> : null}
+                        </TableCell>
+                        <TableCell>
                           <QuickLeadActions lead={lead} onPatch={patchLead} compact />
                           <RowActions
                             lead={lead}
-                            busy={{
-                              enrich: busy[`${lead.id}:enrich`],
-                              whatsapp: busy[`${lead.id}:whatsapp`],
-                              remove: busy[`${lead.id}:remove`],
-                            }}
+                            busy={{ enrich: busy[`${lead.id}:enrich`], whatsapp: busy[`${lead.id}:whatsapp`], remove: busy[`${lead.id}:remove`], status: busy[`${lead.id}:status`], chatbot: busy[`${lead.id}:chatbot`] }}
                             onEnrich={enrichOne}
                             onWhatsapp={checkWhatsapp}
                             onReport={setReportLead}
                             onRemove={removeLead}
+                            onStatus={checkStatusOne}
+                            onChatbot={scanChatbotOne}
                             removeTitle={removeTitle}
                           />
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
-              </>
-            )}
-          </div>
-          <div className="lead-pager">
-            <button disabled={loading || page === 0} onClick={() => setPage((n) => Math.max(0, n - 1))}>
-              Previous
-            </button>
-            <span className="subtle">
-              {total ? `${pageStart}-${pageEnd} of ${total}` : "0 leads"}
-            </span>
-            <button disabled={loading || !hasNextPage} onClick={() => setPage((n) => n + 1)}>
-              Next
-            </button>
-          </div>
-        </div>
-      </section>
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          )}
+        </Card>
 
-      <MobileNav active={activeNav} />
+        {/* Pager */}
+        <div className="flex items-center justify-center gap-4">
+          <Button variant="outline" size="sm" disabled={loading || page === 0} onClick={() => setPage((n) => Math.max(0, n - 1))}>Previous</Button>
+          <span className="text-xs text-muted-foreground">{total ? `${pageStart}-${pageEnd} of ${total}` : "0 leads"}</span>
+          <Button variant="outline" size="sm" disabled={loading || !hasNextPage} onClick={() => setPage((n) => n + 1)}>Next</Button>
+        </div>
+      </div>
+
       {reportLead && <ReportModal lead={reportLead} onClose={() => setReportLead(null)} />}
       {active && (
         <LeadDrawer
           lead={active}
           onClose={() => setActive(null)}
           onPatch={patchLead}
+          onStatus={checkStatusOne}
+          onChatbot={scanChatbotOne}
           onDeleted={(id) => {
             setActive(null);
             setRows((r) => r.filter((x) => x.id !== id));
           }}
         />
       )}
-    </main>
+    </AppShell>
   );
 }

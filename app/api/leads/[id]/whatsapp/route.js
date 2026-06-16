@@ -1,5 +1,6 @@
 import db from "../../../../../web/lib/db.cjs";
 import waLib from "../../../../../whatsapp.cjs";
+import { requireUser } from "../../../../../web/lib/session.js";
 
 export const dynamic = "force-dynamic";
 
@@ -7,8 +8,10 @@ export const dynamic = "force-dynamic";
 // OpenWA instance whether it's registered, then persist the result. Returns the
 // updated lead so the table can refresh that one row in place.
 export async function POST(request, context) {
+  const { userId, response } = await requireUser();
+  if (response) return response;
   const { id } = await context.params;
-  const lead = db.getLead(id);
+  const lead = await db.getLead(userId, id);
   if (!lead) return Response.json({ error: "Lead not found" }, { status: 404 });
   if (!lead.phone) return Response.json({ error: "This lead has no phone to check" }, { status: 400 });
 
@@ -19,13 +22,13 @@ export async function POST(request, context) {
   const cc = waLib.dialingCode(overrideCountry) || waLib.dialingCode(lead.country);
   const number = waLib.normalizePhone(lead.phone, cc);
   if (!number) {
-    const updated = db.updateLeadFields(id, { whatsapp_status: "no phone" });
+    const updated = await db.updateLeadFields(userId, id, { whatsapp_status: "no phone" });
     return Response.json({ lead: updated });
   }
 
   try {
     const r = await waLib.checkNumber(number);
-    const updated = db.updateLeadFields(id, {
+    const updated = await db.updateLeadFields(userId, id, {
       whatsapp_status: r.status,
       whatsapp_id: r.whatsappId,
     });

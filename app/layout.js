@@ -1,9 +1,10 @@
-import "./globals.css";
+import "./tailwind.css";
+import Providers from "./providers";
 
 export const metadata = {
-  title: "Lead Ops",
-  description: "Google Maps lead scraping, enrichment, and Lighthouse audits",
-  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Lead Ops" },
+  title: "LeadsFunda: Google Maps lead generation",
+  description: "Scrape Google Maps business leads, enrich emails & socials, and audit their websites, at scale.",
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "LeadsFunda" },
 };
 
 export const viewport = {
@@ -16,7 +17,9 @@ export const viewport = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

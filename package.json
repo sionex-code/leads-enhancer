@@ -16,23 +16,50 @@
     "audit:mobile": "node analyze.js --mobile",
     "report": "node report.js",
     "project": "node project.js",
-    "install-chrome": "patchright install chrome"
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "install-chrome": "patchright install chrome",
+    "build:standalone": "cross-env BUILD_STANDALONE=1 next build && node scripts/prepare-standalone.cjs",
+    "electron": "electron electron/main.cjs",
+    "electron:build": "npm run build:standalone && npm run electron",
+    "dist": "npm run build:standalone && node scripts/pack-electron.cjs",
+    "dist:dir": "npm run build:standalone && node scripts/pack-electron.cjs --dir"
   },
   "bin": {
     "gmaps-scrape": "scrape.js"
   },
   "dependencies": {
+    "@auth/drizzle-adapter": "^1.11.2",
     "better-sqlite3": "^12.10.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "crawlee": "^3.17.0",
+    "drizzle-orm": "^0.45.2",
     "lucide-react": "^1.17.0",
     "marked": "^18.0.5",
     "next": "^16.2.9",
+    "next-auth": "^5.0.0-beta.31",
     "patchright": "^1.52.5",
+    "pg": "^8.21.0",
     "playwright": "^1.60.0",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss-animate": "^1.0.7",
+    "undici": "^7.27.2"
   },
   "overrides": {
     "postcss": "^8.5.10"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
+    "autoprefixer": "^10.5.0",
+    "cross-env": "^10.1.0",
+    "drizzle-kit": "^0.31.10",
+    "electron": "^41.7.2",
+    "electron-builder": "^26.15.3",
+    "tailwindcss": "^3.4.19"
   }
 }

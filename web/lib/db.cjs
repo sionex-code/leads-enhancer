@@ -1,116 +1,42 @@
-// Central SQLite store: Gmail accounts (cookies, auto-rotated) + the global
-// leads database (every scraped/enriched/audited lead across all projects,
-// deduped so each business appears once).
+// Central Postgres data layer: per-user Gmail accounts (cookies, auto-rotated)
+// + the per-tenant leads database (every scraped/enriched/audited lead, deduped
+// per user so each business appears once *within a user's workspace*).
 //
-// Dependency: better-sqlite3 (synchronous, fast, no server). The DB file lives
-// at output/leads.db and is created on first use.
+// Migrated from better-sqlite3 → node-postgres. All functions are now async and
+// take an explicit `userId` for tenant isolation. Returned rows keep snake_case
+// column names (what the API routes / UI already consume). The Drizzle schema in
+// schema.cjs is the source of truth for DDL (drizzle-kit migrations); this module
+// uses raw parameterized SQL for the hot CRUD paths.
+const { pool } = require("./pg.cjs");
 
-const fs = require("fs");
-const path = require("path");
-const Database = require("better-sqlite3");
+const q = (text, params = []) => pool().query(text, params);
+const now = () => new Date().toISOString();
 
-const ROOT = process.cwd();
-const OUTPUT_DIR = path.join(ROOT, "output");
-const DB_FILE = path.join(OUTPUT_DIR, "leads.db");
-
-let _db = null;
-function db() {
-  if (_db) return _db;
-  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-  _db = new Database(DB_FILE);
-  _db.pragma("journal_mode = WAL"); // concurrent reads while a runner writes
-  _db.pragma("busy_timeout = 5000"); // wait instead of throwing when locked
-  migrate(_db);
-  return _db;
-}
-
-function migrate(d) {
-  d.exec(`
-    CREATE TABLE IF NOT EXISTS accounts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      cookies TEXT NOT NULL,
-      enabled INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL,
-      last_used_at TEXT,
-      use_count INTEGER NOT NULL DEFAULT 0
-    );
-
-    CREATE TABLE IF NOT EXISTS leads (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      dedup_key TEXT UNIQUE NOT NULL,
-      name TEXT, category TEXT, rating TEXT, reviews TEXT,
-      website TEXT, domain TEXT, phone TEXT, address TEXT,
-      city TEXT, country TEXT,
-      plus_code TEXT, hours TEXT, maps_url TEXT, image_urls TEXT,
-      email TEXT, all_emails TEXT, contact_page TEXT,
-      facebook TEXT, instagram TEXT, linkedin TEXT, twitter TEXT,
-      youtube TEXT, tiktok TEXT, pinterest TEXT, whatsapp TEXT, telegram TEXT,
-      enrich_status TEXT,
-      whatsapp_status TEXT, whatsapp_id TEXT,
-      desktop_performance INTEGER, desktop_seo INTEGER,
-      desktop_accessibility INTEGER, desktop_best_practices INTEGER,
-      mobile_performance INTEGER, mobile_seo INTEGER,
-      mobile_accessibility INTEGER, mobile_best_practices INTEGER,
-      project TEXT, query TEXT,
-      watchlist INTEGER NOT NULL DEFAULT 0,
-      contact_list INTEGER NOT NULL DEFAULT 0,
-      email_status TEXT NOT NULL DEFAULT 'unset',
-      outreach_status TEXT NOT NULL DEFAULT 'new',
-      notes TEXT,
-      last_contacted_at TEXT,
-      message_sent_at TEXT,
-      completed_at TEXT,
-      first_seen TEXT NOT NULL, last_updated TEXT NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_leads_domain ON leads(domain);
-    CREATE INDEX IF NOT EXISTS idx_leads_project ON leads(project);
-    CREATE INDEX IF NOT EXISTS idx_leads_updated ON leads(last_updated);
-  `);
-
-  // Add columns introduced after a DB was first created (idempotent — keeps an
-  // existing leads.db, like the one on the VPS, in sync without a rebuild).
-  const have = new Set(d.prepare("PRAGMA table_info(leads)").all().map((c) => c.name));
-  const textColumns = ["youtube", "tiktok", "pinterest", "whatsapp", "telegram", "whatsapp_status", "whatsapp_id", "city", "country"];
-  const addedCity = !have.has("city");
-  for (const col of textColumns) {
-    if (!have.has(col)) d.exec(`ALTER TABLE leads ADD COLUMN ${col} TEXT`);
-  }
-  const workflowColumns = {
-    watchlist: "INTEGER NOT NULL DEFAULT 0",
-    contact_list: "INTEGER NOT NULL DEFAULT 0",
-    email_status: "TEXT NOT NULL DEFAULT 'unset'",
-    outreach_status: "TEXT NOT NULL DEFAULT 'new'",
-    notes: "TEXT",
-    last_contacted_at: "TEXT",
-    message_sent_at: "TEXT",
-    completed_at: "TEXT",
-  };
-  for (const [col, type] of Object.entries(workflowColumns)) {
-    if (!have.has(col)) d.exec(`ALTER TABLE leads ADD COLUMN ${col} ${type}`);
-  }
-  d.exec("CREATE INDEX IF NOT EXISTS idx_leads_country ON leads(country)");
-
-  // One-time backfill: derive city/country from the existing address text so the
-  // grouping/filters work on leads scraped before these columns existed.
-  if (addedCity) {
-    const rows = d.prepare("SELECT id, address FROM leads WHERE address IS NOT NULL AND address != ''").all();
-    const upd = d.prepare("UPDATE leads SET city = @city, country = @country WHERE id = @id");
-    const tx = d.transaction((list) => {
-      for (const r of list) {
-        const { city, country } = parseLocation(r.address);
-        if (city || country) upd.run({ id: r.id, city, country });
-      }
-    });
-    tx(rows);
+// ---- pure helpers (no DB) ---------------------------------------------------
+function hostOf(url) {
+  try {
+    return new URL(/^https?:\/\//i.test(url) ? url : `http://${url}`).hostname
+      .replace(/^www\./, "")
+      .toLowerCase();
+  } catch {
+    return "";
   }
 }
 
-// Best-effort split of a freeform Google Maps address into a city + country for
-// grouping. Addresses look like "123 Main St, Miami, FL 33101, USA" (country may
-// be absent). The last letters-only segment is treated as the country; the city
-// is the last non-street segment that has no digits.
+// Stable identity for a business across projects/runs: prefer its website
+// domain, then its phone (digits only), then name+address.
+function dedupKey(lead) {
+  const domain = hostOf(lead.website || "");
+  if (domain) return "d:" + domain;
+  const phone = String(lead.phone || "").replace(/[^\d]/g, "");
+  if (phone.length >= 7) return "p:" + phone;
+  const name = String(lead.name || "").trim().toLowerCase();
+  const addr = String(lead.address || "").trim().toLowerCase();
+  if (name) return "n:" + name + "|" + addr;
+  return "";
+}
+
+// Best-effort split of a freeform Google Maps address into city + country.
 function parseLocation(address) {
   const segments = String(address || "")
     .split(",")
@@ -124,99 +50,80 @@ function parseLocation(address) {
     segments.pop();
   }
   let city = "";
-  // Drop the first segment (usually the street) and pick the last digit-free part.
   for (const seg of segments.slice(1)) {
     if (!/\d/.test(seg) && seg.length >= 2) city = seg;
   }
   return { city, country };
 }
 
-// ---- helpers ----------------------------------------------------------------
-const now = () => new Date().toISOString();
+function numOrNull(v) {
+  if (v === "" || v === null || v === undefined) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
 
-function hostOf(url) {
+// ---- scraper proxy pool (global, admin-managed) -----------------------------
+// Normalize a pasted proxy into a canonical url. Accepts host:port,
+// user:pass@host:port, or a full http(s):// url; defaults the scheme to http.
+function normalizeProxyUrl(raw) {
+  let s = String(raw || "").trim();
+  if (!s) return "";
+  if (!/^https?:\/\//i.test(s)) s = "http://" + s;
   try {
-    return new URL(/^https?:\/\//i.test(url) ? url : `http://${url}`).hostname
-      .replace(/^www\./, "")
-      .toLowerCase();
+    const u = new URL(s);
+    if (!u.hostname || !u.port) return "";
+    return u.toString().replace(/\/+$/, "");
   } catch {
     return "";
   }
 }
 
-// Stable identity for a business across projects/runs: prefer its website
-// domain, then its phone (digits only), then name+address. This is what makes
-// "every lead stored once, unique" work.
-function dedupKey(lead) {
-  const domain = hostOf(lead.website || "");
-  if (domain) return "d:" + domain;
-  const phone = String(lead.phone || "").replace(/[^\d]/g, "");
-  if (phone.length >= 7) return "p:" + phone;
-  const name = String(lead.name || "").trim().toLowerCase();
-  const addr = String(lead.address || "").trim().toLowerCase();
-  if (name) return "n:" + name + "|" + addr;
-  return "";
+async function listProxies() {
+  const { rows } = await q(
+    `SELECT id, url, label, enabled, created_at, last_used_at, use_count, fail_count
+       FROM proxies ORDER BY id`
+  );
+  return rows.map((p) => ({ ...p, enabled: !!p.enabled }));
 }
 
-// ---- accounts (Gmail cookies, auto-rotated) ---------------------------------
-function listAccounts() {
-  return db()
-    .prepare("SELECT id, name, enabled, created_at, last_used_at, use_count FROM accounts ORDER BY id")
-    .all()
-    .map((a) => ({ ...a, enabled: !!a.enabled }));
+// Just the enabled proxy urls — what the scrapers rotate through.
+async function listEnabledProxyUrls() {
+  const { rows } = await q(`SELECT url FROM proxies WHERE enabled = 1 ORDER BY id`);
+  return rows.map((r) => r.url);
 }
 
-// Accept Cookie-Editor JSON (array), {cookies:[...]}, or a JSON string. Returns
-// the stored account summary. Cookies are kept verbatim; scrape.js normalizes.
-function addAccount(name, cookiesInput) {
-  let cookies = cookiesInput;
-  if (typeof cookies === "string") {
-    cookies = JSON.parse(cookies);
+// Bulk add from a pasted block (one proxy per line / comma-separated). Dedupes
+// against what's already stored. Returns { added, total }.
+async function addProxies(input) {
+  const urls = [
+    ...new Set(
+      String(input || "")
+        .split(/[\r\n,]+/)
+        .map(normalizeProxyUrl)
+        .filter(Boolean)
+    ),
+  ];
+  let added = 0;
+  for (const url of urls) {
+    const res = await q(
+      `INSERT INTO proxies (url, enabled, created_at, use_count, fail_count)
+       VALUES ($1, 1, $2, 0, 0) ON CONFLICT (url) DO NOTHING`,
+      [url, now()]
+    );
+    if (res.rowCount) added++;
   }
-  if (cookies && !Array.isArray(cookies) && Array.isArray(cookies.cookies)) {
-    cookies = cookies.cookies;
-  }
-  if (!Array.isArray(cookies) || !cookies.length) {
-    throw new Error("Cookies must be a non-empty array (paste Cookie-Editor JSON)");
-  }
-  const info = db()
-    .prepare("INSERT INTO accounts (name, cookies, enabled, created_at, use_count) VALUES (?, ?, 1, ?, 0)")
-    .run(String(name || "Account").slice(0, 80), JSON.stringify(cookies), now());
-  return { id: info.lastInsertRowid, name, count: cookies.length };
+  return { added, total: urls.length };
 }
 
-function deleteAccount(id) {
-  db().prepare("DELETE FROM accounts WHERE id = ?").run(Number(id));
+async function deleteProxy(id) {
+  await q(`DELETE FROM proxies WHERE id = $1`, [Number(id)]);
 }
 
-function setAccountEnabled(id, enabled) {
-  db().prepare("UPDATE accounts SET enabled = ? WHERE id = ?").run(enabled ? 1 : 0, Number(id));
+async function setProxyEnabled(id, enabled) {
+  await q(`UPDATE proxies SET enabled = $1 WHERE id = $2`, [enabled ? 1 : 0, Number(id)]);
 }
 
-// Auto-rotation: hand out the enabled account used least recently (then lowest
-// use_count). Concurrent project runs therefore spread across Gmail accounts.
-// Returns { id, name, cookies } or null when no accounts exist.
-function nextAccount() {
-  const row = db()
-    .prepare(
-      `SELECT id, name, cookies FROM accounts
-       WHERE enabled = 1
-       ORDER BY (last_used_at IS NULL) DESC, last_used_at ASC, use_count ASC, id ASC
-       LIMIT 1`
-    )
-    .get();
-  if (!row) return null;
-  db()
-    .prepare("UPDATE accounts SET last_used_at = ?, use_count = use_count + 1 WHERE id = ?")
-    .run(now(), row.id);
-  let cookies = [];
-  try {
-    cookies = JSON.parse(row.cookies);
-  } catch {}
-  return { id: row.id, name: row.name, cookies };
-}
-
-// ---- leads (global, deduped) ------------------------------------------------
+// ---- leads (per-tenant, deduped) --------------------------------------------
 const LEAD_COLUMNS = [
   "name", "category", "rating", "reviews", "website", "domain", "phone",
   "address", "city", "country", "plus_code", "hours", "maps_url", "image_urls",
@@ -227,8 +134,12 @@ const LEAD_COLUMNS = [
   "mobile_performance", "mobile_seo", "mobile_accessibility", "mobile_best_practices",
   "project", "query",
 ];
+const INT_COLUMNS = new Set([
+  "desktop_performance", "desktop_seo", "desktop_accessibility", "desktop_best_practices",
+  "mobile_performance", "mobile_seo", "mobile_accessibility", "mobile_best_practices",
+]);
 
-// Map a CSV/lead object (camelCase or snake) onto our column names.
+// Map a CSV/lead object (camelCase or snake) onto our snake_case column names.
 function normalizeLead(lead) {
   const g = (...keys) => {
     for (const k of keys) {
@@ -282,107 +193,105 @@ function normalizeLead(lead) {
   };
 }
 
-function numOrNull(v) {
-  if (v === "" || v === null || v === undefined) return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
+// Upsert a batch for a user. Field-by-field merge via ON CONFLICT: a new non-empty
+// value overwrites, a new empty/null value never wipes an existing one.
+async function upsertLeads(userId, leadObjs) {
+  const insertCols = ["user_id", "dedup_key", ...LEAD_COLUMNS, "first_seen", "last_updated"];
+  const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(", ");
+  // Merge rule per column on conflict.
+  const setClause = LEAD_COLUMNS.map((c) =>
+    INT_COLUMNS.has(c)
+      ? `${c} = COALESCE(EXCLUDED.${c}, leads.${c})`
+      : `${c} = COALESCE(NULLIF(EXCLUDED.${c}, ''), leads.${c})`
+  ).join(", ");
+  const sql = `
+    INSERT INTO leads (${insertCols.join(", ")})
+    VALUES (${placeholders})
+    ON CONFLICT (user_id, dedup_key) DO UPDATE SET
+      ${setClause}, last_updated = EXCLUDED.last_updated
+    RETURNING (xmax = 0) AS inserted`;
 
-// Upsert a batch. Existing rows are merged field-by-field: a new non-empty value
-// overwrites, but a new empty value never wipes an existing one (so enrichment
-// from a later run augments the scrape row instead of blanking it).
-function upsertLeads(leadObjs) {
-  const d = db();
   const ts = now();
-  const selectStmt = d.prepare("SELECT * FROM leads WHERE dedup_key = ?");
-  const insertStmt = d.prepare(
-    `INSERT INTO leads (dedup_key, ${LEAD_COLUMNS.join(", ")}, first_seen, last_updated)
-     VALUES (@dedup_key, ${LEAD_COLUMNS.map((c) => "@" + c).join(", ")}, @first_seen, @last_updated)`
-  );
-  const updateStmt = d.prepare(
-    `UPDATE leads SET ${LEAD_COLUMNS.map((c) => `${c} = @${c}`).join(", ")}, last_updated = @last_updated
-     WHERE dedup_key = @dedup_key`
-  );
-
   let inserted = 0;
   let updated = 0;
-  const tx = d.transaction((rows) => {
-    for (const raw of rows) {
+  const client = await pool().connect();
+  try {
+    await client.query("BEGIN");
+    for (const raw of leadObjs) {
       const key = dedupKey(raw);
       if (!key) continue;
       const norm = normalizeLead(raw);
-      const existing = selectStmt.get(key);
-      if (!existing) {
-        insertStmt.run({ dedup_key: key, ...norm, first_seen: ts, last_updated: ts });
-        inserted++;
-      } else {
-        const merged = { dedup_key: key, last_updated: ts };
-        for (const c of LEAD_COLUMNS) {
-          const next = norm[c];
-          const hasNext = next !== "" && next !== null && next !== undefined;
-          merged[c] = hasNext ? next : existing[c];
-        }
-        updateStmt.run(merged);
-        updated++;
-      }
+      const values = [userId, key, ...LEAD_COLUMNS.map((c) => norm[c]), ts, ts];
+      const res = await client.query(sql, values);
+      if (res.rows[0] && res.rows[0].inserted) inserted++;
+      else updated++;
     }
-  });
-  tx(leadObjs);
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
+  // Count newly-inserted leads against the user's monthly quota. Lazy-required to
+  // avoid a circular dependency (billing → pg → ok; db → billing only here).
+  if (inserted > 0) {
+    try {
+      await require("./billing.cjs").consumeLeads(userId, inserted);
+    } catch (err) {
+      console.warn("[db] quota consume failed:", err.message);
+    }
+  }
   return { inserted, updated };
 }
 
 // Query for the viewer page. Supports text search, workflow filters, has-email,
-// and a min score filter across either device's performance.
-function queryLeads({
-  search = "",
-  hasEmail = false,
-  hasPhone = false,
-  minScore = 0,
-  project = "",
-  country = "",
-  city = "",
-  workflow = "",
-  emailStatus = "",
-  outreachStatus = "",
-  watchlist = false,
-  contactList = false,
-  limit = 2000,
-  offset = 0,
-} = {}) {
-  const where = [];
-  const params = {};
+// and a min score filter across either device's performance. Always user-scoped.
+async function queryLeads(
+  userId,
+  {
+    search = "",
+    hasEmail = false,
+    hasPhone = false,
+    minScore = 0,
+    project = "",
+    country = "",
+    city = "",
+    workflow = "",
+    emailStatus = "",
+    outreachStatus = "",
+    watchlist = false,
+    contactList = false,
+    limit = 2000,
+    offset = 0,
+  } = {}
+) {
+  const where = ["user_id = $1"];
+  const params = [userId];
+  const add = (val) => {
+    params.push(val);
+    return `$${params.length}`;
+  };
+
   if (search) {
-    where.push("(name LIKE @q OR domain LIKE @q OR phone LIKE @q OR address LIKE @q OR email LIKE @q OR category LIKE @q OR notes LIKE @q)");
-    params.q = `%${search}%`;
+    const p = add(`%${search}%`);
+    where.push(
+      `(name ILIKE ${p} OR domain ILIKE ${p} OR phone ILIKE ${p} OR address ILIKE ${p} OR email ILIKE ${p} OR category ILIKE ${p} OR notes ILIKE ${p})`
+    );
   }
   if (hasEmail) where.push("email IS NOT NULL AND email != ''");
   if (hasPhone) where.push("phone IS NOT NULL AND phone != ''");
-  if (project) {
-    where.push("project = @project COLLATE NOCASE");
-    params.project = project;
-  }
-  if (country) {
-    where.push("country = @country COLLATE NOCASE");
-    params.country = country;
-  }
-  if (city) {
-    where.push("city = @city COLLATE NOCASE");
-    params.city = city;
-  }
+  if (project) where.push(`lower(project) = lower(${add(project)})`);
+  if (country) where.push(`lower(country) = lower(${add(country)})`);
+  if (city) where.push(`lower(city) = lower(${add(city)})`);
   if (minScore > 0) {
-    where.push("(COALESCE(desktop_performance,0) >= @min OR COALESCE(mobile_performance,0) >= @min)");
-    params.min = Number(minScore);
+    const p = add(Number(minScore));
+    where.push(`(COALESCE(desktop_performance,0) >= ${p} OR COALESCE(mobile_performance,0) >= ${p})`);
   }
   if (watchlist) where.push("watchlist = 1");
   if (contactList) where.push("contact_list = 1");
-  if (emailStatus) {
-    where.push("email_status = @emailStatus");
-    params.emailStatus = emailStatus;
-  }
-  if (outreachStatus) {
-    where.push("outreach_status = @outreachStatus");
-    params.outreachStatus = outreachStatus;
-  }
+  if (emailStatus) where.push(`email_status = ${add(emailStatus)}`);
+  if (outreachStatus) where.push(`outreach_status = ${add(outreachStatus)}`);
   if (workflow === "watchlist") where.push("watchlist = 1");
   if (workflow === "contacts") where.push("contact_list = 1");
   if (workflow === "email-ready") where.push("email_status = 'send'");
@@ -394,25 +303,31 @@ function queryLeads({
     where.push("(contact_list = 1 OR watchlist = 1 OR email_status = 'send')");
     where.push("outreach_status NOT IN ('sent', 'complete', 'skipped')");
   }
-  const clause = where.length ? "WHERE " + where.join(" AND ") : "";
-  const total = db().prepare(`SELECT COUNT(*) c FROM leads ${clause}`).get(params).c;
-  const rows = db()
-    .prepare(`SELECT * FROM leads ${clause} ORDER BY last_updated DESC LIMIT @limit OFFSET @offset`)
-    .all({ ...params, limit: Number(limit), offset: Number(offset) });
-  return { total, rows };
+
+  const clause = "WHERE " + where.join(" AND ");
+  const totalRes = await q(`SELECT COUNT(*)::int AS c FROM leads ${clause}`, params);
+  const total = totalRes.rows[0].c;
+  const limP = add(Number(limit));
+  const offP = add(Number(offset));
+  const rowsRes = await q(
+    `SELECT * FROM leads ${clause} ORDER BY last_updated DESC LIMIT ${limP} OFFSET ${offP}`,
+    params
+  );
+  return { total, rows: rowsRes.rows };
 }
 
-function getLead(id) {
-  return db().prepare("SELECT * FROM leads WHERE id = ?").get(Number(id)) || null;
+async function getLead(userId, id) {
+  const { rows } = await q(`SELECT * FROM leads WHERE id = $1 AND user_id = $2`, [Number(id), userId]);
+  return rows[0] || null;
 }
 
-function deleteLead(id) {
-  return db().prepare("DELETE FROM leads WHERE id = ?").run(Number(id)).changes;
+async function deleteLead(userId, id) {
+  const res = await q(`DELETE FROM leads WHERE id = $1 AND user_id = $2`, [Number(id), userId]);
+  return res.rowCount;
 }
 
-function updateLeadWorkflow(id, patch = {}) {
-  const d = db();
-  const current = getLead(id);
+async function updateLeadWorkflow(userId, id, patch = {}) {
+  const current = await getLead(userId, id);
   if (!current) return null;
 
   const allowedEmail = new Set(["unset", "send", "do_not_send", "later"]);
@@ -441,18 +356,30 @@ function updateLeadWorkflow(id, patch = {}) {
 
   if (!Object.keys(updates).length) return current;
   updates.last_updated = now();
-  const set = Object.keys(updates).map((k) => `${k} = @${k}`).join(", ");
-  d.prepare(`UPDATE leads SET ${set} WHERE id = @id`).run({ ...updates, id: Number(id) });
-  return getLead(id);
+  await runUpdate(userId, id, updates);
+  return getLead(userId, id);
 }
 
-function createOrUpdateLead(raw = {}) {
+// Build + run a dynamic positional UPDATE scoped to (id, user_id).
+async function runUpdate(userId, id, updates) {
+  const keys = Object.keys(updates);
+  const set = keys.map((k, i) => `${k} = $${i + 1}`).join(", ");
+  const vals = keys.map((k) => updates[k]);
+  vals.push(Number(id), userId);
+  await q(
+    `UPDATE leads SET ${set} WHERE id = $${vals.length - 1} AND user_id = $${vals.length}`,
+    vals
+  );
+}
+
+async function createOrUpdateLead(userId, raw = {}) {
   const prepared = normalizeLead(raw);
   const key = dedupKey({ ...raw, ...prepared });
   if (!key) throw new Error("Add a website, phone, or lead name first");
 
-  upsertLeads([{ ...raw, ...prepared }]);
-  let lead = db().prepare("SELECT * FROM leads WHERE dedup_key = ?").get(key);
+  await upsertLeads(userId, [{ ...raw, ...prepared }]);
+  const sel = await q(`SELECT * FROM leads WHERE dedup_key = $1 AND user_id = $2`, [key, userId]);
+  let lead = sel.rows[0];
   if (!lead) throw new Error("Lead was not saved");
 
   const patch = {};
@@ -465,93 +392,133 @@ function createOrUpdateLead(raw = {}) {
   if (raw.outreachStatus !== undefined) patch.outreach_status = raw.outreachStatus;
   if (raw.notes !== undefined) patch.notes = raw.notes;
 
-  if (Object.keys(patch).length) lead = updateLeadWorkflow(lead.id, patch);
+  if (Object.keys(patch).length) lead = await updateLeadWorkflow(userId, lead.id, patch);
   return lead;
 }
 
 // Delete by domain/name match — used by the agent ("delete the lead for x.com").
-function deleteLeadsWhere({ domain = "", search = "" } = {}) {
-  if (domain) return db().prepare("DELETE FROM leads WHERE domain = ?").run(String(domain).toLowerCase()).changes;
-  if (search) return db().prepare("DELETE FROM leads WHERE name LIKE ? OR domain LIKE ?").run(`%${search}%`, `%${search}%`).changes;
+async function deleteLeadsWhere(userId, { domain = "", search = "" } = {}) {
+  if (domain) {
+    const res = await q(`DELETE FROM leads WHERE user_id = $1 AND domain = $2`, [
+      userId,
+      String(domain).toLowerCase(),
+    ]);
+    return res.rowCount;
+  }
+  if (search) {
+    const res = await q(
+      `DELETE FROM leads WHERE user_id = $1 AND (name ILIKE $2 OR domain ILIKE $2)`,
+      [userId, `%${search}%`]
+    );
+    return res.rowCount;
+  }
   return 0;
 }
 
-function listProjectNames() {
-  return db()
-    .prepare("SELECT DISTINCT project FROM leads WHERE project != '' ORDER BY project")
-    .all()
-    .map((r) => r.project);
+async function listProjectNames(userId) {
+  const { rows } = await q(
+    `SELECT DISTINCT project FROM leads WHERE user_id = $1 AND project != '' ORDER BY project`,
+    [userId]
+  );
+  return rows.map((r) => r.project);
 }
 
-// Distinct countries (with lead counts) for the location filter/grouping.
-function listCountries() {
-  return db()
-    .prepare("SELECT country AS name, COUNT(*) AS count FROM leads WHERE country IS NOT NULL AND country != '' GROUP BY country ORDER BY count DESC, country")
-    .all();
+async function listCountries(userId) {
+  const { rows } = await q(
+    `SELECT country AS name, COUNT(*)::int AS count FROM leads
+      WHERE user_id = $1 AND country IS NOT NULL AND country != ''
+      GROUP BY country ORDER BY count DESC, country`,
+    [userId]
+  );
+  return rows;
 }
 
-// Distinct cities for the location filter, optionally scoped to one country.
-function listCities(country = "") {
+async function listCities(userId, country = "") {
   if (country) {
-    return db()
-      .prepare("SELECT city AS name, COUNT(*) AS count FROM leads WHERE city IS NOT NULL AND city != '' AND country = ? COLLATE NOCASE GROUP BY city ORDER BY count DESC, city")
-      .all(country);
+    const { rows } = await q(
+      `SELECT city AS name, COUNT(*)::int AS count FROM leads
+        WHERE user_id = $1 AND city IS NOT NULL AND city != '' AND lower(country) = lower($2)
+        GROUP BY city ORDER BY count DESC, city`,
+      [userId, country]
+    );
+    return rows;
   }
-  return db()
-    .prepare("SELECT city AS name, COUNT(*) AS count FROM leads WHERE city IS NOT NULL AND city != '' GROUP BY city ORDER BY count DESC, city")
-    .all();
+  const { rows } = await q(
+    `SELECT city AS name, COUNT(*)::int AS count FROM leads
+      WHERE user_id = $1 AND city IS NOT NULL AND city != ''
+      GROUP BY city ORDER BY count DESC, city`,
+    [userId]
+  );
+  return rows;
 }
 
-// Persist enrichment / WhatsApp results onto a lead (from on-demand single-lead
-// actions). Only contact/social/audit columns are writable here; empty values
-// never overwrite an existing non-empty one, matching the batch upsert merge rule.
+// Persist enrichment / WhatsApp results onto a lead (on-demand single-lead).
 const ENRICHABLE = new Set([
   "email", "all_emails", "contact_page", "facebook", "instagram", "linkedin",
   "twitter", "youtube", "tiktok", "pinterest", "whatsapp", "telegram",
   "enrich_status", "whatsapp_status", "whatsapp_id",
 ]);
-function updateLeadFields(id, fields = {}, { overwrite = false } = {}) {
-  const current = getLead(id);
+async function updateLeadFields(userId, id, fields = {}, { overwrite = false } = {}) {
+  const current = await getLead(userId, id);
   if (!current) return null;
   const updates = {};
   for (const [k, v] of Object.entries(fields)) {
     if (!ENRICHABLE.has(k)) continue;
     const val = v === null || v === undefined ? "" : String(v);
-    // enrich_status / whatsapp_status are always written (they report the outcome);
-    // other fields only when non-empty unless overwrite is requested.
     if (overwrite || val !== "" || k === "enrich_status" || k === "whatsapp_status") {
       updates[k] = val;
     }
   }
   if (!Object.keys(updates).length) return current;
   updates.last_updated = now();
-  const set = Object.keys(updates).map((k) => `${k} = @${k}`).join(", ");
-  db().prepare(`UPDATE leads SET ${set} WHERE id = @id`).run({ ...updates, id: Number(id) });
-  return getLead(id);
+  await runUpdate(userId, id, updates);
+  return getLead(userId, id);
 }
 
-function statsLeads() {
-  const d = db();
-  return {
-    total: d.prepare("SELECT COUNT(*) c FROM leads").get().c,
-    withEmail: d.prepare("SELECT COUNT(*) c FROM leads WHERE email IS NOT NULL AND email != ''").get().c,
-    withWebsite: d.prepare("SELECT COUNT(*) c FROM leads WHERE website IS NOT NULL AND website != ''").get().c,
-    audited: d.prepare("SELECT COUNT(*) c FROM leads WHERE desktop_performance IS NOT NULL OR mobile_performance IS NOT NULL").get().c,
-    projects: d.prepare("SELECT COUNT(DISTINCT project) c FROM leads WHERE project != ''").get().c,
-    watchlist: d.prepare("SELECT COUNT(*) c FROM leads WHERE watchlist = 1").get().c,
-    contactList: d.prepare("SELECT COUNT(*) c FROM leads WHERE contact_list = 1").get().c,
-    emailReady: d.prepare("SELECT COUNT(*) c FROM leads WHERE email_status = 'send'").get().c,
-    queued: d.prepare("SELECT COUNT(*) c FROM leads WHERE outreach_status = 'queued'").get().c,
-    sent: d.prepare("SELECT COUNT(*) c FROM leads WHERE outreach_status = 'sent'").get().c,
-    completed: d.prepare("SELECT COUNT(*) c FROM leads WHERE outreach_status = 'complete'").get().c,
-  };
+// Persist website-status / chatbot-scan results onto a lead. Always overwrites;
+// numeric/null values are written as-is.
+const SCAN_FIELDS = new Set([
+  "http_status", "http_status_text", "http_checked_at",
+  "chatbot", "chatbot_vendors", "chatbot_method", "chatbot_checked_at",
+]);
+async function updateLeadScan(userId, id, fields = {}) {
+  const current = await getLead(userId, id);
+  if (!current) return null;
+  const updates = {};
+  for (const [k, v] of Object.entries(fields)) {
+    if (SCAN_FIELDS.has(k)) updates[k] = v === undefined ? null : v;
+  }
+  if (!Object.keys(updates).length) return current;
+  updates.last_updated = now();
+  await runUpdate(userId, id, updates);
+  return getLead(userId, id);
+}
+
+async function statsLeads(userId) {
+  const { rows } = await q(
+    `SELECT
+       COUNT(*)::int AS total,
+       COUNT(*) FILTER (WHERE email IS NOT NULL AND email != '')::int AS "withEmail",
+       COUNT(*) FILTER (WHERE website IS NOT NULL AND website != '')::int AS "withWebsite",
+       COUNT(*) FILTER (WHERE desktop_performance IS NOT NULL OR mobile_performance IS NOT NULL)::int AS audited,
+       COUNT(DISTINCT project) FILTER (WHERE project != '')::int AS projects,
+       COUNT(*) FILTER (WHERE watchlist = 1)::int AS watchlist,
+       COUNT(*) FILTER (WHERE contact_list = 1)::int AS "contactList",
+       COUNT(*) FILTER (WHERE email_status = 'send')::int AS "emailReady",
+       COUNT(*) FILTER (WHERE outreach_status = 'queued')::int AS queued,
+       COUNT(*) FILTER (WHERE outreach_status = 'sent')::int AS sent,
+       COUNT(*) FILTER (WHERE outreach_status = 'complete')::int AS completed
+     FROM leads WHERE user_id = $1`,
+    [userId]
+  );
+  return rows[0];
 }
 
 const WORKFLOW_COLUMNS = ["watchlist", "contact_list", "email_status", "outreach_status", "notes", "last_contacted_at", "message_sent_at", "completed_at"];
 const EXPORT_COLUMNS = ["dedup_key", ...LEAD_COLUMNS, ...WORKFLOW_COLUMNS, "first_seen", "last_updated"];
 
-function exportCsv() {
-  const rows = db().prepare(`SELECT * FROM leads ORDER BY last_updated DESC`).all();
+async function exportCsv(userId) {
+  const { rows } = await q(`SELECT * FROM leads WHERE user_id = $1 ORDER BY last_updated DESC`, [userId]);
   const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const lines = [String.fromCharCode(0xfeff) + EXPORT_COLUMNS.join(",") + "\r\n"];
   for (const r of rows) lines.push(EXPORT_COLUMNS.map((c) => esc(r[c])).join(",") + "\r\n");
@@ -559,14 +526,15 @@ function exportCsv() {
 }
 
 module.exports = {
-  DB_FILE,
   hostOf,
   dedupKey,
-  listAccounts,
-  addAccount,
-  deleteAccount,
-  setAccountEnabled,
-  nextAccount,
+  parseLocation,
+  normalizeProxyUrl,
+  listProxies,
+  listEnabledProxyUrls,
+  addProxies,
+  deleteProxy,
+  setProxyEnabled,
   upsertLeads,
   queryLeads,
   getLead,
@@ -575,10 +543,10 @@ module.exports = {
   createOrUpdateLead,
   deleteLeadsWhere,
   updateLeadFields,
+  updateLeadScan,
   listProjectNames,
   listCountries,
   listCities,
-  parseLocation,
   statsLeads,
   exportCsv,
 };

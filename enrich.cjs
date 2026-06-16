@@ -14,6 +14,8 @@
 
 const fs = require("fs");
 const path = require("path");
+const proxy = require("./web/lib/proxy.cjs");
+let PROXY_URLS = []; // admin proxy pool, loaded at startup; random per request
 
 // ---- CLI args ----------------------------------------------------------------
 const VALUE_FLAGS = new Set(["--concurrency", "--maxPages", "--timeout", "--browserConcurrency", "--siteTimeout"]);
@@ -258,6 +260,7 @@ async function fetchOnce(url, timeoutMs) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
+    const dispatcher = proxy.proxyDispatcher(proxy.pickRandom(PROXY_URLS));
     const res = await fetch(url, {
       signal: ctrl.signal,
       redirect: "follow",
@@ -266,6 +269,7 @@ async function fetchOnce(url, timeoutMs) {
         accept: "text/html,application/xhtml+xml,*/*;q=0.8",
         "accept-language": "en-US,en;q=0.9",
       },
+      ...(dispatcher ? { dispatcher } : {}),
     });
     const ct = res.headers.get("content-type") || "";
     if (!res.ok || (ct && !/text\/html|application\/xhtml|text\/plain/i.test(ct))) {
@@ -302,13 +306,29 @@ let _ctxPromise = null;
 let _browserPages = 0;
 
 async function getBrowserContext() {
+  // Reuse the live context, but self-heal if the browser died (crash/OOM). Without
+  // this, a dead browser leaves _ctxPromise cached forever and every later enrich
+  // fails — the long-running-server failure mode behind "enrichment has an issue".
+  if (_ctxPromise && _browser && _browser.isConnected()) return _ctxPromise;
+  if (_browser && !_browser.isConnected()) {
+    _browser = null;
+    _ctxPromise = null;
+  }
   if (_ctxPromise) return _ctxPromise;
   _ctxPromise = (async () => {
     const { chromium } = require("patchright");
+    // One proxy per browser launch (browsers can't rotate per-request).
+    const pwProxy = await proxy.randomPlaywrightProxy();
     _browser = await chromium.launch({
       channel: "chrome",
       headless: BROWSER_HEADLESS,
       args: ["--no-sandbox", "--disable-dev-shm-usage"], // robust on the Linux VPS
+      ...(pwProxy ? { proxy: pwProxy } : {}),
+    });
+    // If Chrome dies, drop the cached handles so the next call relaunches cleanly.
+    _browser.on("disconnected", () => {
+      _browser = null;
+      _ctxPromise = null;
     });
     const ctx = await _browser.newContext({ userAgent: UA });
     // Block images/media/fonts — we only need the HTML/text, and this keeps tabs light.
@@ -318,7 +338,12 @@ async function getBrowserContext() {
       return route.continue();
     });
     return ctx;
-  })();
+  })().catch((err) => {
+    // Failed launch must not poison the cache — clear so a retry can relaunch.
+    _browser = null;
+    _ctxPromise = null;
+    throw err;
+  });
   return _ctxPromise;
 }
 
@@ -594,6 +619,8 @@ if (require.main === module)
   console.log(
     `  Resume: ${state.size ? `${capturedAlready} with email kept, re-trying the rest (use --force to redo all)` : "fresh run"}`
   );
+  PROXY_URLS = await proxy.loadProxyUrls();
+  console.log(`  Proxies: ${PROXY_URLS.length ? `${PROXY_URLS.length} (random per request)` : "none (direct)"}`);
   console.log(
     `  Mode  : concurrency ${CONCURRENCY}, ${MAX_PAGES} pages/site, ${TIMEOUT}ms timeout, browser fallback ${USE_BROWSER ? `on (max ${BROWSER_MAX} tabs)` : "off"}${WATCH ? ", WATCH" : ""}\n`
   );

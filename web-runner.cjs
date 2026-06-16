@@ -17,7 +17,6 @@ const {
   latestEnrichedCsv,
   latestInputCsv,
   summaryPath,
-  writeRotatedCookies,
   syncProjectToDb,
 } = require("./web/lib/store.cjs");
 
@@ -106,10 +105,17 @@ function appendTo(file, chunk) {
 
 // Merge this project's latest CSVs into the global deduped leads DB. Never let a
 // sync error abort the run — the CSVs remain the source of truth.
-function syncDb() {
+async function syncDb(stage) {
   try {
-    const res = syncProjectToDb(projectName);
+    const res = await syncProjectToDb(projectName);
     log(`DB sync: +${res.inserted} new, ${res.updated} updated`);
+    // Record the new-vs-duplicate split so the dashboard can explain what was charged
+    // ("X new · Y already in your leads"). Only the post-scrape sync of the browser
+    // path is meaningful here — the grid scraper upserts in realtime and records its
+    // own running totals, so its post-scrape sync reports 0 new and is skipped.
+    if (stage === "scrape" && res.inserted > 0) {
+      writeState(dir, { dbSync: { inserted: res.inserted, updated: res.updated, at: new Date().toISOString() } });
+    }
   } catch (err) {
     log(`DB sync failed: ${err.message}`);
   }
@@ -182,20 +188,6 @@ async function runScrape() {
   if (flags.has("--blockCanvas")) args.push("--blockCanvas");
   // Images are blocked by default; only forward the opt-out.
   if (flags.has("--allowImages")) args.push("--allowImages");
-
-  // Auto-rotate Gmail accounts: each scrape run takes the least-recently-used
-  // account from the DB, so concurrent projects sign in with different Gmails.
-  try {
-    const { file, account } = writeRotatedCookies(projectName);
-    if (file) {
-      args.push("--cookies", file);
-      log(`Using Gmail account: ${account.name} (id ${account.id})`);
-    } else {
-      log("No Gmail accounts configured — scraping logged out");
-    }
-  } catch (err) {
-    log(`Cookie rotation skipped: ${err.message}`);
-  }
 
   const stageLog = path.join(dir, "scrape.log");
   setStage(dir, "scrape", { status: "running", startedAt: new Date().toISOString(), error: "" });
@@ -319,7 +311,7 @@ async function runReport() {
     else if (stage === "report") await runReport();
     else log(`Skipping unknown stage ${stage}`);
     log(`Finished stage ${stage}`);
-    syncDb(); // keep the global leads DB current after every stage
+    await syncDb(stage); // keep the global leads DB current after every stage
   }
 
   writeState(dir, {

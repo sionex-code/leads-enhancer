@@ -1,5 +1,6 @@
 import db from "../../../../../web/lib/db.cjs";
 import enrichLib from "../../../../../enrich.cjs";
+import { requireUser } from "../../../../../web/lib/session.js";
 
 export const dynamic = "force-dynamic";
 
@@ -7,14 +8,16 @@ export const dynamic = "force-dynamic";
 // social links (same engine as the batch pipeline) and persist the result.
 // Returns the updated lead so the table can refresh that one row in place.
 export async function POST(_request, context) {
+  const { userId, response } = await requireUser();
+  if (response) return response;
   const { id } = await context.params;
-  const lead = db.getLead(id);
+  const lead = await db.getLead(userId, id);
   if (!lead) return Response.json({ error: "Lead not found" }, { status: 404 });
   if (!lead.website) return Response.json({ error: "This lead has no website to enrich" }, { status: 400 });
 
   try {
     const r = await enrichLib.enrichSite(lead.website);
-    const updated = db.updateLeadFields(id, {
+    const updated = await db.updateLeadFields(userId, id, {
       email: r.email,
       all_emails: r.allEmails,
       contact_page: r.contactPage,

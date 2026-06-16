@@ -22,6 +22,7 @@ const path = require("path");
 const { chromium } = require("patchright");
 const { startCapture } = require("./inpage.cjs");
 const { rowsFromBody } = require("./mapsparse.cjs");
+const proxy = require("./web/lib/proxy.cjs");
 
 // ---- CLI args ----------------------------------------------------------------
 // Flags that take a value (so the value isn't mistaken for a positional query word).
@@ -205,10 +206,15 @@ function normalizeCookie(cookie) {
   // (clicking a result opens the panel in place instead of navigating to the
   // place-only page and losing the list). --disable-dev-shm-usage is a no-op on
   // Windows and prevents Chrome's small /dev/shm from filling up on Linux long runs.
+  // One random proxy from the admin pool for this scrape (browsers can't rotate
+  // per-request). Empty pool = direct connection.
+  const pwProxy = await proxy.randomPlaywrightProxy();
+  console.log(`  Proxy : ${pwProxy ? pwProxy.server : "none (direct)"}`);
   const context = await chromium.launchPersistentContext(userDataDir, {
     channel: "chrome",
     headless,
     viewport: { width: viewportWidth, height: viewportHeight },
+    ...(pwProxy ? { proxy: pwProxy } : {}),
     args: [
       `--window-size=${viewportWidth},${viewportHeight}`,
       "--start-maximized",

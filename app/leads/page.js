@@ -5,5 +5,7 @@ import LeadsClient from "./LeadsClient";
 export const dynamic = "force-dynamic";
 
 export default function Page() {
-  return <LeadsClient />;
+  // Default to the "Needs action" workflow — the unfiltered "All leads" view is
+  // hidden for the SaaS launch.
+  return <LeadsClient initialWorkflow="needs-action" />;
 }

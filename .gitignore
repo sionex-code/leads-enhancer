@@ -1,10 +1,15 @@
 node_modules/
 .env*
+!.env.example
 .next/
 .chrome-profile/
 output/
 *.enrich-state.jsonl
 *.log
+
+# Electron desktop build output
+dist-electron/
+package.json.packbak
 
 # stray Lighthouse/report test artifacts in repo root
 /*.report.html

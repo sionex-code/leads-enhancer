@@ -1,10 +1,17 @@
-import Dashboard from "./dashboard";
+import { redirect } from "next/navigation";
+import { auth } from "../auth";
+import Landing from "./components/Landing";
 
-// Render per-request (no long-lived static cache). Without this, Next emits
-// Cache-Control: s-maxage=31536000 on the prerendered page, which the upstream
-// nginx proxy_cache then holds for a year — so redeploys wouldn't show up.
+// Public marketing landing. Signed-in users are sent straight to the app.
 export const dynamic = "force-dynamic";
 
-export default function Page() {
-  return <Dashboard />;
+export default async function Page() {
+  const session = await auth();
+  if (session?.user) redirect("/dashboard");
+  const checkout = {
+    p19: process.env.WHOP_CHECKOUT_19 || "",
+    p49: process.env.WHOP_CHECKOUT_49 || "",
+    p99: process.env.WHOP_CHECKOUT_99 || "",
+  };
+  return <Landing checkout={checkout} />;
 }

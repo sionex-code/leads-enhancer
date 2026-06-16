@@ -3,8 +3,17 @@ const path = require("path");
 const { spawn, execFileSync } = require("child_process");
 const db = require("./db.cjs");
 
-const ROOT = process.cwd();
-const PROJECT_ROOT = path.join(ROOT, "output", "projects");
+// Two roots so the runner works both as the web app (repo) and inside the
+// Electron desktop build:
+//   ROOT      — where the runner scripts + node_modules live (read-only in the
+//               packaged app: the standalone bundle). Used to locate web-runner.js
+//               / scrape.js etc. and as the child process cwd.
+//   DATA_ROOT — writable location for projects/output/leads.db (per-user in the
+//               desktop app via GMAPS_DATA_DIR).
+// Both default to process.cwd() so the normal web/CLI usage is unchanged.
+const ROOT = process.env.GMAPS_APP_ROOT || process.cwd();
+const DATA_ROOT = process.env.GMAPS_DATA_DIR || process.cwd();
+const PROJECT_ROOT = path.join(DATA_ROOT, "output", "projects");
 
 function slugify(value) {
   return (
@@ -21,14 +30,30 @@ function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
-function projectDir(slugOrName) {
-  return path.join(PROJECT_ROOT, slugify(slugOrName));
+// Per-tenant project root. On the web server, each request passes the signed-in
+// userId so users never share project dirs (two users can both have a project
+// named "plumbers-miami" without colliding). Inside the runner child, userId is
+// omitted — its GMAPS_DATA_DIR is already set to the tenant dir by spawnRunner,
+// so PROJECT_ROOT is per-tenant and projectRootFor() returns it directly.
+function projectRootFor(userId) {
+  if (!userId) return PROJECT_ROOT;
+  return path.join(DATA_ROOT, "tenants", String(userId), "output", "projects");
 }
 
-function safeProjectDir(slugOrName) {
-  const dir = path.resolve(projectDir(slugOrName));
-  const root = path.resolve(PROJECT_ROOT) + path.sep;
-  if (!dir.startsWith(root)) throw new Error("Invalid project path");
+// The GMAPS_DATA_DIR a runner child should use for a given user (its output/
+// tree, project files and logs all live under here). Mirrors projectRootFor.
+function tenantDataDir(userId) {
+  return path.join(DATA_ROOT, "tenants", String(userId));
+}
+
+function projectDir(slugOrName, userId) {
+  return path.join(projectRootFor(userId), slugify(slugOrName));
+}
+
+function safeProjectDir(slugOrName, userId) {
+  const root = path.resolve(projectRootFor(userId));
+  const dir = path.resolve(projectDir(slugOrName, userId));
+  if (dir !== root && !dir.startsWith(root + path.sep)) throw new Error("Invalid project path");
   return dir;
 }
 
@@ -318,11 +343,12 @@ function cleanupBrowser(dir) {
 // to the scrape/enrich/analyze children and the Lighthouse + headless Chrome they
 // spawn), mark every project idle, then sweep any orphaned processes still
 // referencing the projects tree (e.g. a Lighthouse run whose parent already died).
-function stopAll() {
-  ensureDir(PROJECT_ROOT);
+function stopAll(userId) {
+  const root = projectRootFor(userId);
+  ensureDir(root);
   let projects = 0;
-  for (const name of fs.readdirSync(PROJECT_ROOT)) {
-    const dir = path.join(PROJECT_ROOT, name);
+  for (const name of fs.readdirSync(root)) {
+    const dir = path.join(root, name);
     try {
       if (!fs.statSync(dir).isDirectory()) continue;
     } catch {
@@ -349,7 +375,7 @@ function stopAll() {
   }
   // Backstop for orphans whose runner is already gone (taskkill /T on the runner
   // normally gets these, but a detached/re-parented Lighthouse can survive).
-  const swept = killProcessesUsingPath(PROJECT_ROOT);
+  const swept = killProcessesUsingPath(root);
   return { projects, swept };
 }
 
@@ -435,8 +461,8 @@ function readEnrichProgress(input, stage = {}) {
   };
 }
 
-function loadStatus(slugOrName) {
-  const dir = safeProjectDir(slugOrName);
+function loadStatus(slugOrName, userId) {
+  const dir = safeProjectDir(slugOrName, userId);
   const meta = readMeta(dir);
   const state = readState(dir);
   const raw = latestRawCsv(dir);
@@ -538,11 +564,12 @@ function projectSummary(dir) {
   };
 }
 
-function listProjects() {
-  ensureDir(PROJECT_ROOT);
+function listProjects(userId) {
+  const root = projectRootFor(userId);
+  ensureDir(root);
   return fs
-    .readdirSync(PROJECT_ROOT)
-    .map((name) => path.join(PROJECT_ROOT, name))
+    .readdirSync(root)
+    .map((name) => path.join(root, name))
     .filter((dir) => {
       try {
         return fs.statSync(dir).isDirectory();
@@ -555,7 +582,8 @@ function listProjects() {
 }
 
 function spawnRunner(payload) {
-  const dir = safeProjectDir(payload.name);
+  const userId = payload.userId || null;
+  const dir = safeProjectDir(payload.name, userId);
   ensureDir(dir);
   const meta = writeMeta(dir, {
     name: payload.name,
@@ -587,11 +615,29 @@ function spawnRunner(payload) {
   if (payload.blockImages === false) args.push("--allowImages");
   // Scrape capture mode: fast network RPC reading (default) vs legacy DOM clicking.
   args.push(payload.network === false ? "--dom" : "--network");
-  const child = spawn(process.execPath, args, {
+  // Capture the runner's early stdout/stderr (before it sets up its own per-stage
+  // logs) so boot-time crashes are diagnosable instead of vanishing.
+  const bootLogPath = path.join(dir, "runner-boot.log");
+  const bootLog = fs.openSync(bootLogPath, "a");
+  const runnerExe = process.env.GMAPS_RUNNER_NODE || process.execPath;
+  fs.appendFileSync(bootLogPath, `[spawn] exe=${runnerExe} runAsNode=${process.env.ELECTRON_RUN_AS_NODE || "(set in child)"} cwd=${ROOT}\n`);
+  const child = spawn(runnerExe, args, {
     cwd: ROOT,
     detached: true,
-    stdio: "ignore",
+    stdio: ["ignore", bootLog, bootLog],
     windowsHide: true,
+    // In the Electron build runnerExe is the app exe; ELECTRON_RUN_AS_NODE makes
+    // it run web-runner.js as plain Node. Harmless under the web/CLI server (real
+    // Node ignores the flag). GMAPS_USER_ID tells the runner which tenant owns the
+    // leads it upserts; GMAPS_DATA_DIR points its output/ tree at that tenant's
+    // isolated folder so project files never collide across users.
+    env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: "1",
+      ...(userId
+        ? { GMAPS_USER_ID: String(userId), GMAPS_DATA_DIR: tenantDataDir(userId) }
+        : {}),
+    },
   });
   child.unref();
   writeState(dir, {
@@ -603,36 +649,35 @@ function spawnRunner(payload) {
   return { pid: child.pid, slug: meta.slug, name: meta.name };
 }
 
-function deleteProject(slugOrName) {
-  const dir = safeProjectDir(slugOrName);
+function deleteProject(slugOrName, userId) {
+  const dir = safeProjectDir(slugOrName, userId);
   const state = readState(dir);
   if (state.activePid) killTree(state.activePid);
   if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
 }
 
-function setProjectWatchlist(slugOrName, watchlist) {
-  const dir = safeProjectDir(slugOrName);
+function setProjectWatchlist(slugOrName, watchlist, userId) {
+  const dir = safeProjectDir(slugOrName, userId);
   const meta = writeMeta(dir, { watchlist: !!watchlist });
   return { slug: meta.slug, name: meta.name || slugOrName, watchlist: !!meta.watchlist };
 }
 
-// Pull the next Gmail account from the rotation and drop its cookies into the
-// project folder so scrape.js can load them via --cookies. Returns the cookie
-// file path (or "" when no accounts are configured — then scrape runs logged out).
-function writeRotatedCookies(slugOrName) {
-  const account = db.nextAccount();
-  if (!account || !account.cookies || !account.cookies.length) return { file: "", account: null };
-  const dir = safeProjectDir(slugOrName);
-  ensureDir(dir);
-  const file = path.join(dir, "account-cookies.json");
-  writeJson(file, account.cookies);
-  return { file, account: { id: account.id, name: account.name } };
+// The user who owns the current run. In the SaaS the queue sets GMAPS_USER_ID in
+// the runner's environment; web-context callers pass it explicitly. Returns null
+// for legacy CLI usage with no owner configured.
+function ownerId() {
+  return process.env.GMAPS_USER_ID || null;
 }
 
 // Merge this project's lead CSV with its Lighthouse summaries and upsert every
 // row into the global deduped leads DB. Safe to call repeatedly (after each
 // stage); only non-empty fields overwrite, so partial runs accumulate.
-function syncProjectToDb(slugOrName) {
+async function syncProjectToDb(slugOrName) {
+  const uid = ownerId();
+  if (!uid) {
+    console.warn("[store] syncProjectToDb skipped: no GMAPS_USER_ID owner set");
+    return { inserted: 0, updated: 0 };
+  }
   const dir = safeProjectDir(slugOrName);
   const meta = readMeta(dir);
   const raw = latestRawCsv(dir);
@@ -666,10 +711,11 @@ function syncProjectToDb(slugOrName) {
       mobile_best_practices: m["best-practices"],
     };
   });
-  return db.upsertLeads(leads);
+  return db.upsertLeads(uid, leads);
 }
 
 module.exports = {
+  ownerId,
   ROOT,
   PROJECT_ROOT,
   slugify,
@@ -696,7 +742,6 @@ module.exports = {
   spawnRunner,
   deleteProject,
   setProjectWatchlist,
-  writeRotatedCookies,
   syncProjectToDb,
   db,
 };

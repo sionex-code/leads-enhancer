@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ExternalLink, FileText, Loader2, X } from "lucide-react";
+import { ExternalLink, FileText, Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
+import { Button } from "./ui/button";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
@@ -62,40 +64,43 @@ export default function ReportModal({ lead, onClose }) {
   const generating = job?.status === "running";
 
   return (
-    <div className="drawer-backdrop" onClick={onClose}>
-      <div className="report-modal" onClick={(e) => e.stopPropagation()}>
-        <header className="drawer-head">
-          <div>
-            <h2>{lead.name || "Report"}</h2>
-            <div className="subtle">{lead.domain || lead.website}</div>
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="h-[88vh] max-w-5xl p-0">
+        <DialogHeader className="flex-row items-center justify-between gap-3 pr-12">
+          <div className="min-w-0">
+            <DialogTitle className="truncate">{lead.name || "Report"}</DialogTitle>
+            <DialogDescription className="truncate">{lead.domain || lead.website}</DialogDescription>
           </div>
-          <div className="report-modal-actions">
-            <button className="primary" disabled={!lead.website || generating} onClick={generate}>
-              {generating ? <><Loader2 size={14} className="spin" /> Generating…</> : <><FileText size={14} /> {reports.length ? "Regenerate" : "Generate"}</>}
-            </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button size="sm" disabled={!lead.website || generating} onClick={generate}>
+              {generating ? <><Loader2 size={14} className="animate-spin" /> Generating…</> : <><FileText size={14} /> {reports.length ? "Regenerate" : "Generate"}</>}
+            </Button>
             {latest && (
-              <a className="ghost-link-btn" href={`${BASE_PATH}/api/agent/reports/${latest.file}`} target="_blank" rel="noreferrer">
-                <ExternalLink size={14} /> Open
-              </a>
+              <Button asChild size="sm" variant="outline">
+                <a href={`${BASE_PATH}/api/agent/reports/${latest.file}`} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Open</a>
+              </Button>
             )}
-            <button className="icon" onClick={onClose} title="Close"><X size={17} /></button>
           </div>
-        </header>
-        {error && <div className="chat-error">{error}</div>}
+        </DialogHeader>
+
+        {error && <div className="border-b border-border/60 bg-destructive/10 px-5 py-2 text-sm text-red-600">{error}</div>}
         {generating && (
-          <div className="job-progress">
-            <Loader2 size={14} className="spin" /> {(job.log || []).slice(-1)[0] || "Working…"}
+          <div className="flex items-center gap-2 border-b border-border/60 px-5 py-2 text-sm text-muted-foreground">
+            <Loader2 size={14} className="animate-spin" /> {(job.log || []).slice(-1)[0] || "Working…"}
           </div>
         )}
-        {job?.status === "failed" && <div className="chat-error">Report failed: {job.error}</div>}
-        <div className="report-modal-body">
+        {job?.status === "failed" && <div className="border-b border-border/60 bg-destructive/10 px-5 py-2 text-sm text-red-600">Report failed: {job.error}</div>}
+
+        <div className="min-h-0 flex-1 bg-white">
           {latest ? (
-            <iframe title="Website report" src={`${BASE_PATH}/api/agent/reports/${latest.file}`} />
+            <iframe title="Website report" src={`${BASE_PATH}/api/agent/reports/${latest.file}`} className="h-full w-full border-0" />
           ) : (
-            <div className="empty">{generating ? "Generating report — this takes a moment…" : "No report yet. Click Generate."}</div>
+            <div className="flex h-full items-center justify-center bg-card p-10 text-center text-sm text-muted-foreground">
+              {generating ? "Generating report, this takes a moment…" : "No report yet. Click Generate."}
+            </div>
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -20,6 +20,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const proxy = require("./web/lib/proxy.cjs");
 
 const ROOT = __dirname;
 
@@ -216,6 +217,11 @@ const FETCH_HEADERS = {
   console.log(`  Query: "${parts.keyword}" | Location: "${parts.location}"`);
   console.log(`  Area: ${geo.display}`);
 
+  // Admin-managed proxy pool: each Maps tile request picks a random proxy so the
+  // scrape spreads across IPs instead of hammering one. Empty list = direct.
+  const proxyUrls = await proxy.loadProxyUrls();
+  console.log(`  Proxies: ${proxyUrls.length ? `${proxyUrls.length} (random per request)` : "none (direct)"}`);
+
   const { bbox, centers } = planGrid(geo);
   console.log(
     `  Grid: ${centers.length} tiles over [${bbox.latMin.toFixed(3)},${bbox.lngMin.toFixed(3)}] .. [${bbox.latMax.toFixed(3)},${bbox.lngMax.toFixed(3)}]`
@@ -228,24 +234,45 @@ const FETCH_HEADERS = {
   console.log(`  Output: ${outFile}`);
 
   // Optional realtime DB upserts (project runs only — standalone CLI use skips it).
+  // Per-tenant: the owning user id is passed to the runner via GMAPS_USER_ID.
+  const OWNER_ID = process.env.GMAPS_USER_ID || null;
   let db = null;
-  if (PROJECT) {
+  let store = null;
+  if (PROJECT && OWNER_ID) {
     try {
       db = require("./web/lib/db.cjs");
+      // Optional: record the running new-vs-duplicate split into project state so the
+      // dashboard can show what was charged. Best-effort — never block scraping on it.
+      try { store = require("./web/lib/store.cjs"); } catch {}
     } catch (err) {
       console.warn(`  DB unavailable (${err.message}) — CSV only`);
     }
+  } else if (PROJECT && !OWNER_ID) {
+    console.warn("  DB skipped: no GMAPS_USER_ID owner set — CSV only");
   }
   let pendingDb = [];
-  function flushDb(force = false) {
-    if (!db || (!force && pendingDb.length < 20) || !pendingDb.length) return;
+  let flushing = false;
+  let dbInserted = 0; // cumulative leads new to the account (charged) this run
+  let dbUpdated = 0; // cumulative duplicates merged for free this run
+  async function flushDb(force = false) {
+    if (!db || flushing || (!force && pendingDb.length < 20) || !pendingDb.length) return;
+    flushing = true;
     const batch = pendingDb;
     pendingDb = [];
     try {
-      const res = db.upsertLeads(batch);
+      const res = await db.upsertLeads(OWNER_ID, batch);
+      dbInserted += res.inserted;
+      dbUpdated += res.updated;
       console.log(`  DB: +${res.inserted} new, ${res.updated} updated (total ${seen.size})`);
+      if (store) {
+        try {
+          store.writeState(OUT_DIR, { dbSync: { inserted: dbInserted, updated: dbUpdated, at: new Date().toISOString() } });
+        } catch {}
+      }
     } catch (err) {
       console.warn(`  DB upsert failed: ${err.message}`);
+    } finally {
+      flushing = false;
     }
   }
   const dbTimer = db ? setInterval(() => flushDb(true), 2500) : null;
@@ -297,7 +324,13 @@ const FETCH_HEADERS = {
     const url = buildUrl(parts.keyword, task.lat, task.lng, task.offset);
     for (let attempt = 0; attempt <= 2; attempt++) {
       try {
-        const res = await fetch(url, { headers: FETCH_HEADERS, signal: AbortSignal.timeout(30000) });
+        // New random proxy each attempt — a blocked/dead proxy just fails over.
+        const dispatcher = proxy.proxyDispatcher(proxy.pickRandom(proxyUrls));
+        const res = await fetch(url, {
+          headers: FETCH_HEADERS,
+          signal: AbortSignal.timeout(30000),
+          ...(dispatcher ? { dispatcher } : {}),
+        });
         const text = await res.text();
         if (!text.startsWith(")]}'")) throw new Error("unexpected response (block/captcha?)");
         return text;
@@ -353,8 +386,8 @@ const FETCH_HEADERS = {
     next();
   });
 
-  flushDb(true);
   if (dbTimer) clearInterval(dbTimer);
+  await flushDb(true);
   if (fatal) {
     console.error(`\nFATAL: ${fatal.message}`);
     process.exit(1);
