@@ -26,9 +26,23 @@ const buttonVariants = cva(
   }
 );
 
-const Button = React.forwardRef(({ className, variant, size, asChild, ...props }, ref) => {
-  const Comp = asChild ? "span" : "button";
-  return <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />;
+const Button = React.forwardRef(({ className, variant, size, asChild, children, ...props }, ref) => {
+  const classes = cn(buttonVariants({ variant, size, className }));
+  // asChild merges the button styles onto the single child element (e.g. an <a>)
+  // instead of wrapping it in a <span>. Wrapping left the inner element un-flexed,
+  // so trailing icons wrapped onto a second line; merging keeps content on one row.
+  if (asChild && React.isValidElement(children)) {
+    return React.cloneElement(children, {
+      className: cn(classes, children.props.className),
+      ref,
+      ...props,
+    });
+  }
+  return (
+    <button className={classes} ref={ref} {...props}>
+      {children}
+    </button>
+  );
 });
 Button.displayName = "Button";
 

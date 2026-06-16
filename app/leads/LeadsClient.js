@@ -25,6 +25,7 @@ import {
   Star,
   Trash2,
   Users,
+  X,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
@@ -628,6 +629,10 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
   const [selected, setSelected] = useState(() => new Set());
   const [credits, setCredits] = useState(null);
   const [bulkBusy, setBulkBusy] = useState(false);
+  // Live progress for an in-flight bulk-report batch (replaces the old fire-and-
+  // forget alert). { total, done, failed, latest, finished, jobIds }.
+  const [reportBatch, setReportBatch] = useState(null);
+  const batchPollRef = useRef(null);
   // Named lists: the user's lists, the active list filter, and the open dialog.
   const [lists, setLists] = useState([]);
   const [listFilter, setListFilter] = useState("");
@@ -729,8 +734,41 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
     jsonFetch("/api/me").then((d) => setCredits(d?.entitlement?.credits ?? null)).catch(() => {});
   }, []);
 
+  // Poll every job in a bulk-report batch and roll the per-job progress up into a
+  // single { done / total } figure for the progress panel. Each report job exposes
+  // `sites` (planned) and `results` (completed), so done = Σ results, total = Σ sites.
+  const pollBatch = useCallback((jobIds, total) => {
+    clearTimeout(batchPollRef.current);
+    const tick = async () => {
+      const jobs = await Promise.all(
+        jobIds.map((id) => jsonFetch(`/api/agent/jobs/${id}`).catch(() => null))
+      );
+      let done = 0, latest = "";
+      let allTerminal = true;
+      for (const job of jobs) {
+        if (!job) { allTerminal = false; continue; }
+        done += (job.results || []).length;
+        if (job.status === "running") allTerminal = false;
+        const line = (job.log || []).slice(-1)[0];
+        if (line) latest = line;
+      }
+      done = Math.min(done, total);
+      // "failed" only makes sense once every job has settled: any reports that
+      // never landed (total − done). Mid-flight that gap is just work in progress.
+      const failed = allTerminal ? Math.max(0, total - done) : 0;
+      setReportBatch({ jobIds, total, done, failed, latest, finished: allTerminal });
+      if (allTerminal) {
+        refreshCredits();
+      } else {
+        batchPollRef.current = setTimeout(tick, 2500);
+      }
+    };
+    tick();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Generate website reports for the selected leads. Charges REPORT_COST each;
-  // confirms cost vs. balance first, then runs them as background jobs.
+  // confirms cost vs. balance first, then runs them as background jobs and shows
+  // a live progress panel that polls each job to completion.
   const bulkReport = useCallback(async () => {
     const ids = rows.filter((r) => r.website && selected.has(r.id)).map((r) => r.id);
     if (!ids.length) return;
@@ -746,14 +784,19 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
       const data = await jsonFetch("/api/leads/report/bulk", { method: "POST", body: JSON.stringify({ ids }) });
       if (typeof data.credits === "number") setCredits(data.credits);
       setSelected(new Set());
-      alert(`Started ${data.count} report(s) — ${data.charged} credits charged. They run in the background; open a lead to watch progress and download the report.`);
+      const jobIds = data.jobIds || [];
+      setReportBatch({ jobIds, total: data.count, done: 0, failed: 0, latest: "Starting…", finished: false });
+      if (jobIds.length) pollBatch(jobIds, data.count);
     } catch (err) {
       refreshCredits();
       alert(err.message);
     } finally {
       setBulkBusy(false);
     }
-  }, [rows, selected, credits, refreshCredits]);
+  }, [rows, selected, credits, refreshCredits, pollBatch]);
+
+  // Stop polling if the component unmounts mid-batch.
+  useEffect(() => () => clearTimeout(batchPollRef.current), []);
 
   const checkWhatsapp = useCallback(async (lead) => {
     const key = `${lead.id}:whatsapp`;
@@ -1218,6 +1261,51 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
             setRows((r) => r.filter((x) => x.id !== id));
           }}
         />
+      )}
+
+      {/* Live bulk-report progress: a fixed card that polls every job to completion. */}
+      {reportBatch && (
+        <div className="fixed bottom-4 right-4 z-50 w-80 rounded-xl border border-border bg-card p-4 shadow-xl">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              {reportBatch.finished ? (
+                <CheckCircle2 size={16} className="text-emerald-500" />
+              ) : (
+                <Loader2 size={16} className="animate-spin text-primary" />
+              )}
+              {reportBatch.finished
+                ? reportBatch.failed
+                  ? `${reportBatch.done} of ${reportBatch.total} reports ready`
+                  : "All reports ready"
+                : "Generating reports…"}
+            </div>
+            {reportBatch.finished && (
+              <button
+                onClick={() => setReportBatch(null)}
+                className="shrink-0 text-muted-foreground hover:text-foreground"
+                title="Dismiss"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className={cn("h-full rounded-full transition-[width] duration-500", reportBatch.finished ? "bg-emerald-500" : "bg-primary")}
+              style={{ width: `${reportBatch.total ? Math.round((reportBatch.done / reportBatch.total) * 100) : 0}%` }}
+            />
+          </div>
+          <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+            <span>{reportBatch.done} / {reportBatch.total} done{reportBatch.failed ? ` · ${reportBatch.failed} failed` : ""}</span>
+            <span>{reportBatch.total ? Math.round((reportBatch.done / reportBatch.total) * 100) : 0}%</span>
+          </div>
+          {!reportBatch.finished && reportBatch.latest && (
+            <p className="mt-1.5 truncate text-[11px] text-muted-foreground" title={reportBatch.latest}>{reportBatch.latest}</p>
+          )}
+          {reportBatch.finished && (
+            <p className="mt-1.5 text-[11px] text-muted-foreground">Open any lead to view or download its report.</p>
+          )}
+        </div>
       )}
     </AppShell>
   );

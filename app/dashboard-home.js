@@ -516,6 +516,19 @@ export default function Dashboard({ view = "" }) {
   const [rowBusy, setRowBusy] = useState({});
   const [rowOverlay, setRowOverlay] = useState({});
   const [reportLead, setReportLead] = useState(null);
+  // Tiny self-dismissing toast for quick confirmations (e.g. favoriting a project).
+  const [toast, setToast] = useState("");
+  const toastTimer = useRef(null);
+  function showToast(message) {
+    setToast(message);
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(""), 2600);
+  }
+  // Favorite stars the user just toggled, keyed by slug → desired value. The 1.5s
+  // poll replaces the whole projects array, which used to revert an optimistic
+  // star before the PATCH had persisted. We hold the user's intent here and keep
+  // overriding the polled value until the backend reports the same thing.
+  const pendingWatch = useRef(new Map());
 
   const selectedProject = useMemo(() => projects.find((p) => p.slug === selected), [projects, selected]);
 
@@ -532,8 +545,16 @@ export default function Dashboard({ view = "" }) {
 
   async function loadProjects() {
     const data = await jsonFetch("/api/projects");
-    setProjects(data.projects || []);
-    if (!selected && data.projects?.[0]) setSelected(data.projects[0].slug);
+    const list = (data.projects || []).map((p) => {
+      if (pendingWatch.current.has(p.slug)) {
+        const want = pendingWatch.current.get(p.slug);
+        if (p.watchlist === want) pendingWatch.current.delete(p.slug); // backend caught up
+        else return { ...p, watchlist: want }; // keep the user's intent until it does
+      }
+      return p;
+    });
+    setProjects(list);
+    if (!selected && list[0]) setSelected(list[0].slug);
   }
 
   // syncForm is only true when the user switches projects — NOT during the 1.5s
@@ -666,9 +687,11 @@ export default function Dashboard({ view = "" }) {
     if (!item?.slug) return;
     const next = !item.watchlist;
     setError("");
-    // Flip the star immediately so it responds on click, regardless of how fast the
-    // projects list refetches (a slow/transient reload used to leave the star stale).
+    // Record the intent so the next poll can't revert the star before the PATCH
+    // persists, flip it immediately, and confirm with a toast.
+    pendingWatch.current.set(item.slug, next);
     setProjects((ps) => ps.map((p) => (p.slug === item.slug ? { ...p, watchlist: next } : p)));
+    showToast(next ? `★ Added “${item.name}” to favorites` : `Removed “${item.name}” from favorites`);
     try {
       await jsonFetch(`/api/projects/${encodeURIComponent(item.slug)}`, {
         method: "PATCH",
@@ -676,8 +699,10 @@ export default function Dashboard({ view = "" }) {
       });
     } catch (err) {
       // Only revert if the save itself failed.
+      pendingWatch.current.delete(item.slug);
       setProjects((ps) => ps.map((p) => (p.slug === item.slug ? { ...p, watchlist: item.watchlist } : p)));
       setError(err.message);
+      showToast("Couldn't update favorite — try again");
       return;
     }
     // Best-effort refresh; don't revert the star if this part hiccups.
@@ -933,6 +958,11 @@ export default function Dashboard({ view = "" }) {
       actions={actions}
       sidebarExtra={projectList}
     >
+      {toast && (
+        <div className="pointer-events-none fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-border bg-foreground px-4 py-2.5 text-sm font-medium text-background shadow-lg">
+          {toast}
+        </div>
+      )}
       <div className="space-y-5 p-4 sm:p-6">
         {/* Mobile project switcher */}
         {projects.length > 0 && (
