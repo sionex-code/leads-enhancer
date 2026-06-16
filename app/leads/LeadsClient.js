@@ -33,6 +33,7 @@ import { Select } from "../components/ui/select";
 import { Textarea } from "../components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Sheet, SheetContent } from "../components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/table";
 import { cn } from "../lib/utils";
 
@@ -198,7 +199,7 @@ function Socials({ lead, full = false }) {
   );
 }
 
-function QuickLeadActions({ lead, onPatch, compact = false }) {
+function QuickLeadActions({ lead, onPatch, onLists, compact = false }) {
   const busy = false;
   const iconSize = 15;
   return (
@@ -206,7 +207,7 @@ function QuickLeadActions({ lead, onPatch, compact = false }) {
       <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.watchlist && "text-amber-500")} disabled={busy} onClick={() => onPatch(lead.id, { watchlist: !lead.watchlist })} title={lead.watchlist ? "Remove from favorites" : "Add to favorites"}>
         <Star size={iconSize} fill={lead.watchlist ? "currentColor" : "none"} />
       </Button>
-      <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.contact_list && "text-primary")} disabled={busy} onClick={() => onPatch(lead.id, { contact_list: !lead.contact_list })} title={lead.contact_list ? "Remove from custom list" : "Add to custom list"}>
+      <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.list_count > 0 && "text-primary")} disabled={busy} onClick={() => onLists && onLists(lead)} title={lead.list_count > 0 ? `In ${lead.list_count} list${lead.list_count === 1 ? "" : "s"} — edit` : "Add to a list"}>
         <ListPlus size={iconSize} />
       </Button>
       <Button variant="ghost" size="icon" className="h-8 w-8" disabled={busy} onClick={() => onPatch(lead.id, { email_status: lead.email_status === "send" ? "unset" : "send", contact_list: true })} title="Toggle send email">
@@ -518,6 +519,88 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot }) 
   );
 }
 
+// Add/remove a lead (or a bulk selection) to named lists. Single-lead mode edits
+// membership (checkboxes pre-filled); bulk mode adds the selected leads to the
+// checked lists. Either mode can create a new list inline.
+function ListsDialog({ lead, ids, lists, onClose, onSavedLead, onChanged }) {
+  const bulk = !lead && Array.isArray(ids);
+  const [allLists, setAllLists] = useState(lists || []);
+  const [checked, setChecked] = useState(() => new Set());
+  const [newName, setNewName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (lead) {
+      jsonFetch(`/api/leads/${lead.id}/lists`).then((d) => setChecked(new Set(d.listIds || []))).catch(() => {});
+    }
+  }, [lead]);
+
+  const toggle = (id) => setChecked((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  async function createList() {
+    const name = newName.trim();
+    if (!name) return;
+    setError("");
+    try {
+      const d = await jsonFetch("/api/lists", { method: "POST", body: JSON.stringify({ name }) });
+      setAllLists((ls) => (ls.some((l) => l.id === d.list.id) ? ls : [...ls, { ...d.list, count: 0 }].sort((a, b) => a.name.localeCompare(b.name))));
+      setChecked((s) => new Set(s).add(d.list.id));
+      setNewName("");
+      onChanged?.();
+    } catch (e) { setError(e.message); }
+  }
+
+  async function save() {
+    setSaving(true);
+    setError("");
+    try {
+      if (bulk) {
+        for (const listId of checked) {
+          await jsonFetch("/api/leads/lists/bulk", { method: "POST", body: JSON.stringify({ ids, listId }) });
+        }
+      } else {
+        const d = await jsonFetch(`/api/leads/${lead.id}/lists`, { method: "PUT", body: JSON.stringify({ listIds: [...checked] }) });
+        if (d.lead) onSavedLead?.(d.lead);
+      }
+      onChanged?.();
+      onClose();
+    } catch (e) { setError(e.message); setSaving(false); }
+  }
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{bulk ? `Add ${ids.length} lead${ids.length === 1 ? "" : "s"} to lists` : "Lists"}</DialogTitle>
+          <DialogDescription>{bulk ? "Pick the list(s) to add the selected leads to." : "Choose which lists this lead belongs to."}</DialogDescription>
+        </DialogHeader>
+        <div className="max-h-[40vh] space-y-1.5 overflow-auto py-1">
+          {allLists.length === 0 && <p className="text-sm text-muted-foreground">No lists yet — create one below.</p>}
+          {allLists.map((l) => (
+            <label key={l.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-accent">
+              <input type="checkbox" checked={checked.has(l.id)} onChange={() => toggle(l.id)} className="accent-[hsl(var(--primary))]" />
+              <span className="flex-1">{l.name}</span>
+              <span className="text-xs text-muted-foreground">{l.count}</span>
+            </label>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <Input placeholder="New list name…" value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createList(); } }} />
+          <Button variant="outline" onClick={createList} disabled={!newName.trim()}>Create</Button>
+        </div>
+        {error && <div className="text-sm text-red-600">{error}</div>}
+        <div className="mt-1 flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={save} disabled={saving || (bulk && checked.size === 0)}>
+            {saving ? <Loader2 size={15} className="animate-spin" /> : null} {bulk ? "Add to list" : "Save"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead manager", activeNav = "leads" }) {
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
@@ -545,6 +628,10 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
   const [selected, setSelected] = useState(() => new Set());
   const [credits, setCredits] = useState(null);
   const [bulkBusy, setBulkBusy] = useState(false);
+  // Named lists: the user's lists, the active list filter, and the open dialog.
+  const [lists, setLists] = useState([]);
+  const [listFilter, setListFilter] = useState("");
+  const [listDialog, setListDialog] = useState(null);
 
   const toggleSelect = useCallback((id) => {
     setSelected((s) => {
@@ -724,6 +811,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
       if (workflow) params.set("workflow", workflow);
       if (hasEmail) params.set("hasEmail", "1");
       if (minScore) params.set("minScore", String(minScore));
+      if (listFilter) params.set("list", listFilter);
       params.set("limit", String(PAGE_SIZE));
       params.set("offset", String(page * PAGE_SIZE));
       const data = await jsonFetch(`/api/leads?${params.toString()}`);
@@ -733,6 +821,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
       setProjects(data.projects || []);
       setCountries(data.countries || []);
       setCities(data.cities || []);
+      setLists(data.lists || []);
       if (active?.id) {
         const next = (data.rows || []).find((row) => row.id === active.id);
         if (next) setActive(next);
@@ -742,7 +831,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
     } finally {
       setLoading(false);
     }
-  }, [active?.id, city, country, hasEmail, minScore, page, project, search, workflow]);
+  }, [active?.id, city, country, hasEmail, listFilter, minScore, page, project, search, workflow]);
 
   useEffect(() => {
     setPage(0);
@@ -798,12 +887,15 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
   const pageEnd = total && rows.length ? page * PAGE_SIZE + rows.length : 0;
   const hasNextPage = rows.length > 0 && pageEnd < total;
 
-  // Bulk-selection derived values (scoped to the current page's rows with a website).
-  const selectableIds = rows.filter((r) => r.website).map((r) => r.id);
+  // Bulk-selection derived values (scoped to the current page's rows). Any lead can
+  // be selected (e.g. to add to a list); only those with a website are "reportable",
+  // which is what the credit cost is based on.
+  const selectableIds = rows.map((r) => r.id);
   const selectedCount = selectableIds.filter((id) => selected.has(id)).length;
-  const selectedCost = selectedCount * REPORT_COST;
+  const reportableCount = rows.filter((r) => r.website && selected.has(r.id)).length;
+  const reportCost = reportableCount * REPORT_COST;
   const allSelected = selectableIds.length > 0 && selectedCount === selectableIds.length;
-  const notEnoughCredits = credits != null && selectedCost > credits;
+  const notEnoughCredits = credits != null && reportCost > credits;
   const toggleSelectAll = () => {
     setSelected((s) => {
       const n = new Set(s);
@@ -893,6 +985,10 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                 <option value="">All cities</option>
                 {cities.map((c) => <option key={c.name} value={c.name}>{c.name} ({c.count})</option>)}
               </Select>
+              <Select value={listFilter} onChange={(e) => setListFilter(e.target.value)} className="w-auto min-w-[120px]" title="Filter by list">
+                <option value="">All lists</option>
+                {lists.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.count})</option>)}
+              </Select>
               <label className="flex items-center gap-2 text-sm text-muted-foreground">
                 <input type="checkbox" checked={hasEmail} onChange={(e) => setHasEmail(e.target.checked)} className="accent-[hsl(var(--primary))]" /> Has email
               </label>
@@ -908,20 +1004,23 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
           </CardContent>
         </Card>
 
-        {/* Bulk report bar — shows the credit cost before charging */}
+        {/* Bulk action bar — add to a list, or generate reports (with credit cost) */}
         {selectedCount > 0 && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-primary/40 bg-primary/5 px-4 py-2.5 text-sm">
             <span className="font-medium">{selectedCount} selected</span>
-            <span className="text-muted-foreground">
-              Reports cost {REPORT_COST} credits each — {selectedCount} × {REPORT_COST} = <strong className="text-foreground">{selectedCost} credits</strong>
-              {credits != null && <> · balance {credits}</>}
-            </span>
-            {notEnoughCredits && <span className="font-medium text-red-600">Not enough credits</span>}
+            {reportableCount > 0 && (
+              <span className="text-muted-foreground">
+                Reports: {reportableCount} × {REPORT_COST} = <strong className="text-foreground">{reportCost} credits</strong>
+                {credits != null && <> · balance {credits}</>}
+                {notEnoughCredits && <span className="ml-2 font-medium text-red-600">Not enough credits</span>}
+              </span>
+            )}
             <div className="ml-auto flex items-center gap-2">
               <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>Clear</Button>
-              <Button size="sm" disabled={bulkBusy || notEnoughCredits} onClick={bulkReport}>
+              <Button variant="outline" size="sm" onClick={() => setListDialog({ ids: [...selected] })}><ListPlus size={15} /> Add to list</Button>
+              <Button size="sm" disabled={bulkBusy || reportableCount === 0 || notEnoughCredits} onClick={bulkReport}>
                 {bulkBusy ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
-                Generate {selectedCount} report{selectedCount === 1 ? "" : "s"}
+                Generate {reportableCount} report{reportableCount === 1 ? "" : "s"}
               </Button>
             </div>
           </div>
@@ -943,7 +1042,6 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                           type="checkbox"
                           aria-label={`Select ${lead.name || "lead"}`}
                           checked={selected.has(lead.id)}
-                          disabled={!lead.website}
                           onClick={(e) => e.stopPropagation()}
                           onChange={() => toggleSelect(lead.id)}
                           className="mt-0.5 accent-[hsl(var(--primary))]"
@@ -969,7 +1067,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                       <ChatbotBadge lead={lead} />
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-border/60 pt-2">
-                      <QuickLeadActions lead={lead} onPatch={patchLead} compact />
+                      <QuickLeadActions lead={lead} onPatch={patchLead} onLists={(l) => setListDialog({ lead: l })} compact />
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-1">
                       <RowActions
@@ -1021,10 +1119,9 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                             type="checkbox"
                             aria-label={`Select ${lead.name || "lead"}`}
                             checked={selected.has(lead.id)}
-                            disabled={!lead.website}
                             onChange={() => toggleSelect(lead.id)}
                             className="accent-[hsl(var(--primary))]"
-                            title={lead.website ? "Select for bulk report" : "No website to report on"}
+                            title="Select lead"
                           />
                         </TableCell>
                         <TableCell>
@@ -1068,7 +1165,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                           {lead.country ? <div>{lead.country}</div> : null}
                         </TableCell>
                         <TableCell>
-                          <QuickLeadActions lead={lead} onPatch={patchLead} compact />
+                          <QuickLeadActions lead={lead} onPatch={patchLead} onLists={(l) => setListDialog({ lead: l })} compact />
                           <RowActions
                             lead={lead}
                             busy={{ enrich: busy[`${lead.id}:enrich`], whatsapp: busy[`${lead.id}:whatsapp`], remove: busy[`${lead.id}:remove`], status: busy[`${lead.id}:status`], chatbot: busy[`${lead.id}:chatbot`] }}
@@ -1099,6 +1196,16 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
       </div>
 
       {reportLead && <ReportModal lead={reportLead} onClose={() => setReportLead(null)} />}
+      {listDialog && (
+        <ListsDialog
+          lead={listDialog.lead}
+          ids={listDialog.ids}
+          lists={lists}
+          onClose={() => setListDialog(null)}
+          onSavedLead={mergeLead}
+          onChanged={load}
+        />
+      )}
       {active && (
         <LeadDrawer
           lead={active}

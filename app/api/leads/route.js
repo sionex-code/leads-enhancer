@@ -8,7 +8,7 @@ export async function GET(request) {
   if (response) return response;
   const { searchParams } = new URL(request.url);
   const country = searchParams.get("country") || "";
-  const [result, stats, projects, countries, cities] = await Promise.all([
+  const [result, stats, projects, countries, cities, lists] = await Promise.all([
     db.queryLeads(userId, {
       search: searchParams.get("search") || "",
       hasEmail: searchParams.get("hasEmail") === "1",
@@ -21,6 +21,7 @@ export async function GET(request) {
       outreachStatus: searchParams.get("outreachStatus") || "",
       watchlist: searchParams.get("watchlist") === "1",
       contactList: searchParams.get("contactList") === "1",
+      list: searchParams.get("list") || "",
       limit: Number(searchParams.get("limit") || 2000),
       offset: Number(searchParams.get("offset") || 0),
     }),
@@ -28,8 +29,9 @@ export async function GET(request) {
     db.listProjectNames(userId),
     db.listCountries(userId),
     db.listCities(userId, country),
+    db.listLists(userId),
   ]);
-  return Response.json({ ...result, stats, projects, countries, cities });
+  return Response.json({ ...result, stats, projects, countries, cities, lists });
 }
 
 export async function POST(request) {

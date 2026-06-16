@@ -59,6 +59,22 @@ const STATEMENTS = [
    )`,
   `CREATE INDEX IF NOT EXISTS idx_enrichment_cache_phone ON enrichment_cache (phone)`,
 
+  // ---- named lead lists (per-tenant, many-to-many) ----
+  `CREATE TABLE IF NOT EXISTS lists (
+     id serial PRIMARY KEY,
+     user_id text NOT NULL,
+     name text NOT NULL,
+     created_at text NOT NULL
+   )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_lists_user_name ON lists (user_id, lower(name))`,
+  `CREATE TABLE IF NOT EXISTS list_members (
+     list_id integer NOT NULL,
+     lead_id integer NOT NULL,
+     added_at text NOT NULL,
+     PRIMARY KEY (list_id, lead_id)
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_list_members_lead ON list_members (lead_id)`,
+
   // sensible defaults for the free monthly grant (only inserted if absent)
   `INSERT INTO app_settings (key, value, updated_at)
      VALUES ('free_monthly_credits_enabled', '1', now()::text)

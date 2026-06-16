@@ -262,6 +262,7 @@ async function queryLeads(
     outreachStatus = "",
     watchlist = false,
     contactList = false,
+    list = "",
     limit = 2000,
     offset = 0,
   } = {}
@@ -290,6 +291,9 @@ async function queryLeads(
   }
   if (watchlist) where.push("watchlist = 1");
   if (contactList) where.push("contact_list = 1");
+  // Membership in a specific named list (leads are already user-scoped above, so an
+  // arbitrary list_id can only ever match this user's own leads).
+  if (list) where.push(`id IN (SELECT lead_id FROM list_members WHERE list_id = ${add(Number(list))})`);
   if (emailStatus) where.push(`email_status = ${add(emailStatus)}`);
   if (outreachStatus) where.push(`outreach_status = ${add(outreachStatus)}`);
   if (workflow === "watchlist") where.push("watchlist = 1");
@@ -310,10 +314,74 @@ async function queryLeads(
   const limP = add(Number(limit));
   const offP = add(Number(offset));
   const rowsRes = await q(
-    `SELECT * FROM leads ${clause} ORDER BY last_updated DESC LIMIT ${limP} OFFSET ${offP}`,
+    `SELECT *,
+            (SELECT COUNT(*)::int FROM list_members m JOIN lists l2 ON l2.id = m.list_id AND l2.user_id = $1
+              WHERE m.lead_id = leads.id) AS list_count
+       FROM leads ${clause} ORDER BY last_updated DESC LIMIT ${limP} OFFSET ${offP}`,
     params
   );
   return { total, rows: rowsRes.rows };
+}
+
+// ---- named lists (per-tenant, many-to-many via list_members) -----------------
+async function listLists(userId) {
+  const { rows } = await q(
+    `SELECT l.id, l.name, l.created_at,
+            (SELECT COUNT(*)::int FROM list_members m WHERE m.list_id = l.id) AS count
+       FROM lists l WHERE l.user_id = $1 ORDER BY lower(l.name)`,
+    [userId]
+  );
+  return rows;
+}
+
+// Create (or return existing, case-insensitive) named list for this user.
+async function createList(userId, name) {
+  const clean = String(name || "").trim().slice(0, 80);
+  if (!clean) throw new Error("List name is required");
+  await q(
+    `INSERT INTO lists (user_id, name, created_at) VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, lower(name)) DO NOTHING`,
+    [userId, clean, now()]
+  );
+  const { rows } = await q(`SELECT id, name, created_at FROM lists WHERE user_id = $1 AND lower(name) = lower($2)`, [userId, clean]);
+  return rows[0];
+}
+
+// List ids (owned by this user) a lead currently belongs to.
+async function getLeadListIds(userId, leadId) {
+  const { rows } = await q(
+    `SELECT m.list_id FROM list_members m
+       JOIN lists l ON l.id = m.list_id AND l.user_id = $1
+      WHERE m.lead_id = $2`,
+    [userId, Number(leadId)]
+  );
+  return rows.map((r) => r.list_id);
+}
+
+// Replace a lead's membership with exactly `listIds` (this user's own lists only).
+// Named lists are an independent dimension — contact_list / outreach are untouched.
+async function setLeadLists(userId, leadId, listIds) {
+  const id = Number(leadId);
+  const { rows: owned } = await q(`SELECT id FROM lists WHERE user_id = $1`, [userId]);
+  const ownedSet = new Set(owned.map((r) => r.id));
+  const want = [...new Set((listIds || []).map(Number).filter((x) => ownedSet.has(x)))];
+  await q(`DELETE FROM list_members WHERE lead_id = $1 AND list_id IN (SELECT id FROM lists WHERE user_id = $2)`, [id, userId]);
+  for (const lid of want) {
+    await q(`INSERT INTO list_members (list_id, lead_id, added_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, [lid, id, now()]);
+  }
+  return want;
+}
+
+// Add many of this user's leads to one of their lists. Returns the count added.
+async function addLeadsToList(userId, listId, leadIds) {
+  const { rows: own } = await q(`SELECT id FROM lists WHERE id = $1 AND user_id = $2`, [Number(listId), userId]);
+  if (!own[0]) throw new Error("List not found");
+  const { rows: leads } = await q(`SELECT id FROM leads WHERE user_id = $1 AND id = ANY($2::int[])`, [userId, (leadIds || []).map(Number)]);
+  const ids = leads.map((r) => r.id);
+  for (const lid of ids) {
+    await q(`INSERT INTO list_members (list_id, lead_id, added_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, [Number(listId), lid, now()]);
+  }
+  return ids.length;
 }
 
 async function getLead(userId, id) {
@@ -549,4 +617,9 @@ module.exports = {
   listCities,
   statsLeads,
   exportCsv,
+  listLists,
+  createList,
+  getLeadListIds,
+  setLeadLists,
+  addLeadsToList,
 };
