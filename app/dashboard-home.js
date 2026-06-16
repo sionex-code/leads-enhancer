@@ -860,34 +860,35 @@ export default function Dashboard({ view = "" }) {
       )}
       <div className="space-y-1">
         {projects.map((project) => (
-          <button
+          <div
             key={project.slug}
+            role="button"
+            tabIndex={0}
             onClick={() => setSelected(project.slug)}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelected(project.slug); } }}
             className={cn(
-              "flex w-full items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors",
+              "flex w-full cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors",
               project.slug === selected ? "border-primary/50 bg-primary/10" : "border-transparent hover:bg-accent"
             )}
           >
             <span className="min-w-0 flex-1">
               <span className="flex items-center gap-1.5 truncate text-sm font-medium">
                 {project.running && <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-emerald-500" title="Running" />}
-                {project.watchlist && <Star size={12} className="shrink-0 text-amber-600" fill="currentColor" />}
                 <span className="truncate">{project.name}</span>
               </span>
               <span className="text-[11px] text-muted-foreground">
                 <AnimatedNumber value={project.counts?.raw || 0} /> leads · {project.counts?.desktopAudits || 0}/{project.counts?.mobileAudits || 0} audits
               </span>
             </span>
-            <span
-              role="button"
-              tabIndex={-1}
+            <button
+              type="button"
               onClick={(e) => { e.stopPropagation(); toggleProjectWatch(project); }}
-              className={cn("shrink-0 pt-0.5", project.watchlist ? "text-amber-600" : "text-muted-foreground hover:text-amber-600")}
+              className={cn("shrink-0 pt-0.5", project.watchlist ? "text-amber-500" : "text-muted-foreground hover:text-amber-500")}
               title={project.watchlist ? "Remove from favorites" : "Add to favorites"}
             >
-              <Star size={14} fill={project.watchlist ? "currentColor" : "none"} />
-            </span>
-          </button>
+              <Star size={16} fill={project.watchlist ? "currentColor" : "none"} />
+            </button>
+          </div>
         ))}
         {!projects.length && <div className="px-2.5 text-sm text-muted-foreground">No projects yet</div>}
       </div>
