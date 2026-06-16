@@ -15,7 +15,8 @@ const PLAN_QUOTAS = { p19: 5000, p35: 50000, p49: null }; // null = unlimited
 const PLAN_PRICES = { p19: 19, p35: 35, p49: 49 };
 const PLAN_CREDITS = { p19: 500, p35: 1500, p49: 4000 }; // monthly report credits
 const PLAN_LABELS = { p19: "Starter", p35: "Growth", p49: "Scale" };
-const REPORT_COST = 10; // credits per website report
+const REPORT_COST = 10; // credits per full website report (audit + AI + chatbot)
+const AUDIT_COST = 3; // credits per quick audit (desktop + mobile Lighthouse scores only)
 
 const now = () => new Date().toISOString();
 const monthKey = (iso) => (iso ? String(iso).slice(0, 7) : ""); // YYYY-MM
@@ -315,6 +316,7 @@ module.exports = {
   PLAN_CREDITS,
   PLAN_LABELS,
   REPORT_COST,
+  AUDIT_COST,
   planFromWhopId,
   quotaForPlan,
   getSetting,
