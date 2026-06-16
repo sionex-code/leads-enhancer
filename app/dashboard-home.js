@@ -10,7 +10,6 @@ import { useMe } from "./components/AccountWidget";
 import { QUICK_COUNTRIES, QUICK_SERVICES } from "./lib/quickSearchData";
 import {
   BarChart3,
-  Brush,
   Clock3,
   FileText,
   Globe2,
@@ -874,7 +873,7 @@ export default function Dashboard({ view = "" }) {
               tabIndex={-1}
               onClick={(e) => { e.stopPropagation(); toggleProjectWatch(project); }}
               className={cn("shrink-0 pt-0.5", project.watchlist ? "text-amber-600" : "text-muted-foreground hover:text-amber-600")}
-              title={project.watchlist ? "Remove from watch list" : "Add to watch list"}
+              title={project.watchlist ? "Remove from favorites" : "Add to favorites"}
             >
               <Star size={14} fill={project.watchlist ? "currentColor" : "none"} />
             </span>
@@ -905,9 +904,9 @@ export default function Dashboard({ view = "" }) {
         className={cn(selectedProject?.watchlist && "border-amber-500/50 text-amber-600")}
         disabled={!selectedProject}
         onClick={() => toggleProjectWatch()}
-        title={selectedProject?.watchlist ? "Remove project from watch list" : "Add project to watch list"}
+        title={selectedProject?.watchlist ? "Remove project from favorites" : "Add project to favorites"}
       >
-        <Star size={15} fill={selectedProject?.watchlist ? "currentColor" : "none"} /> <span className="hidden sm:inline">Watch</span>
+        <Star size={15} fill={selectedProject?.watchlist ? "currentColor" : "none"} /> <span className="hidden sm:inline">Favorite</span>
       </Button>
       <Button variant="destructive" size="sm" disabled={!!busy || running || !selected} onClick={() => projectAction("delete")}>
         <Trash2 size={15} /> <span className="hidden sm:inline">Delete</span>
@@ -980,7 +979,6 @@ export default function Dashboard({ view = "" }) {
               <Button variant="destructive" disabled={!!busy || runningCount === 0} onClick={stopAllProjects} title="Stop every running project and any audit/Chrome processes still running in the background">
                 <OctagonX size={16} /> Stop all{runningCount > 0 ? ` (${runningCount})` : ""}
               </Button>
-              <Button variant="outline" disabled={!!busy || !selected} onClick={() => projectAction("cleanup")}><Brush size={16} /> Clean browser</Button>
               {status?.files?.report && (
                 <Button asChild variant="outline">
                   <a href={`${BASE_PATH}/api/projects/${encodeURIComponent(selected)}/report`} target="_blank" rel="noreferrer"><Globe2 size={16} /> Open report</a>
@@ -1065,7 +1063,7 @@ export default function Dashboard({ view = "" }) {
                     </div>
                     <div className="mt-2"><Socials lead={lead} /></div>
                     <div className="mt-2 flex flex-wrap items-center gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => addCapturedLead(lead, "watchlist")} title="Add to watch list"><Star size={14} /> Watch</Button>
+                      <Button variant="ghost" size="sm" onClick={() => addCapturedLead(lead, "watchlist")} title="Add to favorites"><Star size={14} /> Favorite</Button>
                       <Button variant="ghost" size="sm" onClick={() => addCapturedLead(lead, "contact_list")} title="Add to custom list with notes"><ListPlus size={14} /> List</Button>
                       <CapturedActions lead={lead} busy={rowBusy[leadKey(lead)] || {}} onEnrich={enrichCaptured} onWhatsapp={whatsappCaptured} onReport={reportCaptured} onRemove={hideCaptured} />
                     </div>
@@ -1112,7 +1110,7 @@ export default function Dashboard({ view = "" }) {
                         <TableCell><div className="flex flex-wrap gap-1"><Score label="Perf" value={lead.mobile?.performance} /><Score label="SEO" value={lead.mobile?.seo} /></div></TableCell>
                         <TableCell>
                           <div className="flex flex-wrap items-center gap-0.5">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => addCapturedLead(lead, "watchlist")} title="Add to watch list"><Star size={14} /></Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => addCapturedLead(lead, "watchlist")} title="Add to favorites"><Star size={14} /></Button>
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => addCapturedLead(lead, "contact_list")} title="Add to custom list with notes"><ListPlus size={14} /></Button>
                             <CapturedActions lead={lead} busy={rowBusy[leadKey(lead)] || {}} onEnrich={enrichCaptured} onWhatsapp={whatsappCaptured} onReport={reportCaptured} onRemove={hideCaptured} />
                           </div>

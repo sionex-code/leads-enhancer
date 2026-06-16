@@ -26,7 +26,7 @@ const NEW_SEARCH = { key: "new", label: "New search", href: "/dashboard", icon: 
 const PROJECT_NAV = [
   { key: "dashboard", label: "Projects", href: "/dashboard?view=projects", icon: LayoutGrid },
   { key: "leads", label: "Leads", href: "/leads", icon: Database },
-  { key: "watchlist", label: "Watch list", href: "/watchlist", icon: Star },
+  { key: "watchlist", label: "Favorites", href: "/watchlist", icon: Star },
 ];
 const FOOTER_NAV = [{ key: "billing", label: "Billing", href: "/billing", icon: CreditCard }];
 

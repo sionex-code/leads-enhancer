@@ -43,7 +43,7 @@ const REPORT_COST = 10; // credits per website report (mirrors billing.REPORT_CO
 const WORKFLOWS = [
   // "All leads" tab intentionally hidden for the SaaS launch.
   { key: "needs-action", label: "Needs action" },
-  { key: "watchlist", label: "Watch" },
+  { key: "watchlist", label: "Favorites" },
   { key: "contacts", label: "Custom list" },
   { key: "email-ready", label: "Email ready" },
   { key: "queued", label: "Queued" },
@@ -203,7 +203,7 @@ function QuickLeadActions({ lead, onPatch, compact = false }) {
   const iconSize = 15;
   return (
     <div className="flex flex-wrap items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
-      <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.watchlist && "text-amber-600")} disabled={busy} onClick={() => onPatch(lead.id, { watchlist: !lead.watchlist })} title={lead.watchlist ? "Remove from watch list" : "Add to watch list"}>
+      <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.watchlist && "text-amber-500")} disabled={busy} onClick={() => onPatch(lead.id, { watchlist: !lead.watchlist })} title={lead.watchlist ? "Remove from favorites" : "Add to favorites"}>
         <Star size={iconSize} fill={lead.watchlist ? "currentColor" : "none"} />
       </Button>
       <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.contact_list && "text-primary")} disabled={busy} onClick={() => onPatch(lead.id, { contact_list: !lead.contact_list })} title={lead.contact_list ? "Remove from custom list" : "Add to custom list"}>
@@ -370,7 +370,7 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot }) 
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <WorkflowBadge lead={lead} />
               <EmailBadge status={lead.email_status} />
-              {lead.watchlist ? <Pill tone="watch"><Star size={12} fill="currentColor" /> Watch</Pill> : null}
+              {lead.watchlist ? <Pill tone="watch"><Star size={12} fill="currentColor" /> Favorite</Pill> : null}
               {lead.contact_list ? <Pill tone="contact"><Users size={12} /> List</Pill> : null}
             </div>
           </div>
@@ -381,7 +381,7 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot }) 
             <div className="grid grid-cols-2 gap-2">
               <button className={cn("flex flex-col items-center gap-1 rounded-lg border p-3 text-sm transition-colors", lead.watchlist ? "border-amber-500/50 bg-amber-500/10 text-amber-600" : "border-border hover:bg-accent")} onClick={() => patch({ watchlist: !lead.watchlist })}>
                 <Star size={16} fill={lead.watchlist ? "currentColor" : "none"} />
-                <span>Watch list</span>
+                <span>Favorites</span>
               </button>
               <button className={cn("flex flex-col items-center gap-1 rounded-lg border p-3 text-sm transition-colors", lead.contact_list ? "border-primary/50 bg-primary/10 text-primary" : "border-border hover:bg-accent")} onClick={() => patch({ contact_list: !lead.contact_list })}>
                 <ListPlus size={16} />
@@ -707,7 +707,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
   }, [workflow, patchLead, active?.id, setBusyKey]);
 
   const removeTitle = workflow === "watchlist"
-    ? "Remove from watch list"
+    ? "Remove from favorites"
     : workflow === "contacts"
       ? "Remove from custom list"
       : "Delete lead permanently";
@@ -787,7 +787,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
 
   const statTiles = [
     ["Total", stats?.total || 0, ""],
-    ["Watch", stats?.watchlist || 0, "watchlist"],
+    ["Favorites", stats?.watchlist || 0, "watchlist"],
     ["Custom list", stats?.contactList || 0, "contacts"],
     ["Email ready", stats?.emailReady || 0, "email-ready"],
     ["Queued", stats?.queued || 0, "queued"],
@@ -864,7 +864,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
               </div>
               <Input className="lg:w-40" placeholder="Lead name" value={manualName} onChange={(e) => setManualName(e.target.value)} />
               <Input className="lg:w-40" placeholder="Notes" value={manualNotes} onChange={(e) => setManualNotes(e.target.value)} />
-              <Button variant="outline" disabled={!manualSite.trim() || !!adding} onClick={() => addManualLead("watchlist")}><Star size={15} /> Watch</Button>
+              <Button variant="outline" disabled={!manualSite.trim() || !!adding} onClick={() => addManualLead("watchlist")}><Star size={15} /> Favorite</Button>
               <Button disabled={!manualSite.trim() || !!adding} onClick={() => addManualLead("contact_list")}><ListPlus size={15} /> List</Button>
             </div>
 
@@ -955,7 +955,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       <WorkflowBadge lead={lead} />
                       <EmailBadge status={lead.email_status} />
-                      {lead.watchlist ? <Pill tone="watch"><Star size={12} fill="currentColor" /> Watch</Pill> : null}
+                      {lead.watchlist ? <Pill tone="watch"><Star size={12} fill="currentColor" /> Favorite</Pill> : null}
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
                       {lead.phone && <span>{lead.phone}</span>}
@@ -1043,7 +1043,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                         <TableCell>
                           <div className="flex flex-wrap items-center gap-1">
                             <WorkflowBadge lead={lead} />
-                            {lead.watchlist ? <Pill tone="watch"><Star size={12} fill="currentColor" /> Watch</Pill> : null}
+                            {lead.watchlist ? <Pill tone="watch"><Star size={12} fill="currentColor" /> Favorite</Pill> : null}
                             {lead.contact_list ? <Pill tone="contact"><Users size={12} /> List</Pill> : null}
                           </div>
                         </TableCell>
