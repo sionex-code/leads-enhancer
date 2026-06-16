@@ -718,7 +718,17 @@ export default function Dashboard({ view = "" }) {
         ? prompt("Notes for this custom list item", lead.notes || "")
         : "";
     if (notes === null) return;
-    setBusy(target === "watchlist" ? "Adding watch" : "Adding list");
+    // Captured rows have no saved favorite/list state, so light the icon up via the
+    // row overlay immediately and confirm with a toast — the POST is a slow round-trip
+    // and waiting for it felt like nothing happened. Revert the flag if the save fails.
+    const key = leadKey(lead);
+    const flag = target === "watchlist" ? "__favorited" : "__listed";
+    setRowOverlay((o) => ({ ...o, [key]: { ...(o[key] || {}), [flag]: true } }));
+    showToast(
+      target === "watchlist"
+        ? `★ Added “${lead.name || "lead"}” to favorites`
+        : `Added “${lead.name || "lead"}” to your list`
+    );
     setError("");
     try {
       await jsonFetch("/api/leads", {
@@ -751,9 +761,9 @@ export default function Dashboard({ view = "" }) {
         }),
       });
     } catch (err) {
+      setRowOverlay((o) => ({ ...o, [key]: { ...(o[key] || {}), [flag]: false } }));
       setError(err.message);
-    } finally {
-      setBusy("");
+      showToast("Couldn't add — try again");
     }
   }
 
@@ -1104,8 +1114,8 @@ export default function Dashboard({ view = "" }) {
                     </div>
                     <div className="mt-2"><Socials lead={lead} /></div>
                     <div className="mt-2 flex flex-wrap items-center gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => addCapturedLead(lead, "watchlist")} title="Add to favorites"><Star size={14} /> Favorite</Button>
-                      <Button variant="ghost" size="sm" onClick={() => addCapturedLead(lead, "contact_list")} title="Add to custom list with notes"><ListPlus size={14} /> List</Button>
+                      <Button variant="ghost" size="sm" className={cn(lead.__favorited && "text-amber-500")} onClick={() => addCapturedLead(lead, "watchlist")} title={lead.__favorited ? "Added to favorites" : "Add to favorites"}><Star size={14} fill={lead.__favorited ? "currentColor" : "none"} /> Favorite</Button>
+                      <Button variant="ghost" size="sm" className={cn(lead.__listed && "text-primary")} onClick={() => addCapturedLead(lead, "contact_list")} title="Add to custom list with notes"><ListPlus size={14} /> List</Button>
                       <CapturedActions lead={lead} busy={rowBusy[leadKey(lead)] || {}} onEnrich={enrichCaptured} onWhatsapp={whatsappCaptured} onReport={reportCaptured} onRemove={hideCaptured} />
                     </div>
                   </div>
@@ -1151,8 +1161,8 @@ export default function Dashboard({ view = "" }) {
                         <TableCell><div className="flex flex-wrap gap-1"><Score label="Perf" value={lead.mobile?.performance} /><Score label="SEO" value={lead.mobile?.seo} /></div></TableCell>
                         <TableCell>
                           <div className="flex flex-wrap items-center gap-0.5">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => addCapturedLead(lead, "watchlist")} title="Add to favorites"><Star size={14} /></Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => addCapturedLead(lead, "contact_list")} title="Add to custom list with notes"><ListPlus size={14} /></Button>
+                            <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.__favorited && "text-amber-500")} onClick={() => addCapturedLead(lead, "watchlist")} title={lead.__favorited ? "Added to favorites" : "Add to favorites"}><Star size={14} fill={lead.__favorited ? "currentColor" : "none"} /></Button>
+                            <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.__listed && "text-primary")} onClick={() => addCapturedLead(lead, "contact_list")} title="Add to custom list with notes"><ListPlus size={14} /></Button>
                             <CapturedActions lead={lead} busy={rowBusy[leadKey(lead)] || {}} onEnrich={enrichCaptured} onWhatsapp={whatsappCaptured} onReport={reportCaptured} onRemove={hideCaptured} />
                           </div>
                         </TableCell>
