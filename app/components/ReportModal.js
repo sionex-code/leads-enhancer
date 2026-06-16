@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "./ui/button";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
+const REPORT_COST = 10; // credits per report (mirrors billing.REPORT_COST)
 
 async function jsonFetch(url, options = {}) {
   const res = await fetch(`${BASE_PATH}${url}`, {
@@ -72,6 +73,7 @@ export default function ReportModal({ lead, onClose }) {
             <DialogDescription className="truncate">{lead.domain || lead.website}</DialogDescription>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            <span className="hidden text-xs text-muted-foreground sm:inline" title="Each report costs credits">{REPORT_COST} credits</span>
             <Button size="sm" disabled={!lead.website || generating} onClick={generate}>
               {generating ? <><Loader2 size={14} className="animate-spin" /> Generating…</> : <><FileText size={14} /> {reports.length ? "Regenerate" : "Generate"}</>}
             </Button>

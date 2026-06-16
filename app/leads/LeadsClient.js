@@ -38,6 +38,7 @@ import { cn } from "../lib/utils";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 const PAGE_SIZE = 120;
+const REPORT_COST = 10; // credits per website report (mirrors billing.REPORT_COST)
 
 const WORKFLOWS = [
   // "All leads" tab intentionally hidden for the SaaS launch.
@@ -474,7 +475,7 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot }) 
           </DrawerCard>
 
           <DrawerCard title="Independent report">
-            <p className="text-xs text-muted-foreground">Fast real-Chrome audit (desktop + mobile): speed, layout, mobile, SEO, security, support-chat, summarized by AI, with the raw report attached.</p>
+            <p className="text-xs text-muted-foreground">Fast real-Chrome audit (desktop + mobile): speed, layout, mobile, SEO, security, support-chat, summarized by AI, with the raw report attached. <span className="font-medium text-foreground">Costs {REPORT_COST} credits.</span></p>
             <div className="mt-2 space-y-1.5">
               {reports.map((r) => (
                 <a key={r.file} className="flex items-center gap-2 text-sm text-primary hover:underline" href={`${BASE_PATH}/api/agent/reports/${r.file}`} target="_blank" rel="noreferrer">
@@ -540,6 +541,19 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
   const [manualName, setManualName] = useState("");
   const [manualNotes, setManualNotes] = useState("");
   const [adding, setAdding] = useState("");
+  // Bulk report selection + the user's live credit balance (for the cost warning).
+  const [selected, setSelected] = useState(() => new Set());
+  const [credits, setCredits] = useState(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  const toggleSelect = useCallback((id) => {
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }, []);
 
   const mergeLead = useCallback((lead) => {
     setRows((current) => current.map((row) => (row.id === lead.id ? lead : row)));
@@ -617,6 +631,43 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
     }
   }, [rows, mergeLead]);
 
+  // Keep a live credit balance for the bulk-report cost warning.
+  useEffect(() => {
+    let alive = true;
+    jsonFetch("/api/me").then((d) => { if (alive) setCredits(d?.entitlement?.credits ?? null); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  const refreshCredits = useCallback(() => {
+    jsonFetch("/api/me").then((d) => setCredits(d?.entitlement?.credits ?? null)).catch(() => {});
+  }, []);
+
+  // Generate website reports for the selected leads. Charges REPORT_COST each;
+  // confirms cost vs. balance first, then runs them as background jobs.
+  const bulkReport = useCallback(async () => {
+    const ids = rows.filter((r) => r.website && selected.has(r.id)).map((r) => r.id);
+    if (!ids.length) return;
+    const cost = ids.length * REPORT_COST;
+    const have = credits ?? 0;
+    if (cost > have) {
+      alert(`Not enough credits. ${ids.length} report(s) need ${cost} credits and you have ${have}. Reduce your selection or top up in Billing.`);
+      return;
+    }
+    if (!confirm(`Generate ${ids.length} website report(s)?\n\nThis will use ${cost} credits (${ids.length} × ${REPORT_COST}). You have ${have}, leaving ${have - cost}.`)) return;
+    setBulkBusy(true);
+    try {
+      const data = await jsonFetch("/api/leads/report/bulk", { method: "POST", body: JSON.stringify({ ids }) });
+      if (typeof data.credits === "number") setCredits(data.credits);
+      setSelected(new Set());
+      alert(`Started ${data.count} report(s) — ${data.charged} credits charged. They run in the background; open a lead to watch progress and download the report.`);
+    } catch (err) {
+      refreshCredits();
+      alert(err.message);
+    } finally {
+      setBulkBusy(false);
+    }
+  }, [rows, selected, credits, refreshCredits]);
+
   const checkWhatsapp = useCallback(async (lead) => {
     const key = `${lead.id}:whatsapp`;
     setBusyKey(key, true);
@@ -663,6 +714,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
 
   const load = useCallback(async () => {
     setLoading(true);
+    setSelected(new Set()); // selection is scoped to the current page/filter view
     try {
       const params = new URLSearchParams();
       if (search) params.set("search", search);
@@ -745,6 +797,21 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
   const pageStart = total && rows.length ? page * PAGE_SIZE + 1 : 0;
   const pageEnd = total && rows.length ? page * PAGE_SIZE + rows.length : 0;
   const hasNextPage = rows.length > 0 && pageEnd < total;
+
+  // Bulk-selection derived values (scoped to the current page's rows with a website).
+  const selectableIds = rows.filter((r) => r.website).map((r) => r.id);
+  const selectedCount = selectableIds.filter((id) => selected.has(id)).length;
+  const selectedCost = selectedCount * REPORT_COST;
+  const allSelected = selectableIds.length > 0 && selectedCount === selectableIds.length;
+  const notEnoughCredits = credits != null && selectedCost > credits;
+  const toggleSelectAll = () => {
+    setSelected((s) => {
+      const n = new Set(s);
+      if (selectableIds.every((id) => n.has(id))) selectableIds.forEach((id) => n.delete(id));
+      else selectableIds.forEach((id) => n.add(id));
+      return n;
+    });
+  };
 
   // Stat tiles rendered into the sidebar (AppShell sidebarExtra slot).
   const sidebarStats = stats ? (
@@ -841,6 +908,25 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
           </CardContent>
         </Card>
 
+        {/* Bulk report bar — shows the credit cost before charging */}
+        {selectedCount > 0 && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-primary/40 bg-primary/5 px-4 py-2.5 text-sm">
+            <span className="font-medium">{selectedCount} selected</span>
+            <span className="text-muted-foreground">
+              Reports cost {REPORT_COST} credits each — {selectedCount} × {REPORT_COST} = <strong className="text-foreground">{selectedCost} credits</strong>
+              {credits != null && <> · balance {credits}</>}
+            </span>
+            {notEnoughCredits && <span className="font-medium text-red-600">Not enough credits</span>}
+            <div className="ml-auto flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>Clear</Button>
+              <Button size="sm" disabled={bulkBusy || notEnoughCredits} onClick={bulkReport}>
+                {bulkBusy ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
+                Generate {selectedCount} report{selectedCount === 1 ? "" : "s"}
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Table / cards */}
         <Card className="overflow-hidden">
           {!rows.length ? (
@@ -852,7 +938,18 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                 {rows.map((lead) => (
                   <div className="cursor-pointer rounded-lg border border-border bg-card/60 p-3" key={`m-${lead.id}`} onClick={() => setActive(lead)}>
                     <div className="flex items-start justify-between gap-2">
-                      <strong className="text-sm font-medium">{lead.name || "Unknown"}</strong>
+                      <div className="flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${lead.name || "lead"}`}
+                          checked={selected.has(lead.id)}
+                          disabled={!lead.website}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={() => toggleSelect(lead.id)}
+                          className="mt-0.5 accent-[hsl(var(--primary))]"
+                        />
+                        <strong className="text-sm font-medium">{lead.name || "Unknown"}</strong>
+                      </div>
                       <span className="text-xs text-muted-foreground">{lead.category || lead.address || lead.project || ""}</span>
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -896,6 +993,16 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-8">
+                        <input
+                          type="checkbox"
+                          aria-label="Select all leads with a website"
+                          checked={allSelected}
+                          disabled={!selectableIds.length}
+                          onChange={toggleSelectAll}
+                          className="accent-[hsl(var(--primary))]"
+                        />
+                      </TableHead>
                       <TableHead>Lead</TableHead>
                       <TableHead>Contact</TableHead>
                       <TableHead>Workflow</TableHead>
@@ -909,6 +1016,17 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                   <TableBody>
                     {rows.map((lead) => (
                       <TableRow key={lead.id} className="cursor-pointer" onClick={() => setActive(lead)}>
+                        <TableCell className="w-8" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${lead.name || "lead"}`}
+                            checked={selected.has(lead.id)}
+                            disabled={!lead.website}
+                            onChange={() => toggleSelect(lead.id)}
+                            className="accent-[hsl(var(--primary))]"
+                            title={lead.website ? "Select for bulk report" : "No website to report on"}
+                          />
+                        </TableCell>
                         <TableCell>
                           <div className="font-medium">{lead.name || "Unknown"}</div>
                           <div className="text-xs text-muted-foreground">{lead.category || lead.address || ""}</div>
