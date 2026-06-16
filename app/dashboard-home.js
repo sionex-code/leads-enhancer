@@ -664,17 +664,27 @@ export default function Dashboard({ view = "" }) {
   async function toggleProjectWatch(project) {
     const item = project || selectedProject;
     if (!item?.slug) return;
+    const next = !item.watchlist;
     setError("");
+    // Flip the star immediately so it responds on click, regardless of how fast the
+    // projects list refetches (a slow/transient reload used to leave the star stale).
+    setProjects((ps) => ps.map((p) => (p.slug === item.slug ? { ...p, watchlist: next } : p)));
     try {
       await jsonFetch(`/api/projects/${encodeURIComponent(item.slug)}`, {
         method: "PATCH",
-        body: JSON.stringify({ watchlist: !item.watchlist }),
+        body: JSON.stringify({ watchlist: next }),
       });
+    } catch (err) {
+      // Only revert if the save itself failed.
+      setProjects((ps) => ps.map((p) => (p.slug === item.slug ? { ...p, watchlist: item.watchlist } : p)));
+      setError(err.message);
+      return;
+    }
+    // Best-effort refresh; don't revert the star if this part hiccups.
+    try {
       await loadProjects();
       if (item.slug === selected) await loadStatus(item.slug);
-    } catch (err) {
-      setError(err.message);
-    }
+    } catch {}
   }
 
   async function addCapturedLead(lead, target) {
