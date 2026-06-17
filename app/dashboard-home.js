@@ -8,6 +8,7 @@ import AnimatedNumber from "./components/AnimatedNumber";
 import ReportModal from "./components/ReportModal";
 import ListsDialog from "./components/leads/ListsDialog";
 import { Socials, WhatsAppBadge } from "./components/leads/social-icons";
+import { balanceTone, TONE_PILL, TONE_TEXT, InsufficientModal } from "./components/leads/credit-ui";
 import { useMe } from "./components/AccountWidget";
 import { QUICK_COUNTRIES, QUICK_SERVICES } from "./lib/quickSearchData";
 import {
@@ -257,6 +258,7 @@ function CreditsPill() {
   const ent = me?.entitlement;
   const remaining = ent?.remaining;
   const unlimited = ent?.active && (remaining === null || ent?.plan === "p49");
+  const tone = balanceTone(remaining, ent?.quota);
   const label = !me
     ? "…"
     : !ent?.active
@@ -270,7 +272,7 @@ function CreditsPill() {
       title="Manage plan & credits"
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors hover:border-primary/50",
-        ent?.active ? "border-border bg-card/60 text-foreground" : "border-amber-500/40 bg-amber-500/10 text-amber-600"
+        ent?.active ? TONE_PILL[tone] : "border-amber-500/40 bg-amber-500/10 text-amber-600"
       )}
     >
       <CreditCard className="h-3.5 w-3.5" /> {label}
@@ -505,6 +507,9 @@ export default function Dashboard({ view = "" }) {
   const [selectedLeads, setSelectedLeads] = useState(() => new Set());
   const [bulkBusy, setBulkBusy] = useState("");
   const [credits, setCredits] = useState(null);
+  const [entitlement, setEntitlement] = useState(null);
+  // Shared "not enough credits / leads" modal (also used for capped-run notices).
+  const [creditModal, setCreditModal] = useState(null);
   // Captured rows being added to a list in bulk — saved to the DB first so they
   // have ids; { ids, keys } drives the shared dialog + the "listed" overlay.
   const [listsBulk, setListsBulk] = useState(null);
@@ -607,15 +612,21 @@ export default function Dashboard({ view = "" }) {
   // the batch poller if the page unmounts mid-run.
   useEffect(() => {
     let alive = true;
-    jsonFetch("/api/me").then((d) => { if (alive) setCredits(d?.entitlement?.credits ?? null); }).catch(() => {});
+    jsonFetch("/api/me").then((d) => { if (alive) { setCredits(d?.entitlement?.credits ?? null); setEntitlement(d?.entitlement ?? null); } }).catch(() => {});
     return () => { alive = false; clearTimeout(batchPollRef.current); };
   }, []);
   function refreshCredits() {
-    jsonFetch("/api/me").then((d) => setCredits(d?.entitlement?.credits ?? null)).catch(() => {});
+    jsonFetch("/api/me").then((d) => { setCredits(d?.entitlement?.credits ?? null); setEntitlement(d?.entitlement ?? null); }).catch(() => {});
   }
 
   async function run(stages, formOverride = form) {
     const runForm = formOverride || form;
+    // Pre-flight: never let a scrape even start once the lead balance is spent
+    // (the server enforces this too, but the modal makes it explicit up front).
+    if (stages.includes("scrape") && entitlement && entitlement.remaining !== null && entitlement.remaining <= 0) {
+      setCreditModal({ title: "Out of leads", message: "You've used all the leads in your current plan.", detail: "Upgrade your plan to find more leads." });
+      return false;
+    }
     setBusy(`Starting ${stages.join(", ")}`);
     setError("");
     setNeedPlan(false);
@@ -632,10 +643,24 @@ export default function Dashboard({ view = "" }) {
       setSelected(data.slug);
       await loadProjects();
       await loadStatus(data.slug);
+      refreshCredits();
+      // The server capped this run to the remaining quota — tell the user so the
+      // smaller-than-requested result isn't a surprise.
+      if (data.capped) {
+        setCreditModal({
+          info: true,
+          title: "Lead limit applied",
+          message: `You have ${Number(data.remaining).toLocaleString()} lead${data.remaining === 1 ? "" : "s"} left, so this run is capped to ${Number(data.max).toLocaleString()}.`,
+          detail: "Upgrade your plan to scrape more in a single run.",
+        });
+      }
       return true;
     } catch (err) {
       setError(err.message);
-      if (err.code === "no_plan" || err.code === "quota_exceeded") setNeedPlan(true);
+      if (err.code === "no_plan" || err.code === "quota_exceeded") {
+        setNeedPlan(true);
+        setCreditModal({ title: err.code === "no_plan" ? "No active plan" : "Out of leads", message: err.message, detail: "Choose a plan to continue finding leads." });
+      }
       return false;
     } finally {
       setBusy("");
@@ -1036,7 +1061,15 @@ export default function Dashboard({ view = "" }) {
     const endpoint = kind === "audit" ? "/api/leads/audit/bulk" : "/api/leads/report/bulk";
     const cost = billable.length * unit;
     const have = credits ?? 0;
-    if (cost > have) { alert(`Not enough credits. ${billable.length} ${noun}(s) need ${cost} credits and you have ${have}.`); return; }
+    if (cost > have) {
+      const affordable = Math.floor(have / unit);
+      setCreditModal({
+        title: "Not enough credits",
+        message: `${billable.length} ${noun}${billable.length === 1 ? "" : "s"} need ${cost} credits, but you have ${have}.`,
+        detail: affordable > 0 ? `Select up to ${affordable} ${noun}${affordable === 1 ? "" : "s"}, or top up your credits.` : "Top up your credits to continue.",
+      });
+      return;
+    }
     if (!confirm(`Run ${billable.length} ${noun}${billable.length === 1 ? "" : "s"}?\n\nThis will use ${cost} credits (${billable.length} × ${unit}). You have ${have}, leaving ${have - cost}.`)) return;
     setBulkBusy(kind);
     try {
@@ -1293,7 +1326,7 @@ export default function Dashboard({ view = "" }) {
             {reportableCount > 0 && (
               <span className="text-muted-foreground">
                 {reportableCount} with site · audit <strong className="text-foreground">{auditCost}</strong> / report <strong className="text-foreground">{reportCost}</strong> credits
-                {credits != null && <> · balance {credits}</>}
+                {credits != null && <> · balance <strong className={TONE_TEXT[balanceTone(credits, entitlement?.creditsAllotment)]}>{credits}</strong></>}
               </span>
             )}
             <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -1426,6 +1459,14 @@ export default function Dashboard({ view = "" }) {
           }}
         />
       )}
+      <InsufficientModal
+        open={!!creditModal}
+        onClose={() => setCreditModal(null)}
+        title={creditModal?.title}
+        message={creditModal?.message}
+        detail={creditModal?.detail}
+        info={creditModal?.info}
+      />
       {listsBulk && (
         <ListsDialog
           ids={listsBulk.ids}

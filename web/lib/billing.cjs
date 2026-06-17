@@ -203,16 +203,20 @@ async function setUserMonthlyCredits(userId, monthly) {
 // membership (credits still work for free accounts).
 async function getEntitlement(userId) {
   const m = await ensureCredits(userId); // also lazily creates the row + grants monthly
+  // creditsAllotment = the per-period credit grant this account is entitled to (a
+  // baseline so the UI can colour the balance as a % of the full grant).
+  const free = await getFreeMonthlyConfig();
+  const creditsAllotment = m ? effectiveMonthly(m, free) : (free.enabled ? free.amount : 0);
   if (!m || m.status !== "active") {
-    return { active: false, plan: null, quota: 0, used: 0, remaining: 0, credits: m ? m.credits || 0 : 0, creditsMonthly: m ? m.credits_monthly : null };
+    return { active: false, plan: null, quota: 0, used: 0, remaining: 0, credits: m ? m.credits || 0 : 0, creditsMonthly: m ? m.credits_monthly : null, creditsAllotment };
   }
   if (m.current_period_end && Date.parse(m.current_period_end) < Date.now()) {
-    return { active: false, plan: m.plan, quota: m.leads_quota, used: m.leads_used, remaining: 0, credits: m.credits || 0, creditsMonthly: m.credits_monthly };
+    return { active: false, plan: m.plan, quota: m.leads_quota, used: m.leads_used, remaining: 0, credits: m.credits || 0, creditsMonthly: m.credits_monthly, creditsAllotment };
   }
   const quota = m.leads_quota; // null = unlimited
   const used = m.leads_used || 0;
   const remaining = quota === null ? null : Math.max(0, quota - used);
-  return { active: true, plan: m.plan, quota, used, remaining, credits: m.credits || 0, creditsMonthly: m.credits_monthly };
+  return { active: true, plan: m.plan, quota, used, remaining, credits: m.credits || 0, creditsMonthly: m.credits_monthly, creditsAllotment };
 }
 
 // Increment leads_used after N new leads are persisted for a user. Safe no-op if

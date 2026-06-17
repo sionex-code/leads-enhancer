@@ -38,6 +38,7 @@ import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Sheet, SheetContent } from "../components/ui/sheet";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/table";
 import { Socials, WhatsAppBadge } from "../components/leads/social-icons";
+import { balanceTone, TONE_TEXT, InsufficientModal } from "../components/leads/credit-ui";
 import { cn } from "../lib/utils";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
@@ -521,6 +522,8 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
   // Bulk selection + the user's live credit balance (for the cost warning).
   const [selected, setSelected] = useState(() => new Set());
   const [credits, setCredits] = useState(null);
+  const [entitlement, setEntitlement] = useState(null);
+  const [creditModal, setCreditModal] = useState(null);
   const [bulkBusy, setBulkBusy] = useState("");
   // Live progress for an in-flight bulk batch — reports OR audits. The card and
   // poller are shared; `kind` ("report" | "audit") just switches the labels.
@@ -645,12 +648,12 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
   // Keep a live credit balance for the bulk-report cost warning.
   useEffect(() => {
     let alive = true;
-    jsonFetch("/api/me").then((d) => { if (alive) setCredits(d?.entitlement?.credits ?? null); }).catch(() => {});
+    jsonFetch("/api/me").then((d) => { if (alive) { setCredits(d?.entitlement?.credits ?? null); setEntitlement(d?.entitlement ?? null); } }).catch(() => {});
     return () => { alive = false; };
   }, []);
 
   const refreshCredits = useCallback(() => {
-    jsonFetch("/api/me").then((d) => setCredits(d?.entitlement?.credits ?? null)).catch(() => {});
+    jsonFetch("/api/me").then((d) => { setCredits(d?.entitlement?.credits ?? null); setEntitlement(d?.entitlement ?? null); }).catch(() => {});
   }, []);
 
   // Poll every job in a bulk batch (reports or audits) and roll the per-job
@@ -699,7 +702,12 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
     const cost = ids.length * unit;
     const have = credits ?? 0;
     if (cost > have) {
-      alert(`Not enough credits. ${ids.length} ${noun}(s) need ${cost} credits and you have ${have}. Reduce your selection or top up in Billing.`);
+      const affordable = Math.floor(have / unit);
+      setCreditModal({
+        title: "Not enough credits",
+        message: `${ids.length} ${noun}${ids.length === 1 ? "" : "s"} need ${cost} credits, but you have ${have}.`,
+        detail: affordable > 0 ? `Select up to ${affordable} ${noun}${affordable === 1 ? "" : "s"}, or top up your credits.` : "Top up your credits to continue.",
+      });
       return;
     }
     if (!confirm(`Run ${ids.length} ${noun}${ids.length === 1 ? "" : "s"}?\n\nThis will use ${cost} credits (${ids.length} × ${unit}). You have ${have}, leaving ${have - cost}.`)) return;
@@ -734,7 +742,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
   const auditOne = useCallback(async (lead) => {
     if (!lead.website) return;
     const have = credits ?? 0;
-    if (AUDIT_COST > have) { alert(`Not enough credits — an audit needs ${AUDIT_COST} and you have ${have}.`); return; }
+    if (AUDIT_COST > have) { setCreditModal({ title: "Not enough credits", message: `An audit needs ${AUDIT_COST} credits, but you have ${have}.`, detail: "Top up your credits to continue." }); return; }
     if (!confirm(`Audit ${lead.name || "this site"} (desktop + mobile) for ${AUDIT_COST} credits?`)) return;
     const key = `${lead.id}:audit`;
     setBusyKey(key, true);
@@ -1063,7 +1071,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
             {reportableCount > 0 && (
               <span className="text-muted-foreground">
                 {reportableCount} with site · audit <strong className="text-foreground">{auditCost}</strong> / report <strong className="text-foreground">{reportCost}</strong> credits
-                {credits != null && <> · balance {credits}</>}
+                {credits != null && <> · balance <strong className={TONE_TEXT[balanceTone(credits, entitlement?.creditsAllotment)]}>{credits}</strong></>}
               </span>
             )}
             <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -1257,6 +1265,14 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
       </div>
 
       {reportLead && <ReportModal lead={reportLead} onClose={() => { setReportLead(null); load(); }} />}
+      <InsufficientModal
+        open={!!creditModal}
+        onClose={() => setCreditModal(null)}
+        title={creditModal?.title}
+        message={creditModal?.message}
+        detail={creditModal?.detail}
+        info={creditModal?.info}
+      />
       {listDialog && (
         <ListsDialog
           lead={listDialog.lead}

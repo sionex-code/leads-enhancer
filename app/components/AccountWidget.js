@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator,
 } from "./ui/dropdown-menu";
 import { cn } from "./../lib/utils";
+import { balanceTone, TONE_TEXT, TONE_BAR } from "./leads/credit-ui";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 // Canonical plan keys — must match billing.cjs (p19 Starter · p35 Growth · p49
@@ -56,6 +57,9 @@ export default function AccountWidget({ collapsed = false }) {
   const unlimited = ent?.active && (remaining === null || planKey === "p49");
   const used = quota && remaining != null ? Math.max(0, quota - remaining) : 0;
   const pct = quota && remaining != null ? Math.min(100, (used / quota) * 100) : ent?.active ? 100 : 0;
+  // Colour the balance: < 40% of allotment left → amber, < 20% → red.
+  const leadsTone = balanceTone(ent?.remaining, ent?.quota);
+  const creditsTone = balanceTone(ent?.credits, ent?.creditsAllotment);
   const quotaText = !ent || !ent.active
     ? "No active plan"
     : unlimited
@@ -126,10 +130,16 @@ export default function AccountWidget({ collapsed = false }) {
 
         <div className="mt-3 space-y-1.5">
           <div className="flex items-center justify-between text-[11px]">
-            <span className={cn("font-medium", ent?.active ? "text-foreground" : "text-amber-600")}>{quotaText}</span>
+            <span className={cn("font-medium", ent?.active ? leadsTone === "ok" ? "text-foreground" : TONE_TEXT[leadsTone] : "text-amber-600")}>{quotaText}</span>
             {!unlimited && quota ? <span className="text-muted-foreground">{used.toLocaleString()}/{quota.toLocaleString()}</span> : null}
           </div>
-          <Progress value={pct} className="h-1.5" indicatorClassName={ent?.active ? "bg-primary" : "bg-amber-500"} />
+          <Progress value={pct} className="h-1.5" indicatorClassName={ent?.active ? TONE_BAR[leadsTone] : "bg-amber-500"} />
+          {ent?.active && ent?.creditsAllotment ? (
+            <div className="flex items-center justify-between pt-0.5 text-[11px]">
+              <span className="text-muted-foreground">Credits</span>
+              <span className={cn("font-medium", TONE_TEXT[creditsTone])}>{Number(ent.credits || 0).toLocaleString()}</span>
+            </div>
+          ) : null}
           {!ent?.active && (
             <Link
               href="/billing"

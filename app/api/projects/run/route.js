@@ -29,10 +29,25 @@ export async function POST(request) {
   }
 
   const stages = Array.isArray(body.stages) && body.stages.length ? body.stages : ["scrape", "enrich", "whatsapp", "audit", "report"];
+
+  // Hard-cap the requested lead count to the remaining quota so a run can never
+  // scrape past what the user is entitled to (e.g. 150 requested with 100 left →
+  // capped to 100). Only applies when this run actually scrapes; unlimited plans
+  // (remaining === null) are never capped. A blank or 0 max means "as many as
+  // allowed", which is the remaining quota.
+  let effectiveMax = body.max || "";
+  let capped = false;
+  if (stages.includes("scrape") && entitlement.remaining !== null) {
+    const requested = parseInt(body.max, 10) || 0;
+    if (requested === 0 || requested > entitlement.remaining) {
+      effectiveMax = String(entitlement.remaining);
+      capped = requested > entitlement.remaining;
+    }
+  }
   const result = await queue.enqueue(userId, {
     name: body.name,
     query: body.query || "",
-    max: body.max || "",
+    max: effectiveMax,
     stages,
     device: body.device || "all",
     enrichConcurrency: body.enrichConcurrency || 16,
@@ -43,5 +58,5 @@ export async function POST(request) {
     blockImages: body.blockImages !== false,
     network: body.network !== false,
   });
-  return Response.json({ ok: true, queued: true, ...result });
+  return Response.json({ ok: true, queued: true, capped, max: effectiveMax, remaining: entitlement.remaining, ...result });
 }
