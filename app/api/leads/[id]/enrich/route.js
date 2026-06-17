@@ -16,6 +16,28 @@ export async function POST(_request, context) {
   if (!lead.website) return Response.json({ error: "This lead has no website to enrich" }, { status: 400 });
 
   try {
+    // Already enriched by anyone? Reuse the shared cache instead of re-crawling —
+    // the business's email/socials show instantly with no second website check.
+    const cached = await db.getCachedEnrichment({ domain: lead.domain, website: lead.website, phone: lead.phone });
+    if (cached && cached.email) {
+      const updated = await db.updateLeadFields(userId, id, {
+        email: cached.email,
+        all_emails: cached.all_emails,
+        contact_page: cached.contact_page,
+        facebook: cached.facebook,
+        instagram: cached.instagram,
+        linkedin: cached.linkedin,
+        twitter: cached.twitter,
+        youtube: cached.youtube,
+        tiktok: cached.tiktok,
+        pinterest: cached.pinterest,
+        whatsapp: cached.whatsapp,
+        telegram: cached.telegram,
+        enrich_status: cached.enrich_status || "ok (cached)",
+      });
+      return Response.json({ lead: updated, cached: true });
+    }
+
     const r = await enrichLib.enrichSite(lead.website);
     const updated = await db.updateLeadFields(userId, id, {
       email: r.email,
@@ -32,6 +54,8 @@ export async function POST(_request, context) {
       telegram: r.telegram,
       enrich_status: r.enrichStatus,
     });
+    // Persist the fresh result to the shared cache for everyone else.
+    await db.saveCachedEnrichment({ domain: lead.domain, website: lead.website, phone: lead.phone, ...r, source: "enrich" });
     return Response.json({ lead: updated });
   } catch (err) {
     return Response.json({ error: String(err.message || err) }, { status: 500 });

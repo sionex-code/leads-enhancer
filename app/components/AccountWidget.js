@@ -16,8 +16,11 @@ import {
 import { cn } from "./../lib/utils";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
-const PLAN_LABEL = { p19: "Starter", p49: "Growth", p99: "Scale" };
-const PLAN_QUOTA = { p19: 5000, p49: 50000, p99: null };
+// Canonical plan keys — must match billing.cjs (p19 Starter · p35 Growth · p49
+// Scale). The old p49/p99 mapping linked checkout to ?plan=p99, which the server
+// rejects as "Unknown plan", so upgrades silently failed.
+const PLAN_LABEL = { p19: "Starter", p35: "Growth", p49: "Scale" };
+const PLAN_QUOTA = { p19: 5000, p35: 50000, p49: null };
 
 export function useMe(pollMs = 10000) {
   const [me, setMe] = useState(null);
@@ -50,7 +53,7 @@ export default function AccountWidget({ collapsed = false }) {
 
   const quota = planKey ? PLAN_QUOTA[planKey] : undefined;
   const remaining = ent?.remaining;
-  const unlimited = ent?.active && (remaining === null || planKey === "p99");
+  const unlimited = ent?.active && (remaining === null || planKey === "p49");
   const used = quota && remaining != null ? Math.max(0, quota - remaining) : 0;
   const pct = quota && remaining != null ? Math.min(100, (used / quota) * 100) : ent?.active ? 100 : 0;
   const quotaText = !ent || !ent.active
@@ -61,8 +64,8 @@ export default function AccountWidget({ collapsed = false }) {
 
   const PLANS = [
     { id: "p19", label: "Starter ($19)" },
-    { id: "p49", label: "Growth ($49)" },
-    { id: "p99", label: "Scale ($99)" },
+    { id: "p35", label: "Growth ($35)" },
+    { id: "p49", label: "Scale ($49)" },
   ];
   const offerable = me ? PLANS.filter((p) => p.id !== planKey) : [];
 

@@ -15,12 +15,15 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from ".
 import { cn } from "../lib/utils";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
-const PLAN_LABEL = { p19: "Starter", p49: "Growth", p99: "Scale" };
+// Keys MUST match billing.cjs (p19 Starter · p35 Growth · p49 Scale). The old
+// p49→Growth / p99→Scale mapping was wrong and made "Scale" fail with an Invalid
+// plan error (p99 doesn't exist) while silently mislabelling p49.
+const PLAN_LABEL = { p19: "Starter", p35: "Growth", p49: "Scale" };
 const PLAN_OPTIONS = [
   { value: "", label: "Free (no plan)" },
   { value: "p19", label: "Starter ($19)" },
-  { value: "p49", label: "Growth ($49)" },
-  { value: "p99", label: "Scale ($99)" },
+  { value: "p35", label: "Growth ($35)" },
+  { value: "p49", label: "Scale ($49)" },
 ];
 
 async function jsonFetch(url, options = {}) {
@@ -275,7 +278,8 @@ export default function AdminClient() {
               <TableBody>
                 {filtered.map((u) => {
                   const active = isActive(u);
-                  const unlimited = active && (u.leads_quota === null || u.plan === "p99");
+                  // Scale (p49) is the unlimited tier — its quota is stored as null.
+                  const unlimited = active && (u.leads_quota === null || u.plan === "p49");
                   return (
                     <TableRow key={u.id}>
                       <TableCell>

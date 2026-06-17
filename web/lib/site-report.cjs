@@ -499,6 +499,85 @@ function startReportJob(sites, { devices = ["desktop", "mobile"], onLog } = {}) 
   return id;
 }
 
+// ---- quick audit job -------------------------------------------------------------
+// Like startReportJob but cheaper: runs ONLY the real-Chrome audit (desktop +
+// mobile Lighthouse scores) — no inspect, no AI, no HTML. Each completed site's
+// scores are handed to onResult(site, scores) so the caller can persist them onto
+// the lead (Health column). Tracked in the same job registry, so the existing
+// /api/agent/jobs/<id> polling + progress UI work unchanged.
+const MAX_AUDIT_SITES = 20;
+
+function startAuditJob(sites, { devices = ["desktop", "mobile"], onResult } = {}) {
+  ensureDirs();
+  const valid = (sites || []).filter((s) => s && s.website).slice(0, MAX_AUDIT_SITES);
+  if (!valid.length) throw new Error("No websites to audit (each site needs a website URL)");
+  const id = `audit-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  patchJob(id, {
+    id, kind: "audit", status: "running", startedAt: new Date().toISOString(), log: [],
+    sites: valid.map((s) => ({ name: s.name || "", domain: hostOf(s.website) })),
+    results: [],
+  });
+
+  const log = (msg) => {
+    const job = getJob(id) || {};
+    patchJob(id, { log: [...(job.log || []), `${new Date().toISOString().slice(11, 19)} ${msg}`].slice(-50) });
+  };
+
+  (async () => {
+    const assertNotCancelled = () => {
+      if ((getJob(id) || {}).cancelRequested) throw Object.assign(new Error("cancelled"), { cancelled: true });
+    };
+    let browser = null;
+    try {
+      browser = await chromium.launch({ channel: "chrome", headless: true, args: ["--disable-dev-shm-usage"] });
+      const lhByDevice = {};
+      for (const device of devices) {
+        lhByDevice[device] = await runAuditBatch(valid, device, browser, log, id);
+        assertNotCancelled();
+      }
+
+      for (const site of valid) {
+        assertNotCancelled();
+        const domain = hostOf(site.website);
+        const d = lhByDevice.desktop?.[domain] || {};
+        const m = lhByDevice.mobile?.[domain] || {};
+        const scores = {
+          desktop_performance: d.performance, desktop_seo: d.seo,
+          desktop_accessibility: d.accessibility, desktop_best_practices: d["best-practices"],
+          mobile_performance: m.performance, mobile_seo: m.seo,
+          mobile_accessibility: m.accessibility, mobile_best_practices: m["best-practices"],
+        };
+        if (onResult) {
+          try { await onResult(site, scores); } catch (err) { log(`Save failed for ${domain}: ${err.message}`); }
+        }
+        const summary = {
+          domain, name: site.name || domain,
+          desktopPerf: d.performance ?? null, desktopSeo: d.seo ?? null,
+          mobilePerf: m.performance ?? null, mobileSeo: m.seo ?? null,
+          error: d.error || m.error || null,
+        };
+        const job = getJob(id) || {};
+        patchJob(id, { results: [...(job.results || []), summary] });
+        log(`Audited ${domain}`);
+      }
+
+      patchJob(id, { status: "done", finishedAt: new Date().toISOString() });
+      log("All audits complete.");
+    } catch (err) {
+      if (err && err.cancelled) {
+        patchJob(id, { status: "cancelled", finishedAt: new Date().toISOString() });
+        log("Audit cancelled.");
+      } else {
+        patchJob(id, { status: "failed", error: String(err && err.message || err).slice(0, 400) });
+      }
+    } finally {
+      if (browser) await browser.close().catch(() => {});
+    }
+  })();
+
+  return id;
+}
+
 // Cancel a running report job: flag it (the job loop checks at every stage
 // boundary) and kill the in-flight Lighthouse worker so it stops immediately.
 function cancelJob(id) {
@@ -512,4 +591,4 @@ function cancelJob(id) {
   return patched;
 }
 
-module.exports = { startReportJob, getJob, cancelJob, listReports, safeReportPath, REPORTS_DIR, inspectWebsite, MAX_SITES };
+module.exports = { startReportJob, startAuditJob, getJob, cancelJob, listReports, safeReportPath, REPORTS_DIR, inspectWebsite, MAX_SITES, MAX_AUDIT_SITES };

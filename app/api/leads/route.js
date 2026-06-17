@@ -1,7 +1,24 @@
 import db from "../../../web/lib/db.cjs";
+import siteReport from "../../../web/lib/site-report.cjs";
 import { requireUser } from "../../../web/lib/session.js";
 
 export const dynamic = "force-dynamic";
+
+// Sanitized domains that already have a generated report on disk, so each row can
+// show a "Report ✓" badge. Reports are named `<sanitized-domain>-<ts>.html`; we
+// strip the trailing `-<ts>.html` to recover the domain prefix (skipping the raw
+// lighthouse dumps).
+function reportedDomainSet() {
+  const set = new Set();
+  try {
+    for (const r of siteReport.listReports()) {
+      if (r.file.includes("-lighthouse")) continue;
+      set.add(r.file.replace(/-\d+\.html$/, ""));
+    }
+  } catch {}
+  return set;
+}
+const sanitizeDomain = (d) => String(d || "").replace(/[^a-z0-9.-]/gi, "_");
 
 export async function GET(request) {
   const { userId, response } = await requireUser();
@@ -31,7 +48,13 @@ export async function GET(request) {
     db.listCities(userId, country),
     db.listLists(userId),
   ]);
-  return Response.json({ ...result, stats, projects, countries, cities, lists });
+  // Tag each row with whether a report already exists for its domain.
+  const reported = reportedDomainSet();
+  const rows = (result.rows || []).map((row) => ({
+    ...row,
+    has_report: row.domain ? reported.has(sanitizeDomain(row.domain)) : false,
+  }));
+  return Response.json({ ...result, rows, stats, projects, countries, cities, lists });
 }
 
 export async function POST(request) {

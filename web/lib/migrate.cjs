@@ -102,6 +102,41 @@ async function renamePlanKeysOnce(client) {
   );
 }
 
+// Seed the shared enrichment cache from leads that were already enriched before
+// the cache existed — otherwise re-scraping a previously-enriched business finds
+// an empty cache and crawls it again. Picks the most-recently-updated enriched
+// lead per domain. Guarded by a flag so the leads scan only runs once (the
+// INSERT itself is also ON CONFLICT DO NOTHING, so re-running is harmless).
+async function backfillEnrichmentCacheOnce(client) {
+  const flag = "backfilled_enrichment_cache_v1";
+  const { rows } = await client.query(`SELECT value FROM app_settings WHERE key = $1`, [flag]);
+  if (rows[0]) return;
+  const res = await client.query(
+    `INSERT INTO enrichment_cache
+       (domain, phone, email, all_emails, contact_page, facebook, instagram,
+        linkedin, twitter, youtube, tiktok, pinterest, whatsapp, telegram,
+        enrich_status, source, created_at, updated_at)
+     SELECT DISTINCT ON (domain)
+       domain,
+       NULLIF(regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g'), ''),
+       email, all_emails, contact_page, facebook, instagram, linkedin, twitter,
+       youtube, tiktok, pinterest, whatsapp, telegram,
+       COALESCE(NULLIF(enrich_status, ''), 'ok (backfill)'),
+       'backfill', now()::text, now()::text
+     FROM leads
+     WHERE domain IS NOT NULL AND domain != ''
+       AND email IS NOT NULL AND email != ''
+     ORDER BY domain, last_updated DESC
+     ON CONFLICT (domain) DO NOTHING`
+  );
+  await client.query(
+    `INSERT INTO app_settings (key, value, updated_at) VALUES ($1, 'done', now()::text)
+       ON CONFLICT (key) DO UPDATE SET value = 'done', updated_at = now()::text`,
+    [flag]
+  );
+  console.log(`[migrate] backfilled enrichment_cache from ${res.rowCount} existing enriched lead(s)`);
+}
+
 let _done = false;
 async function ensureSchema() {
   if (_done) return;
@@ -111,6 +146,7 @@ async function ensureSchema() {
       await client.query(sql);
     }
     await renamePlanKeysOnce(client);
+    await backfillEnrichmentCacheOnce(client);
     _done = true;
     console.log("[migrate] schema ensured (credits, proxies, enrichment_cache, app_settings)");
   } catch (err) {

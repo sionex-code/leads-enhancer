@@ -193,6 +193,107 @@ function normalizeLead(lead) {
   };
 }
 
+// ---- shared enrichment cache (global, cross-tenant) -------------------------
+// Once ANY user enriches a business website (emails + socials), the result is
+// cached here keyed by domain (phone is a secondary lookup). Every later scrape
+// or on-demand enrich for that same domain reuses the cached data instead of
+// re-crawling the site — so an already-enriched business shows its email/socials
+// immediately, with no second check.
+const CACHE_FIELDS = [
+  "email", "all_emails", "contact_page", "facebook", "instagram", "linkedin",
+  "twitter", "youtube", "tiktok", "pinterest", "whatsapp", "telegram", "enrich_status",
+];
+const CACHE_SOCIALS = [
+  "facebook", "instagram", "linkedin", "twitter", "youtube",
+  "tiktok", "pinterest", "whatsapp", "telegram",
+];
+
+// Pull the cache columns off a lead/enrich object regardless of casing
+// (enrichSite returns camelCase; normalizeLead / CSV rows are snake_case).
+function cacheFieldsFrom(src) {
+  const g = (...keys) => {
+    for (const k of keys) {
+      if (src[k] !== undefined && src[k] !== null && src[k] !== "") return String(src[k]);
+    }
+    return "";
+  };
+  return {
+    email: g("email"),
+    all_emails: g("all_emails", "allEmails"),
+    contact_page: g("contact_page", "contactPage"),
+    facebook: g("facebook"),
+    instagram: g("instagram"),
+    linkedin: g("linkedin"),
+    twitter: g("twitter"),
+    youtube: g("youtube"),
+    tiktok: g("tiktok"),
+    pinterest: g("pinterest"),
+    whatsapp: g("whatsapp"),
+    telegram: g("telegram"),
+    enrich_status: g("enrich_status", "enrichStatus"),
+  };
+}
+
+// Worth caching only once there's an actual email or social link (an
+// enrich_status of "no email found" on its own must not poison the cache).
+function hasUsefulEnrichment(f) {
+  return !!(f.email || CACHE_SOCIALS.some((s) => f[s]));
+}
+
+// One cached row by domain (preferred), else by phone (digits-only) — but a phone
+// hit is only returned when it actually carries an email.
+async function getCachedEnrichment({ domain = "", website = "", phone = "" } = {}) {
+  const d = hostOf(domain) || hostOf(website);
+  if (d) {
+    const { rows } = await q(`SELECT * FROM enrichment_cache WHERE domain = $1`, [d]);
+    if (rows[0]) return rows[0];
+  }
+  const ph = String(phone || "").replace(/[^\d]/g, "");
+  if (ph.length >= 7) {
+    const { rows } = await q(
+      `SELECT * FROM enrichment_cache
+        WHERE phone = $1 AND email IS NOT NULL AND email != ''
+        ORDER BY updated_at DESC LIMIT 1`,
+      [ph]
+    );
+    if (rows[0]) return rows[0];
+  }
+  return null;
+}
+
+// Bulk lookup for a batch of domains → Map(domain → cache row).
+async function getCachedEnrichmentMap(domains = []) {
+  const clean = [...new Set((domains || []).map((d) => hostOf(d)).filter(Boolean))];
+  const map = new Map();
+  if (!clean.length) return map;
+  const { rows } = await q(`SELECT * FROM enrichment_cache WHERE domain = ANY($1::text[])`, [clean]);
+  for (const r of rows) map.set(r.domain, r);
+  return map;
+}
+
+// Upsert a domain's enrichment into the shared cache. No-op unless there's a
+// domain and at least one useful field. Field-by-field merge: a new non-empty
+// value fills/overwrites, an empty one never wipes an existing value.
+async function saveCachedEnrichment(src = {}) {
+  const domain = hostOf(src.domain || src.website || "");
+  if (!domain) return;
+  const f = cacheFieldsFrom(src);
+  if (!hasUsefulEnrichment(f)) return;
+  const phone = String(src.phone || "").replace(/[^\d]/g, "") || null;
+  const ts = now();
+  const cols = ["domain", "phone", ...CACHE_FIELDS, "source", "created_at", "updated_at"];
+  const vals = [domain, phone, ...CACHE_FIELDS.map((c) => f[c]), src.source || "scrape", ts, ts];
+  const ph = cols.map((_, i) => `$${i + 1}`).join(", ");
+  const setClause = ["phone", ...CACHE_FIELDS]
+    .map((c) => `${c} = COALESCE(NULLIF(EXCLUDED.${c}, ''), enrichment_cache.${c})`)
+    .join(", ");
+  await q(
+    `INSERT INTO enrichment_cache (${cols.join(", ")}) VALUES (${ph})
+       ON CONFLICT (domain) DO UPDATE SET ${setClause}, updated_at = EXCLUDED.updated_at`,
+    vals
+  );
+}
+
 // Upsert a batch for a user. Field-by-field merge via ON CONFLICT: a new non-empty
 // value overwrites, a new empty/null value never wipes an existing one.
 async function upsertLeads(userId, leadObjs) {
@@ -211,17 +312,46 @@ async function upsertLeads(userId, leadObjs) {
       ${setClause}, last_updated = EXCLUDED.last_updated
     RETURNING (xmax = 0) AS inserted`;
 
+  // Normalize + dedup-key every row up front, dropping rows with no identity.
+  // `ownEnrichment` records whether the scrape/import itself carried enrichment,
+  // so we only write back to the shared cache data we actually discovered (not
+  // values we just filled in from the cache).
+  const prepared = [];
+  for (const raw of leadObjs) {
+    const key = dedupKey(raw);
+    if (!key) continue;
+    const norm = normalizeLead(raw);
+    const ownEnrichment = hasUsefulEnrichment(cacheFieldsFrom(norm));
+    prepared.push({ key, norm, ownEnrichment });
+  }
+  if (!prepared.length) return { inserted: 0, updated: 0 };
+
+  // (a) Populate from the shared enrichment cache: any business already enriched
+  // by ANY user has its MISSING email/socials filled in here, so it shows the
+  // data immediately and the enrich step never has to re-crawl that site.
+  try {
+    const cacheMap = await getCachedEnrichmentMap(prepared.map((p) => p.norm.domain));
+    if (cacheMap.size) {
+      for (const p of prepared) {
+        const cached = cacheMap.get(p.norm.domain);
+        if (!cached) continue;
+        for (const c of CACHE_FIELDS) {
+          if (!p.norm[c] && cached[c]) p.norm[c] = cached[c];
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[db] enrichment cache populate failed:", err.message);
+  }
+
   const ts = now();
   let inserted = 0;
   let updated = 0;
   const client = await pool().connect();
   try {
     await client.query("BEGIN");
-    for (const raw of leadObjs) {
-      const key = dedupKey(raw);
-      if (!key) continue;
-      const norm = normalizeLead(raw);
-      const values = [userId, key, ...LEAD_COLUMNS.map((c) => norm[c]), ts, ts];
+    for (const p of prepared) {
+      const values = [userId, p.key, ...LEAD_COLUMNS.map((c) => p.norm[c]), ts, ts];
       const res = await client.query(sql, values);
       if (res.rows[0] && res.rows[0].inserted) inserted++;
       else updated++;
@@ -233,6 +363,18 @@ async function upsertLeads(userId, leadObjs) {
   } finally {
     client.release();
   }
+
+  // (b) Save freshly-enriched businesses back to the shared cache so the next
+  // user who scrapes the same domain reuses it. Only rows whose enrichment came
+  // from this scrape/import (not ones we just filled from the cache above).
+  try {
+    for (const p of prepared) {
+      if (p.ownEnrichment) await saveCachedEnrichment(p.norm);
+    }
+  } catch (err) {
+    console.warn("[db] enrichment cache save failed:", err.message);
+  }
+
   // Count newly-inserted leads against the user's monthly quota. Lazy-required to
   // avoid a circular dependency (billing → pg → ok; db → billing only here).
   if (inserted > 0) {
@@ -562,6 +704,38 @@ async function updateLeadScan(userId, id, fields = {}) {
   return getLead(userId, id);
 }
 
+// Persist quick-audit (real-Chrome Lighthouse, desktop + mobile) scores onto a
+// lead so they show in the Health column. Scores are clamped 0-100 ints; missing
+// devices are left untouched.
+const AUDIT_SCORE_FIELDS = new Set([
+  "desktop_performance", "desktop_seo", "desktop_accessibility", "desktop_best_practices",
+  "mobile_performance", "mobile_seo", "mobile_accessibility", "mobile_best_practices",
+]);
+async function updateLeadAudit(userId, id, scores = {}) {
+  const current = await getLead(userId, id);
+  if (!current) return null;
+  const updates = {};
+  for (const [k, v] of Object.entries(scores)) {
+    if (!AUDIT_SCORE_FIELDS.has(k)) continue;
+    const n = numOrNull(v);
+    if (n === null) continue; // never blank an existing score with a failed scan
+    updates[k] = Math.max(0, Math.min(100, Math.round(n)));
+  }
+  if (!Object.keys(updates).length) return current;
+  updates.last_updated = now();
+  await runUpdate(userId, id, updates);
+  return getLead(userId, id);
+}
+
+// Permanently delete a batch of the caller's own leads by id (bulk delete in the
+// leads manager). Scoped to user_id so one tenant can never delete another's.
+async function deleteLeadsByIds(userId, ids = []) {
+  const clean = [...new Set((ids || []).map((x) => Number(x)).filter(Boolean))];
+  if (!clean.length) return 0;
+  const res = await q(`DELETE FROM leads WHERE user_id = $1 AND id = ANY($2::int[])`, [userId, clean]);
+  return res.rowCount;
+}
+
 async function statsLeads(userId) {
   const { rows } = await q(
     `SELECT
@@ -603,6 +777,9 @@ module.exports = {
   addProxies,
   deleteProxy,
   setProxyEnabled,
+  getCachedEnrichment,
+  getCachedEnrichmentMap,
+  saveCachedEnrichment,
   upsertLeads,
   queryLeads,
   getLead,
@@ -612,6 +789,8 @@ module.exports = {
   deleteLeadsWhere,
   updateLeadFields,
   updateLeadScan,
+  updateLeadAudit,
+  deleteLeadsByIds,
   listProjectNames,
   listCountries,
   listCities,

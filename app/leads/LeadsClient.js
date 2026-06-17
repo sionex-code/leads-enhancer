@@ -4,8 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import AppShell from "../components/app/AppShell";
 import AnimatedNumber from "../components/AnimatedNumber";
 import ReportModal from "../components/ReportModal";
+import ListsDialog from "../components/leads/ListsDialog";
 import {
   Ban,
+  BarChart3,
   Bot,
   CheckCircle2,
   Download,
@@ -34,13 +36,13 @@ import { Select } from "../components/ui/select";
 import { Textarea } from "../components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Sheet, SheetContent } from "../components/ui/sheet";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/table";
 import { cn } from "../lib/utils";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 const PAGE_SIZE = 120;
 const REPORT_COST = 10; // credits per website report (mirrors billing.REPORT_COST)
+const AUDIT_COST = 3; // credits per quick audit (mirrors billing.AUDIT_COST)
 
 const WORKFLOWS = [
   // "All leads" tab intentionally hidden for the SaaS launch.
@@ -224,11 +226,13 @@ function QuickLeadActions({ lead, onPatch, onLists, compact = false }) {
   );
 }
 
-// Inline per-row contact actions: grab email/socials, check WhatsApp, open the
-// website report, and remove. Remove is context-aware (see removeLead in parent):
-// in a watch/custom-list view it just drops the lead from that view; in the full
-// leads view it deletes permanently.
-function RowActions({ lead, busy = {}, onEnrich, onWhatsapp, onReport, onRemove, onStatus, onChatbot, removeTitle }) {
+// Inline per-row contact actions: grab email/socials, check status/chatbot/
+// WhatsApp, run a quick audit (Health scores), open the website report, and
+// remove. Remove is context-aware (see removeLead in parent): in a watch/custom-
+// list view it just drops the lead from that view; in the full leads view it
+// deletes permanently. The audit button spins while its job runs; the report
+// button is tinted once a report exists for the domain.
+function RowActions({ lead, busy = {}, onEnrich, onWhatsapp, onAudit, onReport, onRemove, onStatus, onChatbot, removeTitle }) {
   const wa = waState(lead);
   return (
     <div className="flex flex-wrap items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
@@ -244,7 +248,10 @@ function RowActions({ lead, busy = {}, onEnrich, onWhatsapp, onReport, onRemove,
       <Button variant="ghost" size="icon" className={cn("h-8 w-8", wa === "yes" && "text-emerald-600")} title={lead.phone ? (wa ? `WhatsApp: ${lead.whatsapp_status}` : "Check WhatsApp") : "No phone to check"} disabled={!lead.phone || busy.whatsapp} onClick={() => onWhatsapp(lead)}>
         {busy.whatsapp ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />}
       </Button>
-      <Button variant="ghost" size="icon" className="h-8 w-8" title="Website report" disabled={!lead.website} onClick={() => onReport(lead)}>
+      <Button variant="ghost" size="icon" className="h-8 w-8" title={lead.website ? `Quick audit — desktop + mobile scores (${AUDIT_COST} credits)` : "No website to audit"} disabled={!lead.website || busy.audit} onClick={() => onAudit(lead)}>
+        {busy.audit ? <Loader2 size={14} className="animate-spin" /> : <BarChart3 size={14} />}
+      </Button>
+      <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.has_report && "text-primary")} title={lead.website ? (lead.has_report ? "Report ready — view / regenerate" : "Generate website report") : "No website for a report"} disabled={!lead.website} onClick={() => onReport(lead)}>
         <FileText size={14} />
       </Button>
       <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" title={removeTitle} disabled={busy.remove} onClick={() => onRemove(lead)}>
@@ -520,88 +527,6 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot }) 
   );
 }
 
-// Add/remove a lead (or a bulk selection) to named lists. Single-lead mode edits
-// membership (checkboxes pre-filled); bulk mode adds the selected leads to the
-// checked lists. Either mode can create a new list inline.
-function ListsDialog({ lead, ids, lists, onClose, onSavedLead, onChanged }) {
-  const bulk = !lead && Array.isArray(ids);
-  const [allLists, setAllLists] = useState(lists || []);
-  const [checked, setChecked] = useState(() => new Set());
-  const [newName, setNewName] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (lead) {
-      jsonFetch(`/api/leads/${lead.id}/lists`).then((d) => setChecked(new Set(d.listIds || []))).catch(() => {});
-    }
-  }, [lead]);
-
-  const toggle = (id) => setChecked((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-
-  async function createList() {
-    const name = newName.trim();
-    if (!name) return;
-    setError("");
-    try {
-      const d = await jsonFetch("/api/lists", { method: "POST", body: JSON.stringify({ name }) });
-      setAllLists((ls) => (ls.some((l) => l.id === d.list.id) ? ls : [...ls, { ...d.list, count: 0 }].sort((a, b) => a.name.localeCompare(b.name))));
-      setChecked((s) => new Set(s).add(d.list.id));
-      setNewName("");
-      onChanged?.();
-    } catch (e) { setError(e.message); }
-  }
-
-  async function save() {
-    setSaving(true);
-    setError("");
-    try {
-      if (bulk) {
-        for (const listId of checked) {
-          await jsonFetch("/api/leads/lists/bulk", { method: "POST", body: JSON.stringify({ ids, listId }) });
-        }
-      } else {
-        const d = await jsonFetch(`/api/leads/${lead.id}/lists`, { method: "PUT", body: JSON.stringify({ listIds: [...checked] }) });
-        if (d.lead) onSavedLead?.(d.lead);
-      }
-      onChanged?.();
-      onClose();
-    } catch (e) { setError(e.message); setSaving(false); }
-  }
-
-  return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>{bulk ? `Add ${ids.length} lead${ids.length === 1 ? "" : "s"} to lists` : "Lists"}</DialogTitle>
-          <DialogDescription>{bulk ? "Pick the list(s) to add the selected leads to." : "Choose which lists this lead belongs to."}</DialogDescription>
-        </DialogHeader>
-        <div className="max-h-[40vh] space-y-1.5 overflow-auto py-1">
-          {allLists.length === 0 && <p className="text-sm text-muted-foreground">No lists yet — create one below.</p>}
-          {allLists.map((l) => (
-            <label key={l.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-accent">
-              <input type="checkbox" checked={checked.has(l.id)} onChange={() => toggle(l.id)} className="accent-[hsl(var(--primary))]" />
-              <span className="flex-1">{l.name}</span>
-              <span className="text-xs text-muted-foreground">{l.count}</span>
-            </label>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <Input placeholder="New list name…" value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createList(); } }} />
-          <Button variant="outline" onClick={createList} disabled={!newName.trim()}>Create</Button>
-        </div>
-        {error && <div className="text-sm text-red-600">{error}</div>}
-        <div className="mt-1 flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={save} disabled={saving || (bulk && checked.size === 0)}>
-            {saving ? <Loader2 size={15} className="animate-spin" /> : null} {bulk ? "Add to list" : "Save"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead manager", activeNav = "leads" }) {
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
@@ -625,14 +550,18 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
   const [manualName, setManualName] = useState("");
   const [manualNotes, setManualNotes] = useState("");
   const [adding, setAdding] = useState("");
-  // Bulk report selection + the user's live credit balance (for the cost warning).
+  // Bulk selection + the user's live credit balance (for the cost warning).
   const [selected, setSelected] = useState(() => new Set());
   const [credits, setCredits] = useState(null);
-  const [bulkBusy, setBulkBusy] = useState(false);
-  // Live progress for an in-flight bulk-report batch (replaces the old fire-and-
-  // forget alert). { total, done, failed, latest, finished, jobIds }.
-  const [reportBatch, setReportBatch] = useState(null);
+  const [bulkBusy, setBulkBusy] = useState("");
+  // Live progress for an in-flight bulk batch — reports OR audits. The card and
+  // poller are shared; `kind` ("report" | "audit") just switches the labels.
+  // { kind, total, done, failed, latest, finished, jobIds }.
+  const [batch, setBatch] = useState(null);
   const batchPollRef = useRef(null);
+  // Set to the latest `load` so the batch poller can refresh the list on finish
+  // without depending on declaration order.
+  const loadRef = useRef(null);
   // Named lists: the user's lists, the active list filter, and the open dialog.
   const [lists, setLists] = useState([]);
   const [listFilter, setListFilter] = useState("");
@@ -756,10 +685,12 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
     jsonFetch("/api/me").then((d) => setCredits(d?.entitlement?.credits ?? null)).catch(() => {});
   }, []);
 
-  // Poll every job in a bulk-report batch and roll the per-job progress up into a
-  // single { done / total } figure for the progress panel. Each report job exposes
-  // `sites` (planned) and `results` (completed), so done = Σ results, total = Σ sites.
-  const pollBatch = useCallback((jobIds, total) => {
+  // Poll every job in a bulk batch (reports or audits) and roll the per-job
+  // progress up into a single { done / total } figure for the progress panel.
+  // Each job exposes `sites` (planned) and `results` (completed), so done =
+  // Σ results, total = Σ sites. On completion we refresh credits and reload the
+  // list so new scores / "Report ✓" badges appear.
+  const pollBatch = useCallback((jobIds, total, kind) => {
     clearTimeout(batchPollRef.current);
     const tick = async () => {
       const jobs = await Promise.all(
@@ -775,47 +706,131 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
         if (line) latest = line;
       }
       done = Math.min(done, total);
-      // "failed" only makes sense once every job has settled: any reports that
-      // never landed (total − done). Mid-flight that gap is just work in progress.
+      // "failed" only makes sense once every job has settled: any sites that never
+      // landed (total − done). Mid-flight that gap is just work in progress.
       const failed = allTerminal ? Math.max(0, total - done) : 0;
-      setReportBatch({ jobIds, total, done, failed, latest, finished: allTerminal });
+      setBatch({ kind, jobIds, total, done, failed, latest, finished: allTerminal });
       if (allTerminal) {
         refreshCredits();
+        loadRef.current?.(); // surface new audit scores / report badges
       } else {
         batchPollRef.current = setTimeout(tick, 2500);
       }
     };
     tick();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [refreshCredits]);
 
-  // Generate website reports for the selected leads. Charges REPORT_COST each;
-  // confirms cost vs. balance first, then runs them as background jobs and shows
-  // a live progress panel that polls each job to completion.
-  const bulkReport = useCallback(async () => {
-    const ids = rows.filter((r) => r.website && selected.has(r.id)).map((r) => r.id);
+  // Charge + launch a bulk batch (report or audit) for the given lead ids, then
+  // show the shared progress panel polling each job to completion. `kind` selects
+  // the endpoint, per-unit cost, and labels.
+  const runBatch = useCallback(async (kind, ids) => {
     if (!ids.length) return;
-    const cost = ids.length * REPORT_COST;
+    const unit = kind === "audit" ? AUDIT_COST : REPORT_COST;
+    const noun = kind === "audit" ? "audit" : "report";
+    const endpoint = kind === "audit" ? "/api/leads/audit/bulk" : "/api/leads/report/bulk";
+    const cost = ids.length * unit;
     const have = credits ?? 0;
     if (cost > have) {
-      alert(`Not enough credits. ${ids.length} report(s) need ${cost} credits and you have ${have}. Reduce your selection or top up in Billing.`);
+      alert(`Not enough credits. ${ids.length} ${noun}(s) need ${cost} credits and you have ${have}. Reduce your selection or top up in Billing.`);
       return;
     }
-    if (!confirm(`Generate ${ids.length} website report(s)?\n\nThis will use ${cost} credits (${ids.length} × ${REPORT_COST}). You have ${have}, leaving ${have - cost}.`)) return;
-    setBulkBusy(true);
+    if (!confirm(`Run ${ids.length} ${noun}${ids.length === 1 ? "" : "s"}?\n\nThis will use ${cost} credits (${ids.length} × ${unit}). You have ${have}, leaving ${have - cost}.`)) return;
+    setBulkBusy(kind);
     try {
-      const data = await jsonFetch("/api/leads/report/bulk", { method: "POST", body: JSON.stringify({ ids }) });
+      const data = await jsonFetch(endpoint, { method: "POST", body: JSON.stringify({ ids }) });
       if (typeof data.credits === "number") setCredits(data.credits);
       setSelected(new Set());
       const jobIds = data.jobIds || [];
-      setReportBatch({ jobIds, total: data.count, done: 0, failed: 0, latest: "Starting…", finished: false });
-      if (jobIds.length) pollBatch(jobIds, data.count);
+      setBatch({ kind, jobIds, total: data.count, done: 0, failed: 0, latest: "Starting…", finished: false });
+      if (jobIds.length) pollBatch(jobIds, data.count, kind);
     } catch (err) {
       refreshCredits();
       alert(err.message);
     } finally {
-      setBulkBusy(false);
+      setBulkBusy("");
     }
-  }, [rows, selected, credits, refreshCredits, pollBatch]);
+  }, [credits, refreshCredits, pollBatch]);
+
+  // Bulk actions over the current selection (only website-bearing rows are
+  // billable / auditable).
+  const bulkReport = useCallback(() => {
+    runBatch("report", rows.filter((r) => r.website && selected.has(r.id)).map((r) => r.id));
+  }, [runBatch, rows, selected]);
+  const bulkAudit = useCallback(() => {
+    runBatch("audit", rows.filter((r) => r.website && selected.has(r.id)).map((r) => r.id));
+  }, [runBatch, rows, selected]);
+
+  // Single-row quick audit: charge AUDIT_COST, run the desktop+mobile scan as a
+  // background job, spin the row's audit button while polling it, then merge the
+  // refreshed lead so its new Health scores appear in place.
+  const auditOne = useCallback(async (lead) => {
+    if (!lead.website) return;
+    const have = credits ?? 0;
+    if (AUDIT_COST > have) { alert(`Not enough credits — an audit needs ${AUDIT_COST} and you have ${have}.`); return; }
+    if (!confirm(`Audit ${lead.name || "this site"} (desktop + mobile) for ${AUDIT_COST} credits?`)) return;
+    const key = `${lead.id}:audit`;
+    setBusyKey(key, true);
+    try {
+      const data = await jsonFetch(`/api/leads/${lead.id}/audit`, { method: "POST" });
+      if (typeof data.credits === "number") setCredits(data.credits);
+      await new Promise((resolve) => {
+        const tick = async () => {
+          const job = await jsonFetch(`/api/agent/jobs/${data.jobId}`).catch(() => null);
+          if (!job || job.status === "running") { setTimeout(tick, 2500); return; }
+          resolve();
+        };
+        tick();
+      });
+      const fresh = await jsonFetch(`/api/leads/${lead.id}`).catch(() => null);
+      if (fresh?.lead) mergeLead(fresh.lead);
+      showToast("Audit complete — scores updated");
+    } catch (err) {
+      refreshCredits();
+      alert(err.message);
+    } finally {
+      setBusyKey(key, false);
+    }
+  }, [credits, mergeLead, setBusyKey, showToast, refreshCredits]);
+
+  // Delete the current selection. Context-aware, mirroring the per-row remove:
+  // in a Favorites / Custom-list view it drops the leads from that list (they stay
+  // in the database); in any other view it permanently deletes them.
+  const bulkDelete = useCallback(async () => {
+    const ids = rows.filter((r) => selected.has(r.id)).map((r) => r.id);
+    if (!ids.length) return;
+    const listMode = workflow === "watchlist" || workflow === "contacts";
+    if (listMode) {
+      const field = workflow === "watchlist" ? "watchlist" : "contact_list";
+      const label = workflow === "watchlist" ? "favorites" : "this list";
+      if (!confirm(`Remove ${ids.length} lead${ids.length === 1 ? "" : "s"} from ${label}? They stay in your leads database.`)) return;
+      setBulkBusy("delete");
+      try {
+        await Promise.all(ids.map((id) => jsonFetch(`/api/leads/${id}`, { method: "PATCH", body: JSON.stringify({ [field]: false }) })));
+        const removed = new Set(ids);
+        setRows((r) => r.filter((x) => !removed.has(x.id)));
+        setSelected(new Set());
+      } catch (err) {
+        alert(err.message);
+        loadRef.current?.();
+      } finally {
+        setBulkBusy("");
+      }
+      return;
+    }
+    if (!confirm(`Permanently delete ${ids.length} lead${ids.length === 1 ? "" : "s"} from your database? This cannot be undone.`)) return;
+    setBulkBusy("delete");
+    try {
+      await jsonFetch("/api/leads/bulk-delete", { method: "POST", body: JSON.stringify({ ids }) });
+      const removed = new Set(ids);
+      setRows((r) => r.filter((x) => !removed.has(x.id)));
+      setSelected(new Set());
+    } catch (err) {
+      alert(err.message);
+      loadRef.current?.();
+    } finally {
+      setBulkBusy("");
+    }
+  }, [rows, selected, workflow]);
 
   // Stop polling if the component unmounts mid-batch.
   useEffect(() => () => clearTimeout(batchPollRef.current), []);
@@ -897,6 +912,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
       setLoading(false);
     }
   }, [active?.id, city, country, hasEmail, listFilter, minScore, page, project, search, workflow]);
+  loadRef.current = load; // keep the batch poller's refresh hook pointed at the latest load
 
   useEffect(() => {
     setPage(0);
@@ -959,8 +975,11 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
   const selectedCount = selectableIds.filter((id) => selected.has(id)).length;
   const reportableCount = rows.filter((r) => r.website && selected.has(r.id)).length;
   const reportCost = reportableCount * REPORT_COST;
+  const auditCost = reportableCount * AUDIT_COST;
   const allSelected = selectableIds.length > 0 && selectedCount === selectableIds.length;
-  const notEnoughCredits = credits != null && reportCost > credits;
+  const notEnoughForReport = credits != null && reportCost > credits;
+  const notEnoughForAudit = credits != null && auditCost > credits;
+  const batchRunning = !!batch && !batch.finished;
   const toggleSelectAll = () => {
     setSelected((s) => {
       const n = new Set(s);
@@ -1069,23 +1088,30 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
           </CardContent>
         </Card>
 
-        {/* Bulk action bar — add to a list, or generate reports (with credit cost) */}
+        {/* Bulk action bar — add to a list, audit, report, or delete the selection */}
         {selectedCount > 0 && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-primary/40 bg-primary/5 px-4 py-2.5 text-sm">
             <span className="font-medium">{selectedCount} selected</span>
             {reportableCount > 0 && (
               <span className="text-muted-foreground">
-                Reports: {reportableCount} × {REPORT_COST} = <strong className="text-foreground">{reportCost} credits</strong>
+                {reportableCount} with site · audit <strong className="text-foreground">{auditCost}</strong> / report <strong className="text-foreground">{reportCost}</strong> credits
                 {credits != null && <> · balance {credits}</>}
-                {notEnoughCredits && <span className="ml-2 font-medium text-red-600">Not enough credits</span>}
               </span>
             )}
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex flex-wrap items-center gap-2">
               <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>Clear</Button>
               <Button variant="outline" size="sm" onClick={() => setListDialog({ ids: [...selected] })}><ListPlus size={15} /> Add to list</Button>
-              <Button size="sm" disabled={bulkBusy || reportableCount === 0 || notEnoughCredits} onClick={bulkReport}>
-                {bulkBusy ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
-                Generate {reportableCount} report{reportableCount === 1 ? "" : "s"}
+              <Button variant="outline" size="sm" disabled={!!bulkBusy || batchRunning || reportableCount === 0 || notEnoughForAudit} onClick={bulkAudit} title={notEnoughForAudit ? "Not enough credits" : `Audit ${reportableCount} site(s) — ${auditCost} credits`}>
+                {bulkBusy === "audit" ? <Loader2 size={15} className="animate-spin" /> : <BarChart3 size={15} />}
+                Audit {reportableCount}
+              </Button>
+              <Button size="sm" disabled={!!bulkBusy || batchRunning || reportableCount === 0 || notEnoughForReport} onClick={bulkReport} title={notEnoughForReport ? "Not enough credits" : `Generate ${reportableCount} report(s) — ${reportCost} credits`}>
+                {bulkBusy === "report" ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
+                Report {reportableCount}
+              </Button>
+              <Button variant="destructive" size="sm" disabled={!!bulkBusy} onClick={bulkDelete} title={workflow === "watchlist" || workflow === "contacts" ? "Remove selected from this list" : "Delete selected permanently"}>
+                {bulkBusy === "delete" ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                {workflow === "watchlist" || workflow === "contacts" ? "Remove" : "Delete"}
               </Button>
             </div>
           </div>
@@ -1100,7 +1126,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
               {/* Mobile cards */}
               <div className="space-y-3 p-3 md:hidden">
                 {rows.map((lead) => (
-                  <div className="cursor-pointer rounded-lg border border-border bg-card/60 p-3" key={`m-${lead.id}`} onClick={() => setActive(lead)}>
+                  <div className={cn("cursor-pointer rounded-lg border bg-card/60 p-3", selected.has(lead.id) ? "border-primary/50 bg-primary/5" : "border-border")} key={`m-${lead.id}`} onClick={() => toggleSelect(lead.id)}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-start gap-2">
                         <input
@@ -1111,7 +1137,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                           onChange={() => toggleSelect(lead.id)}
                           className="mt-0.5 accent-[hsl(var(--primary))]"
                         />
-                        <strong className="text-sm font-medium">{lead.name || "Unknown"}</strong>
+                        <button type="button" className="text-left text-sm font-medium hover:text-primary hover:underline" onClick={(e) => { e.stopPropagation(); setActive(lead); }} title="Open lead details">{lead.name || "Unknown"}</button>
                       </div>
                       <span className="text-xs text-muted-foreground">{lead.category || lead.address || lead.project || ""}</span>
                     </div>
@@ -1119,6 +1145,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                       <WorkflowBadge lead={lead} />
                       <EmailBadge status={lead.email_status} />
                       {lead.watchlist ? <Pill tone="watch"><Star size={12} fill="currentColor" /> Favorite</Pill> : null}
+                      {lead.has_report ? <Pill tone="contact"><FileText size={12} /> Report</Pill> : null}
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
                       {lead.phone && <span>{lead.phone}</span>}
@@ -1137,9 +1164,10 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                     <div className="mt-1 flex flex-wrap items-center gap-1">
                       <RowActions
                         lead={lead}
-                        busy={{ enrich: busy[`${lead.id}:enrich`], whatsapp: busy[`${lead.id}:whatsapp`], remove: busy[`${lead.id}:remove`], status: busy[`${lead.id}:status`], chatbot: busy[`${lead.id}:chatbot`] }}
+                        busy={{ enrich: busy[`${lead.id}:enrich`], whatsapp: busy[`${lead.id}:whatsapp`], remove: busy[`${lead.id}:remove`], status: busy[`${lead.id}:status`], chatbot: busy[`${lead.id}:chatbot`], audit: busy[`${lead.id}:audit`] }}
                         onEnrich={enrichOne}
                         onWhatsapp={checkWhatsapp}
+                        onAudit={auditOne}
                         onReport={setReportLead}
                         onRemove={removeLead}
                         onStatus={checkStatusOne}
@@ -1178,7 +1206,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                   </TableHeader>
                   <TableBody>
                     {rows.map((lead) => (
-                      <TableRow key={lead.id} className="cursor-pointer" onClick={() => setActive(lead)}>
+                      <TableRow key={lead.id} className={cn("cursor-pointer", selected.has(lead.id) && "bg-primary/5")} onClick={() => toggleSelect(lead.id)}>
                         <TableCell className="w-8" onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
@@ -1190,7 +1218,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                           />
                         </TableCell>
                         <TableCell>
-                          <div className="font-medium">{lead.name || "Unknown"}</div>
+                          <button type="button" className="text-left font-medium hover:text-primary hover:underline" onClick={(e) => { e.stopPropagation(); setActive(lead); }} title="Open lead details">{lead.name || "Unknown"}</button>
                           <div className="text-xs text-muted-foreground">{lead.category || lead.address || ""}</div>
                           {lead.notes && <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{lead.notes}</div>}
                         </TableCell>
@@ -1207,6 +1235,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                             <WorkflowBadge lead={lead} />
                             {lead.watchlist ? <Pill tone="watch"><Star size={12} fill="currentColor" /> Favorite</Pill> : null}
                             {lead.contact_list ? <Pill tone="contact"><Users size={12} /> List</Pill> : null}
+                            {lead.has_report ? <Pill tone="sent"><FileText size={12} /> Report</Pill> : null}
                           </div>
                         </TableCell>
                         <TableCell><EmailBadge status={lead.email_status} /></TableCell>
@@ -1260,7 +1289,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
         </div>
       </div>
 
-      {reportLead && <ReportModal lead={reportLead} onClose={() => setReportLead(null)} />}
+      {reportLead && <ReportModal lead={reportLead} onClose={() => { setReportLead(null); load(); }} />}
       {listDialog && (
         <ListsDialog
           lead={listDialog.lead}
@@ -1291,25 +1320,29 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
         </div>
       )}
 
-      {/* Live bulk-report progress: a fixed card that polls every job to completion. */}
-      {reportBatch && (
+      {/* Live bulk progress (reports or audits): a fixed card polling every job. */}
+      {batch && (() => {
+        const isAudit = batch.kind === "audit";
+        const noun = isAudit ? "audit" : "report";
+        const pct = batch.total ? Math.round((batch.done / batch.total) * 100) : 0;
+        return (
         <div className="fixed bottom-4 right-4 z-50 w-80 rounded-xl border border-border bg-card p-4 shadow-xl">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-2 text-sm font-semibold">
-              {reportBatch.finished ? (
+              {batch.finished ? (
                 <CheckCircle2 size={16} className="text-emerald-500" />
               ) : (
                 <Loader2 size={16} className="animate-spin text-primary" />
               )}
-              {reportBatch.finished
-                ? reportBatch.failed
-                  ? `${reportBatch.done} of ${reportBatch.total} reports ready`
-                  : "All reports ready"
-                : "Generating reports…"}
+              {batch.finished
+                ? batch.failed
+                  ? `${batch.done} of ${batch.total} ${noun}s done`
+                  : isAudit ? "All audits done" : "All reports ready"
+                : isAudit ? "Auditing sites…" : "Generating reports…"}
             </div>
-            {reportBatch.finished && (
+            {batch.finished && (
               <button
-                onClick={() => setReportBatch(null)}
+                onClick={() => setBatch(null)}
                 className="shrink-0 text-muted-foreground hover:text-foreground"
                 title="Dismiss"
               >
@@ -1319,22 +1352,23 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
           </div>
           <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-muted">
             <div
-              className={cn("h-full rounded-full transition-[width] duration-500", reportBatch.finished ? "bg-emerald-500" : "bg-primary")}
-              style={{ width: `${reportBatch.total ? Math.round((reportBatch.done / reportBatch.total) * 100) : 0}%` }}
+              className={cn("h-full rounded-full transition-[width] duration-500", batch.finished ? "bg-emerald-500" : "bg-primary")}
+              style={{ width: `${pct}%` }}
             />
           </div>
           <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-            <span>{reportBatch.done} / {reportBatch.total} done{reportBatch.failed ? ` · ${reportBatch.failed} failed` : ""}</span>
-            <span>{reportBatch.total ? Math.round((reportBatch.done / reportBatch.total) * 100) : 0}%</span>
+            <span>{batch.done} / {batch.total} done{batch.failed ? ` · ${batch.failed} failed` : ""}</span>
+            <span>{pct}%</span>
           </div>
-          {!reportBatch.finished && reportBatch.latest && (
-            <p className="mt-1.5 truncate text-[11px] text-muted-foreground" title={reportBatch.latest}>{reportBatch.latest}</p>
+          {!batch.finished && batch.latest && (
+            <p className="mt-1.5 truncate text-[11px] text-muted-foreground" title={batch.latest}>{batch.latest}</p>
           )}
-          {reportBatch.finished && (
-            <p className="mt-1.5 text-[11px] text-muted-foreground">Open any lead to view or download its report.</p>
+          {batch.finished && (
+            <p className="mt-1.5 text-[11px] text-muted-foreground">{isAudit ? "Health scores updated on the audited leads." : "Open any lead to view or download its report."}</p>
           )}
         </div>
-      )}
+        );
+      })()}
     </AppShell>
   );
 }

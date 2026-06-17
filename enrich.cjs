@@ -661,6 +661,64 @@ if (require.main === module)
   let processed = 0;
   let withEmail = 0;
 
+  // Pre-fill from the shared, cross-tenant enrichment cache: any site already
+  // enriched by ANY user (here or in an earlier run) is taken straight from the
+  // DB and never crawled again. Best-effort — if there's no DB / DATABASE_URL
+  // (standalone CLI, desktop build) this silently no-ops and we crawl as before.
+  async function prefillFromCache() {
+    if (!process.env.DATABASE_URL) return 0;
+    let db;
+    try {
+      db = require("./web/lib/db.cjs");
+    } catch {
+      return 0;
+    }
+    try {
+      const websites = rows.map((r) => (r[webCol] || "").trim()).filter(Boolean);
+      if (!websites.length) return 0;
+      const map = await db.getCachedEnrichmentMap(websites);
+      if (!map.size) return 0;
+      let filled = 0;
+      for (const w of new Set(websites)) {
+        const key = siteKey(w);
+        if (state.get(key)?.email) continue; // resume state already has it
+        const cached = map.get(db.hostOf(w));
+        if (!cached || !cached.email) continue;
+        const result = {
+          email: cached.email || "",
+          allEmails: cached.all_emails || cached.email || "",
+          contactPage: cached.contact_page || "",
+          facebook: cached.facebook || "",
+          instagram: cached.instagram || "",
+          linkedin: cached.linkedin || "",
+          twitter: cached.twitter || "",
+          youtube: cached.youtube || "",
+          tiktok: cached.tiktok || "",
+          pinterest: cached.pinterest || "",
+          whatsapp: cached.whatsapp || "",
+          telegram: cached.telegram || "",
+          enrichStatus: (cached.enrich_status || "ok") + " (cached)",
+        };
+        state.set(key, result);
+        fs.appendFileSync(
+          stateFile,
+          JSON.stringify({ ts: new Date().toISOString(), key, website: w, result, source: "cache" }) + "\n",
+          "utf8"
+        );
+        filled++;
+      }
+      if (filled) {
+        flushCsv();
+        console.log(`  Cache: ${filled} site${filled > 1 ? "s" : ""} already enriched — reused, not re-crawled.`);
+      }
+      return filled;
+    } catch (err) {
+      console.warn("  Cache pre-fill skipped:", err.message);
+      return 0;
+    }
+  }
+  await prefillFromCache();
+
   // Work queue of unique site keys not yet in state.
   const queued = new Set();
   const queue = [];

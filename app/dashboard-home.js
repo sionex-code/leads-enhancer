@@ -6,10 +6,13 @@ import { useRouter } from "next/navigation";
 import AppShell from "./components/app/AppShell";
 import AnimatedNumber from "./components/AnimatedNumber";
 import ReportModal from "./components/ReportModal";
+import ListsDialog from "./components/leads/ListsDialog";
 import { useMe } from "./components/AccountWidget";
 import { QUICK_COUNTRIES, QUICK_SERVICES } from "./lib/quickSearchData";
 import {
   BarChart3,
+  CheckCircle2,
+  X,
   Clock3,
   FileText,
   Globe2,
@@ -53,6 +56,8 @@ const blankForm = {
 };
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
+const AUDIT_COST = 3; // credits per quick audit (mirrors billing.AUDIT_COST)
+const REPORT_COST = 10; // credits per website report (mirrors billing.REPORT_COST)
 
 // Mirror of the server-side slugify so we can match the typed project name to a
 // project in the list (and know if THAT project — not the selected one — is busy).
@@ -142,8 +147,9 @@ function Socials({ lead }) {
 }
 
 // Per-row actions on the captured-leads table: grab email/socials, check
-// WhatsApp, open the website report, and remove from this list.
-function CapturedActions({ lead, busy = {}, onEnrich, onWhatsapp, onReport, onRemove }) {
+// WhatsApp, run a quick audit (Health scores), open the website report, and
+// remove from this list. Matches the Leads-manager row actions for consistency.
+function CapturedActions({ lead, busy = {}, onEnrich, onWhatsapp, onAudit, onReport, onRemove }) {
   return (
     <>
       <Button variant="ghost" size="icon" className="h-8 w-8" title={lead.email ? "Re-grab email + socials" : "Grab email + socials"} disabled={!lead.website || busy.enrich} onClick={() => onEnrich(lead)}>
@@ -151,6 +157,9 @@ function CapturedActions({ lead, busy = {}, onEnrich, onWhatsapp, onReport, onRe
       </Button>
       <Button variant="ghost" size="icon" className="h-8 w-8" title={lead.phone ? "Check WhatsApp" : "No phone to check"} disabled={!lead.phone || busy.whatsapp} onClick={() => onWhatsapp(lead)}>
         {busy.whatsapp ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />}
+      </Button>
+      <Button variant="ghost" size="icon" className="h-8 w-8" title={lead.website ? `Quick audit — desktop + mobile scores (${AUDIT_COST} credits)` : "No website to audit"} disabled={!lead.website || busy.audit} onClick={() => onAudit(lead)}>
+        {busy.audit ? <Loader2 size={14} className="animate-spin" /> : <BarChart3 size={14} />}
       </Button>
       <Button variant="ghost" size="icon" className="h-8 w-8" title="Website report" disabled={!lead.website || busy.report} onClick={() => onReport(lead)}>
         {busy.report ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
@@ -276,7 +285,7 @@ function CreditsPill() {
   const me = useMe();
   const ent = me?.entitlement;
   const remaining = ent?.remaining;
-  const unlimited = ent?.active && (remaining === null || ent?.plan === "p99");
+  const unlimited = ent?.active && (remaining === null || ent?.plan === "p49");
   const label = !me
     ? "…"
     : !ent?.active
@@ -516,6 +525,24 @@ export default function Dashboard({ view = "" }) {
   const [rowBusy, setRowBusy] = useState({});
   const [rowOverlay, setRowOverlay] = useState({});
   const [reportLead, setReportLead] = useState(null);
+  // Captured lead currently open in the shared "Add to list" dialog (saved to the
+  // DB first so it has an id). Mirrors the Leads manager for a consistent flow.
+  const [listsLead, setListsLead] = useState(null);
+  // Bulk selection on the captured-leads table — keyed by the stable leadKey
+  // (captured rows have no DB id yet), so a click tracks the same lead across the
+  // 1.5s status polls. Mirrors the Leads manager: row-click toggles, header all.
+  const [selectedLeads, setSelectedLeads] = useState(() => new Set());
+  const [bulkBusy, setBulkBusy] = useState("");
+  const [credits, setCredits] = useState(null);
+  // Captured rows being added to a list in bulk — saved to the DB first so they
+  // have ids; { ids, keys } drives the shared dialog + the "listed" overlay.
+  const [listsBulk, setListsBulk] = useState(null);
+  // Live progress for an in-flight bulk batch (reports OR audits — shared card).
+  const [batch, setBatch] = useState(null);
+  const batchPollRef = useRef(null);
+  // id→leadKey map for the running batch so audit scores can be overlaid back onto
+  // the captured rows when the jobs finish.
+  const batchKeyMap = useRef({});
   // Tiny self-dismissing toast for quick confirmations (e.g. favoriting a project).
   const [toast, setToast] = useState("");
   const toastTimer = useRef(null);
@@ -604,6 +631,17 @@ export default function Dashboard({ view = "" }) {
       clearTimeout(timer);
     };
   }, [selected, simpleMode]);
+
+  // Keep a live credit balance for the bulk audit/report cost warnings, and stop
+  // the batch poller if the page unmounts mid-run.
+  useEffect(() => {
+    let alive = true;
+    jsonFetch("/api/me").then((d) => { if (alive) setCredits(d?.entitlement?.credits ?? null); }).catch(() => {});
+    return () => { alive = false; clearTimeout(batchPollRef.current); };
+  }, []);
+  function refreshCredits() {
+    jsonFetch("/api/me").then((d) => setCredits(d?.entitlement?.credits ?? null)).catch(() => {});
+  }
 
   async function run(stages, formOverride = form) {
     const runForm = formOverride || form;
@@ -870,6 +908,61 @@ export default function Dashboard({ view = "" }) {
     }
   }
 
+  // Quick audit for a captured row: save it first (to get an id), run the single
+  // audit endpoint, poll it to completion, then drop the fresh desktop/mobile
+  // scores into the row overlay so they show in place. Mirrors the Leads manager.
+  async function auditCaptured(lead) {
+    const key = leadKey(lead);
+    if (!confirm(`Audit ${lead.name || "this site"} (desktop + mobile) for ${AUDIT_COST} credits?`)) return;
+    setRowBusyKey(key, "audit", true);
+    setError("");
+    try {
+      const saved = await ensureLeadId(lead);
+      const data = await jsonFetch(`/api/leads/${saved.id}/audit`, { method: "POST" });
+      await new Promise((resolve) => {
+        const tick = async () => {
+          const job = await jsonFetch(`/api/agent/jobs/${data.jobId}`).catch(() => null);
+          if (!job || job.status === "running") { setTimeout(tick, 2500); return; }
+          resolve();
+        };
+        tick();
+      });
+      const fresh = await jsonFetch(`/api/leads/${saved.id}`).catch(() => null);
+      const l = fresh?.lead;
+      if (l) {
+        setRowOverlay((o) => ({
+          ...o,
+          [key]: {
+            ...(o[key] || {}),
+            desktop: { performance: l.desktop_performance, seo: l.desktop_seo },
+            mobile: { performance: l.mobile_performance, seo: l.mobile_seo },
+          },
+        }));
+      }
+      showToast("Audit complete — scores updated");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRowBusyKey(key, "audit", false);
+    }
+  }
+
+  // Save the captured row, then open the shared "Add to list" dialog for it — the
+  // same flow the Leads manager uses (replaces the old prompt()).
+  async function openListsForCaptured(lead) {
+    const key = leadKey(lead);
+    setRowBusyKey(key, "list", true);
+    setError("");
+    try {
+      const saved = await ensureLeadId(lead);
+      setListsLead({ id: saved.id, name: saved.name || lead.name, domain: saved.domain || lead.domain, website: saved.website || lead.website, __key: key });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRowBusyKey(key, "list", false);
+    }
+  }
+
   // Remove from this captured list only (local hide) — it stays in the global
   // leads database, matching the rule that the overall view owns deletion.
   function hideCaptured(lead) {
@@ -886,6 +979,141 @@ export default function Dashboard({ view = "" }) {
   // when a status fetch is mid-flight or briefly stale after switching projects.
   const running = !!status?.state?.activeAlive || !!selectedProject?.running;
   const runningCount = projects.filter((p) => p.running).length;
+
+  // --- Bulk selection over the captured-leads table (keyed by leadKey) ---
+  const leadKeysOnPage = leads.map(leadKey);
+  const selectedLeadObjs = leads.filter((l) => selectedLeads.has(leadKey(l)));
+  const selectedCount = selectedLeadObjs.length;
+  const reportableLeads = selectedLeadObjs.filter((l) => l.website);
+  const reportableCount = reportableLeads.length;
+  const auditCost = reportableCount * AUDIT_COST;
+  const reportCost = reportableCount * REPORT_COST;
+  const allLeadsSelected = leadKeysOnPage.length > 0 && leadKeysOnPage.every((k) => selectedLeads.has(k));
+  const notEnoughForAudit = credits != null && auditCost > credits;
+  const notEnoughForReport = credits != null && reportCost > credits;
+  const batchRunning = !!batch && !batch.finished;
+  const toggleLead = (key) => setSelectedLeads((s) => { const n = new Set(s); if (n.has(key)) n.delete(key); else n.add(key); return n; });
+  const toggleAllLeads = () => setSelectedLeads((s) => {
+    const n = new Set(s);
+    if (leadKeysOnPage.every((k) => n.has(k))) leadKeysOnPage.forEach((k) => n.delete(k));
+    else leadKeysOnPage.forEach((k) => n.add(k));
+    return n;
+  });
+
+  // Ensure every selected captured lead exists in the DB; returns [{ key, id }].
+  // Used by bulk audit / report / add-to-list (the bulk endpoints work off ids).
+  async function ensureSelectedIds(leadObjs) {
+    const pairs = [];
+    for (const lead of leadObjs) {
+      try {
+        const saved = await ensureLeadId(lead);
+        pairs.push({ key: leadKey(lead), id: saved.id });
+      } catch {}
+    }
+    return pairs;
+  }
+
+  // Poll every job in a bulk batch and roll the per-job progress into one
+  // done/total figure. On completion, refresh credits and — for audits — overlay
+  // the fresh scores back onto the captured rows. Mirrors the Leads manager.
+  function pollBatch(jobIds, total, kind) {
+    clearTimeout(batchPollRef.current);
+    const tick = async () => {
+      const jobs = await Promise.all(jobIds.map((id) => jsonFetch(`/api/agent/jobs/${id}`).catch(() => null)));
+      let done = 0, latest = "", allTerminal = true;
+      for (const job of jobs) {
+        if (!job) { allTerminal = false; continue; }
+        done += (job.results || []).length;
+        if (job.status === "running") allTerminal = false;
+        const line = (job.log || []).slice(-1)[0];
+        if (line) latest = line;
+      }
+      done = Math.min(done, total);
+      const failed = allTerminal ? Math.max(0, total - done) : 0;
+      setBatch({ kind, jobIds, total, done, failed, latest, finished: allTerminal });
+      if (allTerminal) {
+        refreshCredits();
+        if (kind === "audit") overlayAuditScores(batchKeyMap.current);
+      } else {
+        batchPollRef.current = setTimeout(tick, 2500);
+      }
+    };
+    tick();
+  }
+
+  // After a bulk audit, pull each audited lead's fresh scores and drop them into
+  // the captured-row overlay (the rows come from project status, not the DB).
+  async function overlayAuditScores(idKeyMap) {
+    await Promise.all(Object.entries(idKeyMap || {}).map(async ([id, key]) => {
+      const fresh = await jsonFetch(`/api/leads/${id}`).catch(() => null);
+      const l = fresh?.lead;
+      if (!l) return;
+      setRowOverlay((o) => ({
+        ...o,
+        [key]: { ...(o[key] || {}), desktop: { performance: l.desktop_performance, seo: l.desktop_seo }, mobile: { performance: l.mobile_performance, seo: l.mobile_seo } },
+      }));
+    }));
+  }
+
+  // Charge + launch a bulk batch (audit or report) for the selected rows with a
+  // website. Saves them to the DB first (for ids), then drives the shared card.
+  async function runBulkBatch(kind) {
+    const billable = reportableLeads;
+    if (!billable.length) { alert("None of the selected leads have a website."); return; }
+    const unit = kind === "audit" ? AUDIT_COST : REPORT_COST;
+    const noun = kind === "audit" ? "audit" : "report";
+    const endpoint = kind === "audit" ? "/api/leads/audit/bulk" : "/api/leads/report/bulk";
+    const cost = billable.length * unit;
+    const have = credits ?? 0;
+    if (cost > have) { alert(`Not enough credits. ${billable.length} ${noun}(s) need ${cost} credits and you have ${have}.`); return; }
+    if (!confirm(`Run ${billable.length} ${noun}${billable.length === 1 ? "" : "s"}?\n\nThis will use ${cost} credits (${billable.length} × ${unit}). You have ${have}, leaving ${have - cost}.`)) return;
+    setBulkBusy(kind);
+    try {
+      const pairs = await ensureSelectedIds(billable);
+      const ids = pairs.map((p) => p.id);
+      if (!ids.length) throw new Error("Could not save the selected leads.");
+      batchKeyMap.current = Object.fromEntries(pairs.map((p) => [p.id, p.key]));
+      const data = await jsonFetch(endpoint, { method: "POST", body: JSON.stringify({ ids }) });
+      if (typeof data.credits === "number") setCredits(data.credits);
+      setSelectedLeads(new Set());
+      const jobIds = data.jobIds || [];
+      setBatch({ kind, jobIds, total: data.count, done: 0, failed: 0, latest: "Starting…", finished: false });
+      if (jobIds.length) pollBatch(jobIds, data.count, kind);
+    } catch (err) {
+      refreshCredits();
+      alert(err.message);
+    } finally {
+      setBulkBusy("");
+    }
+  }
+
+  // Save the selected rows, then open the shared "Add to list" dialog in bulk mode.
+  async function bulkAddToList() {
+    if (!selectedLeadObjs.length) return;
+    setBulkBusy("list");
+    try {
+      const pairs = await ensureSelectedIds(selectedLeadObjs);
+      if (!pairs.length) throw new Error("Could not save the selected leads.");
+      setListsBulk({ ids: pairs.map((p) => p.id), keys: pairs.map((p) => p.key) });
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setBulkBusy("");
+    }
+  }
+
+  // Remove the selection from this captured view only (local hide) — the leads
+  // stay in the database, matching the per-row remove + the Leads-manager rule.
+  function bulkRemove() {
+    if (!selectedLeadObjs.length) return;
+    if (!confirm(`Remove ${selectedLeadObjs.length} lead${selectedLeadObjs.length === 1 ? "" : "s"} from this list? They stay in your leads database.`)) return;
+    setRowOverlay((o) => {
+      const next = { ...o };
+      for (const l of selectedLeadObjs) { const k = leadKey(l); next[k] = { ...(next[k] || {}), __removed: true }; }
+      return next;
+    });
+    setSelectedLeads(new Set());
+  }
 
   // Sidebar project list (rendered into AppShell's sidebarExtra slot).
   const projectList = (
@@ -1087,6 +1315,34 @@ export default function Dashboard({ view = "" }) {
 
         <ScoreLegend />
 
+        {/* Bulk action bar — add to a list, audit, report, or remove the selection */}
+        {selectedCount > 0 && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-primary/40 bg-primary/5 px-4 py-2.5 text-sm">
+            <span className="font-medium">{selectedCount} selected</span>
+            {reportableCount > 0 && (
+              <span className="text-muted-foreground">
+                {reportableCount} with site · audit <strong className="text-foreground">{auditCost}</strong> / report <strong className="text-foreground">{reportCost}</strong> credits
+                {credits != null && <> · balance {credits}</>}
+              </span>
+            )}
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setSelectedLeads(new Set())}>Clear</Button>
+              <Button variant="outline" size="sm" disabled={!!bulkBusy} onClick={bulkAddToList} title="Add the selected leads to a list">
+                {bulkBusy === "list" ? <Loader2 size={15} className="animate-spin" /> : <ListPlus size={15} />} Add to list
+              </Button>
+              <Button variant="outline" size="sm" disabled={!!bulkBusy || batchRunning || reportableCount === 0 || notEnoughForAudit} onClick={() => runBulkBatch("audit")} title={notEnoughForAudit ? "Not enough credits" : `Audit ${reportableCount} site(s) — ${auditCost} credits`}>
+                {bulkBusy === "audit" ? <Loader2 size={15} className="animate-spin" /> : <BarChart3 size={15} />} Audit {reportableCount}
+              </Button>
+              <Button size="sm" disabled={!!bulkBusy || batchRunning || reportableCount === 0 || notEnoughForReport} onClick={() => runBulkBatch("report")} title={notEnoughForReport ? "Not enough credits" : `Generate ${reportableCount} report(s) — ${reportCost} credits`}>
+                {bulkBusy === "report" ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />} Report {reportableCount}
+              </Button>
+              <Button variant="destructive" size="sm" disabled={!!bulkBusy} onClick={bulkRemove} title="Remove the selected leads from this list">
+                {bulkBusy === "remove" ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />} Remove
+              </Button>
+            </div>
+          </div>
+        )}
+
         <Card className="overflow-hidden">
           {!leads.length ? (
             <div className="p-10 text-center text-sm text-muted-foreground">No leads loaded</div>
@@ -1094,32 +1350,38 @@ export default function Dashboard({ view = "" }) {
             <>
               {/* Mobile cards */}
               <div className="space-y-3 p-3 md:hidden">
-                {leads.map((lead, index) => (
-                  <div className="rounded-lg border border-border bg-card/60 p-3" key={`m-${lead.name}-${index}`}>
+                {leads.map((lead, index) => {
+                  const key = leadKey(lead);
+                  return (
+                  <div className={cn("cursor-pointer rounded-lg border bg-card/60 p-3", selectedLeads.has(key) ? "border-primary/50 bg-primary/5" : "border-border")} key={`m-${lead.name}-${index}`} onClick={() => toggleLead(key)}>
                     <div className="flex items-start justify-between gap-2">
-                      <strong className="text-sm font-medium">{lead.mapsUrl ? <a className="text-primary hover:underline" href={lead.mapsUrl} target="_blank" rel="noreferrer">{lead.name || "Unknown"}</a> : lead.name || "Unknown"}</strong>
+                      <div className="flex items-start gap-2">
+                        <input type="checkbox" aria-label={`Select ${lead.name || "lead"}`} checked={selectedLeads.has(key)} onClick={(e) => e.stopPropagation()} onChange={() => toggleLead(key)} className="mt-0.5 accent-[hsl(var(--primary))]" />
+                        <strong className="text-sm font-medium">{lead.mapsUrl ? <a className="text-primary hover:underline" href={lead.mapsUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{lead.name || "Unknown"}</a> : lead.name || "Unknown"}</strong>
+                      </div>
                       <span className="text-xs text-muted-foreground">{lead.category || ""}</span>
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
                       {lead.phone && <span>{lead.phone}</span>}
                       {lead.whatsappExists === "yes" && <Badge variant="success">WA ✓</Badge>}
                       {lead.whatsappExists === "no" && <Badge variant="destructive">WA ✗</Badge>}
-                      {lead.website && <a className="text-primary hover:underline" href={lead.website} target="_blank" rel="noreferrer">{lead.domain || "site"}</a>}
+                      {lead.website && <a className="text-primary hover:underline" href={lead.website} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{lead.domain || "site"}</a>}
                     </div>
-                    {lead.email && <div className="mt-1 text-sm"><a className="text-primary hover:underline" href={`mailto:${lead.email}`}>{lead.email}</a></div>}
+                    {lead.email && <div className="mt-1 text-sm"><a className="text-primary hover:underline" href={`mailto:${lead.email}`} onClick={(e) => e.stopPropagation()}>{lead.email}</a></div>}
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       <Score label="Perf" value={lead.desktop?.performance} />
                       <Score label="SEO" value={lead.desktop?.seo} />
                       <Score label="M-Perf" value={lead.mobile?.performance} />
                     </div>
-                    <div className="mt-2"><Socials lead={lead} /></div>
-                    <div className="mt-2 flex flex-wrap items-center gap-1">
+                    <div className="mt-2" onClick={(e) => e.stopPropagation()}><Socials lead={lead} /></div>
+                    <div className="mt-2 flex flex-wrap items-center gap-1" onClick={(e) => e.stopPropagation()}>
                       <Button variant="ghost" size="sm" className={cn(lead.__favorited && "text-amber-500")} onClick={() => addCapturedLead(lead, "watchlist")} title={lead.__favorited ? "Added to favorites" : "Add to favorites"}><Star size={14} fill={lead.__favorited ? "currentColor" : "none"} /> Favorite</Button>
-                      <Button variant="ghost" size="sm" className={cn(lead.__listed && "text-primary")} onClick={() => addCapturedLead(lead, "contact_list")} title="Add to custom list with notes"><ListPlus size={14} /> List</Button>
-                      <CapturedActions lead={lead} busy={rowBusy[leadKey(lead)] || {}} onEnrich={enrichCaptured} onWhatsapp={whatsappCaptured} onReport={reportCaptured} onRemove={hideCaptured} />
+                      <Button variant="ghost" size="sm" className={cn(lead.__listed && "text-primary")} disabled={(rowBusy[leadKey(lead)] || {}).list} onClick={() => openListsForCaptured(lead)} title="Add to a list">{(rowBusy[leadKey(lead)] || {}).list ? <Loader2 size={14} className="animate-spin" /> : <ListPlus size={14} />} List</Button>
+                      <CapturedActions lead={lead} busy={rowBusy[leadKey(lead)] || {}} onEnrich={enrichCaptured} onWhatsapp={whatsappCaptured} onAudit={auditCaptured} onReport={reportCaptured} onRemove={hideCaptured} />
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Desktop table */}
@@ -1127,6 +1389,9 @@ export default function Dashboard({ view = "" }) {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-8">
+                        <input type="checkbox" aria-label="Select all leads" checked={allLeadsSelected} disabled={!leadKeysOnPage.length} onChange={toggleAllLeads} className="accent-[hsl(var(--primary))]" />
+                      </TableHead>
                       <TableHead>Name</TableHead>
                       <TableHead>Contact</TableHead>
                       <TableHead>Website</TableHead>
@@ -1138,10 +1403,15 @@ export default function Dashboard({ view = "" }) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {leads.map((lead, index) => (
-                      <TableRow key={`${lead.name}-${index}`}>
+                    {leads.map((lead, index) => {
+                      const key = leadKey(lead);
+                      return (
+                      <TableRow key={`${lead.name}-${index}`} className={cn("cursor-pointer", selectedLeads.has(key) && "bg-primary/5")} onClick={() => toggleLead(key)}>
+                        <TableCell className="w-8" onClick={(e) => e.stopPropagation()}>
+                          <input type="checkbox" aria-label={`Select ${lead.name || "lead"}`} checked={selectedLeads.has(key)} onChange={() => toggleLead(key)} className="accent-[hsl(var(--primary))]" />
+                        </TableCell>
                         <TableCell>
-                          {lead.mapsUrl ? <a className="font-medium text-primary hover:underline" href={lead.mapsUrl} target="_blank" rel="noreferrer">{lead.name || "Unknown"}</a> : <span className="font-medium">{lead.name || "Unknown"}</span>}
+                          {lead.mapsUrl ? <a className="font-medium text-primary hover:underline" href={lead.mapsUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{lead.name || "Unknown"}</a> : <span className="font-medium">{lead.name || "Unknown"}</span>}
                           <div className="text-xs text-muted-foreground">{lead.category || lead.address || ""}</div>
                         </TableCell>
                         <TableCell>
@@ -1152,22 +1422,23 @@ export default function Dashboard({ view = "" }) {
                           </div>
                           {lead.rating ? <div className="text-xs text-muted-foreground">Rating {lead.rating}</div> : null}
                         </TableCell>
-                        <TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
                           {lead.website ? <a className="text-primary hover:underline" href={lead.website} target="_blank" rel="noreferrer">{lead.domain || lead.website}</a> : <span className="text-xs text-muted-foreground">No website</span>}
                         </TableCell>
                         <TableCell>{lead.email || <span className="text-xs text-muted-foreground">{lead.enrichStatus || "-"}</span>}</TableCell>
-                        <TableCell><Socials lead={lead} /></TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}><Socials lead={lead} /></TableCell>
                         <TableCell><div className="flex flex-wrap gap-1"><Score label="Perf" value={lead.desktop?.performance} /><Score label="SEO" value={lead.desktop?.seo} /></div></TableCell>
                         <TableCell><div className="flex flex-wrap gap-1"><Score label="Perf" value={lead.mobile?.performance} /><Score label="SEO" value={lead.mobile?.seo} /></div></TableCell>
-                        <TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
                           <div className="flex flex-wrap items-center gap-0.5">
                             <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.__favorited && "text-amber-500")} onClick={() => addCapturedLead(lead, "watchlist")} title={lead.__favorited ? "Added to favorites" : "Add to favorites"}><Star size={14} fill={lead.__favorited ? "currentColor" : "none"} /></Button>
-                            <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.__listed && "text-primary")} onClick={() => addCapturedLead(lead, "contact_list")} title="Add to custom list with notes"><ListPlus size={14} /></Button>
-                            <CapturedActions lead={lead} busy={rowBusy[leadKey(lead)] || {}} onEnrich={enrichCaptured} onWhatsapp={whatsappCaptured} onReport={reportCaptured} onRemove={hideCaptured} />
+                            <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.__listed && "text-primary")} disabled={(rowBusy[leadKey(lead)] || {}).list} onClick={() => openListsForCaptured(lead)} title="Add to a list">{(rowBusy[leadKey(lead)] || {}).list ? <Loader2 size={14} className="animate-spin" /> : <ListPlus size={14} />}</Button>
+                            <CapturedActions lead={lead} busy={rowBusy[leadKey(lead)] || {}} onEnrich={enrichCaptured} onWhatsapp={whatsappCaptured} onAudit={auditCaptured} onReport={reportCaptured} onRemove={hideCaptured} />
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -1176,6 +1447,61 @@ export default function Dashboard({ view = "" }) {
         </Card>
       </div>
       {reportLead && <ReportModal lead={reportLead} onClose={() => setReportLead(null)} />}
+      {listsLead && (
+        <ListsDialog
+          lead={listsLead}
+          onClose={() => setListsLead(null)}
+          onChanged={() => {
+            // Light up the row's list icon once it's been added to a list.
+            if (listsLead.__key) setRowOverlay((o) => ({ ...o, [listsLead.__key]: { ...(o[listsLead.__key] || {}), __listed: true } }));
+          }}
+        />
+      )}
+      {listsBulk && (
+        <ListsDialog
+          ids={listsBulk.ids}
+          onClose={() => setListsBulk(null)}
+          onChanged={() => {
+            setRowOverlay((o) => {
+              const next = { ...o };
+              for (const k of listsBulk.keys) next[k] = { ...(next[k] || {}), __listed: true };
+              return next;
+            });
+            setSelectedLeads(new Set());
+          }}
+        />
+      )}
+
+      {/* Live bulk progress (reports or audits): a fixed card polling every job. */}
+      {batch && (() => {
+        const isAudit = batch.kind === "audit";
+        const noun = isAudit ? "audit" : "report";
+        const pct = batch.total ? Math.round((batch.done / batch.total) * 100) : 0;
+        return (
+        <div className="fixed bottom-4 right-4 z-50 w-80 rounded-xl border border-border bg-card p-4 shadow-xl">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              {batch.finished ? <CheckCircle2 size={16} className="text-emerald-500" /> : <Loader2 size={16} className="animate-spin text-primary" />}
+              {batch.finished
+                ? batch.failed ? `${batch.done} of ${batch.total} ${noun}s done` : isAudit ? "All audits done" : "All reports ready"
+                : isAudit ? "Auditing sites…" : "Generating reports…"}
+            </div>
+            {batch.finished && (
+              <button onClick={() => setBatch(null)} className="shrink-0 text-muted-foreground hover:text-foreground" title="Dismiss"><X size={16} /></button>
+            )}
+          </div>
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-muted">
+            <div className={cn("h-full rounded-full transition-[width] duration-500", batch.finished ? "bg-emerald-500" : "bg-primary")} style={{ width: `${pct}%` }} />
+          </div>
+          <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+            <span>{batch.done} / {batch.total} done{batch.failed ? ` · ${batch.failed} failed` : ""}</span>
+            <span>{pct}%</span>
+          </div>
+          {!batch.finished && batch.latest && <p className="mt-1.5 truncate text-[11px] text-muted-foreground" title={batch.latest}>{batch.latest}</p>}
+          {batch.finished && <p className="mt-1.5 text-[11px] text-muted-foreground">{isAudit ? "Health scores updated on the audited leads." : "Open any lead to view or download its report."}</p>}
+        </div>
+        );
+      })()}
     </AppShell>
   );
 }

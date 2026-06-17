@@ -6,8 +6,9 @@ export const runtime = "nodejs";
 
 // Admin-only: list all users with their membership, and change a user's plan.
 //   GET  /api/admin/users                      -> { users: [...] }
-//   POST /api/admin/users { userId, plan }      -> grant p19|p49|p99, or revoke
+//   POST /api/admin/users { userId, plan }      -> grant p19|p35|p49, or revoke
 //      (plan = null | "" | "free" downgrades the user to no plan)
+//   Plan keys MUST match billing.cjs: p19 Starter · p35 Growth · p49 Scale.
 export async function GET() {
   const { response } = await requireAdmin();
   if (response) return response;
@@ -25,7 +26,7 @@ export async function POST(request) {
 
   if (plan === null || plan === "" || plan === "free") {
     await billing.revokeForUser(userId);
-  } else if (["p19", "p49", "p99"].includes(plan)) {
+  } else if (["p19", "p35", "p49"].includes(plan)) {
     await billing.setPlanForUser(userId, plan);
   } else {
     return Response.json({ error: "Invalid plan" }, { status: 400 });
