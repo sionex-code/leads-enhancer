@@ -102,8 +102,10 @@ function effectiveMonthly(m, free) {
 
 // Ensure the user has a membership row (free users need one to hold credits) and
 // apply the monthly credit grant if a new calendar month has begun since the last
-// grant. Returns the fresh membership row. Cheap on the hot path: one SELECT when
-// the row exists and this month's grant already happened.
+// grant. The grant TOPS UP to the plan's allotment (GREATEST), it does not add —
+// otherwise re-granting a plan (admin re-set / Whop webhook retry, both of which
+// reset credits_renewed_at to force a regrant) would stack the full allotment each
+// time and the balance would balloon. Returns the fresh membership row.
 async function ensureCredits(userId) {
   let { rows } = await pool().query(`SELECT * FROM memberships WHERE user_id = $1`, [userId]);
   let m = rows[0];
@@ -135,7 +137,7 @@ async function ensureCredits(userId) {
     const grant = effectiveMonthly(m, free);
     const ts = now();
     const upd = await pool().query(
-      `UPDATE memberships SET credits = credits + $1, credits_renewed_at = $2, updated_at = $2
+      `UPDATE memberships SET credits = GREATEST(credits, $1), credits_renewed_at = $2, updated_at = $2
          WHERE user_id = $3 RETURNING *`,
       [grant, ts, userId]
     );
