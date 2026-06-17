@@ -7,5 +7,8 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const { userId, response } = await requireUser();
   if (response) return response;
+  // Nudge the supervisor so queued jobs keep advancing even if the background
+  // interval isn't running in this process.
+  queue.kick();
   return Response.json({ jobs: await queue.listJobs(userId) });
 }

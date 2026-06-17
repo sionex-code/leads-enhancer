@@ -245,6 +245,19 @@ function start() {
   setImmediate(() => tick().catch(() => {}));
 }
 
+// Self-heal: make sure the supervisor is running and nudge it now. Called fire-
+// and-forget from frequently-polled routes (project status, jobs list) so that
+// even if the background interval never started (e.g. the instrumentation hook
+// didn't run in this process), a queued job still gets promoted instead of being
+// stuck on "waiting for a free slot" forever. Cheap: start() is idempotent and
+// tick() guards against overlapping runs.
+function kick() {
+  try {
+    start();
+    setImmediate(() => tick().catch(() => {}));
+  } catch {}
+}
+
 // List a user's jobs (most recent first) for the dashboard.
 async function listJobs(userId, limit = 50) {
   const { rows } = await pool().query(
@@ -299,4 +312,4 @@ async function cancelAllForUser(userId) {
   return rowCount || 0;
 }
 
-module.exports = { start, enqueue, tick, listJobs, cancel, cancelByProject, cancelAllForUser, queuePosition, MAX_CONCURRENT };
+module.exports = { start, kick, enqueue, tick, listJobs, cancel, cancelByProject, cancelAllForUser, queuePosition, MAX_CONCURRENT };
