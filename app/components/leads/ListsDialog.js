@@ -60,9 +60,10 @@ export default function ListsDialog({ lead, ids, lists, onClose, onSavedLead, on
     setError("");
     try {
       if (bulk) {
-        for (const listId of checked) {
-          await jsonFetch("/api/leads/lists/bulk", { method: "POST", body: JSON.stringify({ ids, listId }) });
-        }
+        await jsonFetch("/api/leads/lists/bulk", {
+          method: "POST",
+          body: JSON.stringify({ ids, listIds: [...checked] }),
+        });
       } else {
         const d = await jsonFetch(`/api/leads/${lead.id}/lists`, { method: "PUT", body: JSON.stringify({ listIds: [...checked] }) });
         if (d.lead) onSavedLead?.(d.lead);

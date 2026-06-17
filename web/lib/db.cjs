@@ -520,9 +520,14 @@ async function addLeadsToList(userId, listId, leadIds) {
   if (!own[0]) throw new Error("List not found");
   const { rows: leads } = await q(`SELECT id FROM leads WHERE user_id = $1 AND id = ANY($2::int[])`, [userId, (leadIds || []).map(Number)]);
   const ids = leads.map((r) => r.id);
-  for (const lid of ids) {
-    await q(`INSERT INTO list_members (list_id, lead_id, added_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, [Number(listId), lid, now()]);
-  }
+  if (!ids.length) return 0;
+  // One multi-row insert instead of a query per id (avoids N remote round-trips).
+  await q(
+    `INSERT INTO list_members (list_id, lead_id, added_at)
+       SELECT $1, lid, $3 FROM unnest($2::int[]) AS lid
+       ON CONFLICT DO NOTHING`,
+    [Number(listId), ids, now()]
+  );
   return ids.length;
 }
 
@@ -604,6 +609,34 @@ async function createOrUpdateLead(userId, raw = {}) {
 
   if (Object.keys(patch).length) lead = await updateLeadWorkflow(userId, lead.id, patch);
   return lead;
+}
+
+// Save many leads at once and return their DB ids aligned to the input order
+// (null for any input with no usable identity). Used by the dashboard's bulk
+// actions (add-to-list / audit / report) so the selected captured rows are saved
+// in ONE round-trip instead of one slow POST per lead. Reuses upsertLeads (shared
+// enrichment cache + quota), then a single SELECT maps dedup_key → id.
+async function bulkSaveLeads(userId, rawLeads = []) {
+  const entries = (rawLeads || []).map((raw) => {
+    const prepared = normalizeLead(raw);
+    const merged = { ...raw, ...prepared };
+    const key = dedupKey(merged);
+    return key ? { key, merged } : null;
+  });
+  const valid = entries.filter(Boolean);
+  if (valid.length) await upsertLeads(userId, valid.map((e) => e.merged));
+
+  const keys = [...new Set(valid.map((e) => e.key))];
+  const byKey = new Map();
+  if (keys.length) {
+    const { rows } = await q(
+      `SELECT id, dedup_key FROM leads WHERE user_id = $1 AND dedup_key = ANY($2::text[])`,
+      [userId, keys]
+    );
+    for (const r of rows) byKey.set(r.dedup_key, r.id);
+  }
+  // Aligned to input order: each input becomes { id, dedup_key } or null.
+  return entries.map((e) => (e && byKey.has(e.key) ? { id: byKey.get(e.key), dedup_key: e.key } : null));
 }
 
 // Delete by domain/name match — used by the agent ("delete the lead for x.com").
@@ -786,6 +819,7 @@ module.exports = {
   deleteLead,
   updateLeadWorkflow,
   createOrUpdateLead,
+  bulkSaveLeads,
   deleteLeadsWhere,
   updateLeadFields,
   updateLeadScan,

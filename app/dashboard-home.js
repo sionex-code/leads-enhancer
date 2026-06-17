@@ -1011,14 +1011,27 @@ export default function Dashboard({ view = "" }) {
 
   // Ensure every selected captured lead exists in the DB; returns [{ key, id }].
   // Used by bulk audit / report / add-to-list (the bulk endpoints work off ids).
+  // Saves the whole selection in ONE request (ids come back aligned to input
+  // order) instead of a slow POST per lead — selecting 30 rows used to take 30+s.
   async function ensureSelectedIds(leadObjs) {
+    if (!leadObjs.length) return [];
+    const payload = leadObjs.map((lead) => ({
+      name: lead.name, category: lead.category, rating: lead.rating, reviews: lead.reviews,
+      website: lead.website, phone: lead.phone, address: lead.address,
+      maps_url: lead.mapsUrl || lead.maps_url, email: lead.email,
+      all_emails: lead.allEmails || lead.all_emails,
+      facebook: lead.facebook, instagram: lead.instagram, linkedin: lead.linkedin,
+      twitter: lead.twitter, youtube: lead.youtube, tiktok: lead.tiktok,
+      pinterest: lead.pinterest, whatsapp: lead.whatsapp, telegram: lead.telegram,
+      project: status?.name || selectedProject?.name || form.name,
+      query: status?.query || form.query,
+    }));
+    const data = await jsonFetch("/api/leads", { method: "POST", body: JSON.stringify({ leads: payload }) });
+    const saved = Array.isArray(data.leads) ? data.leads : [];
     const pairs = [];
-    for (const lead of leadObjs) {
-      try {
-        const saved = await ensureLeadId(lead);
-        pairs.push({ key: leadKey(lead), id: saved.id });
-      } catch {}
-    }
+    leadObjs.forEach((lead, i) => {
+      if (saved[i] && saved[i].id) pairs.push({ key: leadKey(lead), id: saved[i].id });
+    });
     return pairs;
   }
 
@@ -1504,6 +1517,7 @@ export default function Dashboard({ view = "" }) {
               for (const k of listsBulk.keys) next[k] = { ...(next[k] || {}), __listed: true };
               return next;
             });
+            showToast(`Added ${listsBulk.ids.length} lead${listsBulk.ids.length === 1 ? "" : "s"} to your list`);
             setSelectedLeads(new Set());
           }}
         />

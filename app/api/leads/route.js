@@ -61,6 +61,19 @@ export async function POST(request) {
   const { userId, response } = await requireUser();
   if (response) return response;
   const body = await request.json().catch(() => ({}));
+
+  // Bulk mode: save many leads in one round-trip and return their ids aligned to
+  // input order (used by the dashboard's bulk add-to-list / audit / report so the
+  // selected rows are persisted in a single request instead of one POST per lead).
+  if (Array.isArray(body.leads)) {
+    try {
+      const saved = await db.bulkSaveLeads(userId, body.leads);
+      return Response.json({ leads: saved });
+    } catch (err) {
+      return Response.json({ error: err.message }, { status: 400 });
+    }
+  }
+
   const rawWebsite = String(body.website || "").trim();
   const website = rawWebsite && !/^https?:\/\//i.test(rawWebsite) ? `https://${rawWebsite}` : rawWebsite;
   const phone = String(body.phone || "").trim();
