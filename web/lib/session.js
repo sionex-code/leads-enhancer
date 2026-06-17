@@ -1,6 +1,7 @@
 // Server-side auth helpers for API routes. ESM (routes are ESM); pairs with the
 // CJS data layer which now takes an explicit userId for tenant isolation.
 import { auth } from "../../auth";
+import billing from "./billing.cjs";
 
 // Resolve the signed-in user id, or null. Real enforcement lives here (the edge
 // middleware only does a cheap cookie redirect for UX).
@@ -12,12 +13,19 @@ export async function currentUserId() {
 // Use at the top of a protected route:
 //   const { userId, response } = await requireUser();
 //   if (response) return response;
+// Also blocks suspended (admin-banned) accounts from every protected route.
 export async function requireUser() {
   const userId = await currentUserId();
   if (!userId) {
     return {
       userId: null,
       response: Response.json({ error: "Unauthorized" }, { status: 401 }),
+    };
+  }
+  if (await billing.isBanned(userId)) {
+    return {
+      userId: null,
+      response: Response.json({ error: "Your account has been suspended. Contact support.", code: "banned" }, { status: 403 }),
     };
   }
   return { userId, response: null };

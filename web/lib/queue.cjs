@@ -258,6 +258,32 @@ function kick() {
   } catch {}
 }
 
+// Admin: every queued/running job across ALL users, with the owner's email, for
+// the admin "running operations" view. Most-recently-started first.
+async function listActiveJobs(limit = 200) {
+  const { rows } = await pool().query(
+    `SELECT j.id, j.user_id, j.project_slug, j.type, j.status, j.params, j.pid,
+            j.created_at, j.started_at, u.email, u.name
+       FROM jobs j
+       LEFT JOIN users u ON u.id = j.user_id
+      WHERE j.status IN ('queued', 'running')
+      ORDER BY (j.status = 'running') DESC, j.started_at DESC NULLS LAST, j.id DESC
+      LIMIT $1`,
+    [limit]
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    userId: r.user_id,
+    email: r.email,
+    name: r.name,
+    project: (r.params && r.params.name) || r.project_slug,
+    type: r.type,
+    status: r.status,
+    createdAt: r.created_at,
+    startedAt: r.started_at,
+  }));
+}
+
 // List a user's jobs (most recent first) for the dashboard.
 async function listJobs(userId, limit = 50) {
   const { rows } = await pool().query(
@@ -312,4 +338,4 @@ async function cancelAllForUser(userId) {
   return rowCount || 0;
 }
 
-module.exports = { start, kick, enqueue, tick, listJobs, cancel, cancelByProject, cancelAllForUser, queuePosition, MAX_CONCURRENT };
+module.exports = { start, kick, enqueue, tick, listJobs, listActiveJobs, cancel, cancelByProject, cancelAllForUser, queuePosition, MAX_CONCURRENT };

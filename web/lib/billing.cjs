@@ -330,7 +330,7 @@ async function revokeForUser(userId) {
 // All users joined with their membership, for the admin panel.
 async function listUsersWithEntitlement(limit = 500) {
   const { rows } = await pool().query(
-    `SELECT u.id, u.email, u.name, u.image, u.created_at,
+    `SELECT u.id, u.email, u.name, u.image, u.created_at, u.banned,
             m.plan, m.status, m.leads_quota, m.leads_used,
             m.credits, m.credits_monthly, m.current_period_end
        FROM users u
@@ -340,6 +340,57 @@ async function listUsersWithEntitlement(limit = 500) {
     [limit]
   );
   return rows;
+}
+
+// ---- Admin: account ban + package pricing ------------------------------------
+// Ban (suspend) or unban a user account. requireUser() blocks banned users.
+async function setUserBanned(userId, banned) {
+  await pool().query(`UPDATE users SET banned = $1 WHERE id = $2`, [banned ? 1 : 0, userId]);
+  return !!banned;
+}
+
+// Cheap ban check on the request hot path (PK lookup).
+async function isBanned(userId) {
+  if (!userId) return false;
+  try {
+    const { rows } = await pool().query(`SELECT banned FROM users WHERE id = $1`, [userId]);
+    return !!(rows[0] && rows[0].banned);
+  } catch {
+    return false; // never lock everyone out if the column/query hiccups
+  }
+}
+
+const PLAN_IDS = ["p19", "p35", "p49"];
+
+// The packages as the public billing page / admin should display them: plan
+// constants with any admin price/credits override from app_settings applied.
+async function getPackages() {
+  const pkgs = PLAN_IDS.map((id) => ({
+    id,
+    label: PLAN_LABELS[id],
+    price: PLAN_PRICES[id],
+    quota: PLAN_QUOTAS[id],
+    credits: PLAN_CREDITS[id],
+  }));
+  for (const p of pkgs) {
+    const pr = await getSetting(`plan_price_${p.id}`);
+    if (pr != null && pr !== "") p.price = Math.max(0, parseInt(pr, 10) || 0);
+    const cr = await getSetting(`plan_credits_${p.id}`);
+    if (cr != null && cr !== "") p.credits = Math.max(0, parseInt(cr, 10) || 0);
+  }
+  return pkgs;
+}
+
+// Admin: override a package's monthly price and/or credit grant.
+async function setPackage(id, { price, credits } = {}) {
+  if (!PLAN_IDS.includes(id)) throw new Error("Invalid package");
+  if (price !== undefined && price !== null && price !== "") {
+    await setSetting(`plan_price_${id}`, Math.max(0, parseInt(price, 10) || 0));
+  }
+  if (credits !== undefined && credits !== null && credits !== "") {
+    await setSetting(`plan_credits_${id}`, Math.max(0, parseInt(credits, 10) || 0));
+  }
+  return (await getPackages()).find((p) => p.id === id);
 }
 
 module.exports = {
@@ -372,4 +423,8 @@ module.exports = {
   setPlanForUser,
   revokeForUser,
   listUsersWithEntitlement,
+  setUserBanned,
+  isBanned,
+  getPackages,
+  setPackage,
 };
