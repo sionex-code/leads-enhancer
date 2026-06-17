@@ -25,6 +25,7 @@ import {
   OctagonX,
   RotateCcw,
   Search,
+  Send,
   Star,
   Trash2,
   Zap,
@@ -40,7 +41,7 @@ import { Input } from "./components/ui/input";
 import { Select } from "./components/ui/select";
 import { Progress } from "./components/ui/progress";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "./components/ui/table";
-import { cn } from "./lib/utils";
+import { cn, waMeLink } from "./lib/utils";
 
 const blankForm = {
   name: "Austin Real Estate Leads",
@@ -150,14 +151,27 @@ function Socials({ lead }) {
 // WhatsApp, run a quick audit (Health scores), open the website report, and
 // remove from this list. Matches the Leads-manager row actions for consistency.
 function CapturedActions({ lead, busy = {}, onEnrich, onWhatsapp, onAudit, onReport, onRemove }) {
+  const waLink = waMeLink(lead);
   return (
     <>
       <Button variant="ghost" size="icon" className="h-8 w-8" title={lead.email ? "Re-grab email + socials" : "Grab email + socials"} disabled={!lead.website || busy.enrich} onClick={() => onEnrich(lead)}>
         {busy.enrich ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
       </Button>
-      <Button variant="ghost" size="icon" className="h-8 w-8" title={lead.phone ? "Check WhatsApp" : "No phone to check"} disabled={!lead.phone || busy.whatsapp} onClick={() => onWhatsapp(lead)}>
+      <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.whatsappExists === "yes" && "text-emerald-600")} title={lead.phone ? "Check WhatsApp" : "No phone to check"} disabled={!lead.phone || busy.whatsapp} onClick={() => onWhatsapp(lead)}>
         {busy.whatsapp ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />}
       </Button>
+      {waLink && (
+        <a
+          href={waLink}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          title={`Message on WhatsApp (${waLink.replace(/^https?:\/\//, "")})`}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-emerald-600 transition hover:bg-emerald-500/10"
+        >
+          <Send size={14} />
+        </a>
+      )}
       <Button variant="ghost" size="icon" className="h-8 w-8" title={lead.website ? `Quick audit — desktop + mobile scores (${AUDIT_COST} credits)` : "No website to audit"} disabled={!lead.website || busy.audit} onClick={() => onAudit(lead)}>
         {busy.audit ? <Loader2 size={14} className="animate-spin" /> : <BarChart3 size={14} />}
       </Button>

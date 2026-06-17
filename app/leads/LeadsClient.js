@@ -37,7 +37,7 @@ import { Textarea } from "../components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Sheet, SheetContent } from "../components/ui/sheet";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/table";
-import { cn } from "../lib/utils";
+import { cn, waMeLink } from "../lib/utils";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 const PAGE_SIZE = 120;
@@ -234,6 +234,7 @@ function QuickLeadActions({ lead, onPatch, onLists, compact = false }) {
 // button is tinted once a report exists for the domain.
 function RowActions({ lead, busy = {}, onEnrich, onWhatsapp, onAudit, onReport, onRemove, onStatus, onChatbot, removeTitle }) {
   const wa = waState(lead);
+  const waLink = waMeLink(lead);
   return (
     <div className="flex flex-wrap items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
       <Button variant="ghost" size="icon" className="h-8 w-8" title={lead.email ? "Re-grab email + socials" : "Grab email + socials"} disabled={!lead.website || busy.enrich} onClick={() => onEnrich(lead)}>
@@ -248,6 +249,18 @@ function RowActions({ lead, busy = {}, onEnrich, onWhatsapp, onAudit, onReport, 
       <Button variant="ghost" size="icon" className={cn("h-8 w-8", wa === "yes" && "text-emerald-600")} title={lead.phone ? (wa ? `WhatsApp: ${lead.whatsapp_status}` : "Check WhatsApp") : "No phone to check"} disabled={!lead.phone || busy.whatsapp} onClick={() => onWhatsapp(lead)}>
         {busy.whatsapp ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />}
       </Button>
+      {waLink && (
+        <a
+          href={waLink}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          title={`Message on WhatsApp (${waLink.replace(/^https?:\/\//, "")})`}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-emerald-600 transition hover:bg-emerald-500/10"
+        >
+          <Send size={14} />
+        </a>
+      )}
       <Button variant="ghost" size="icon" className="h-8 w-8" title={lead.website ? `Quick audit — desktop + mobile scores (${AUDIT_COST} credits)` : "No website to audit"} disabled={!lead.website || busy.audit} onClick={() => onAudit(lead)}>
         {busy.audit ? <Loader2 size={14} className="animate-spin" /> : <BarChart3 size={14} />}
       </Button>
