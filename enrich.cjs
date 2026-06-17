@@ -584,7 +584,12 @@ const siteKey = (website) => {
 module.exports = { enrichSite, closeBrowser };
 
 // ---- main -----------------------------------------------------------------------------
-if (require.main === module)
+// Run the CLI when invoked directly (`node enrich.cjs`) OR via the thin ESM
+// wrapper `enrich.js` (`node enrich.js`), where require.main !== module. Without
+// the argv[1] check the batch stage silently no-ops when the pipeline runner
+// spawns `node enrich.js`. Stays false when this file is require()'d as the
+// shared engine by the web server / runner (argv[1] is their entrypoint).
+if (require.main === module || /[\\/]enrich\.[cm]?js$/.test(process.argv[1] || ""))
 (async () => {
   // Resolve input: explicit path, or the most recent CSV in ./output.
   let input = positionals[0];

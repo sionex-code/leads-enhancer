@@ -250,7 +250,9 @@ function loadState(stateFile) {
 module.exports = { checkNumber, normalizePhone, dialingCode };
 
 // ---- main --------------------------------------------------------------------
-if (require.main === module)
+// Also fire when launched via the ESM wrapper `whatsapp.js` (require.main !==
+// module there); without this the pipeline's `node whatsapp.js` stage no-ops.
+if (require.main === module || /[\\/]whatsapp\.[cm]?js$/.test(process.argv[1] || ""))
 (async () => {
   // Resolve input: explicit path, else most recent CSV in ./output (prefer enriched).
   let input = positionals[0];
