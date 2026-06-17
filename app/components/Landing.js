@@ -47,7 +47,7 @@ const FAQ = [
   { q: "Do I need to install anything?", a: "No. LeadsFunda runs entirely in the cloud. Sign in with Google, start a scrape, and your leads appear in the dashboard, even if you close the tab." },
   { q: "Where do the leads come from?", a: "Public Google Maps business listings for the niche and location you choose. We then visit each business's own website to enrich emails and social profiles." },
   { q: "Can I cancel anytime?", a: "Yes. Plans are monthly and managed through Whop. Upgrade, downgrade or cancel whenever you like. No contracts." },
-  { q: "What counts as a lead?", a: "Each unique business captured and enriched counts once against your monthly quota. Re-checking or auditing an existing lead is free." },
+  { q: "How do credits work?", a: "One balance covers everything: finding a lead costs 1 credit, a quick audit 3, and a full website report 10. Enriching emails/socials and WhatsApp checks are free. Each plan includes a monthly pool of credits." },
 ];
 
 function StatPill({ value, label }) {
@@ -208,7 +208,7 @@ export default function Landing({ checkout = {} }) {
         <div className="mx-auto mb-12 max-w-2xl text-center">
           <Badge variant="secondary" className="mb-4">Pricing</Badge>
           <h2 className="text-3xl font-bold tracking-tight">Simple, lead-based pricing</h2>
-          <p className="mt-3 text-muted-foreground">Pick a monthly lead quota. Upgrade or cancel anytime.</p>
+          <p className="mt-3 text-muted-foreground">Pick a monthly credit pack — 1 credit finds 1 lead. Upgrade or cancel anytime.</p>
         </div>
         <div className="mx-auto grid max-w-5xl items-start gap-6 lg:grid-cols-3">
           {PLANS.map((plan) => (

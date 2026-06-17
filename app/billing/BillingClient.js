@@ -22,7 +22,7 @@ const PLANS = [
 ];
 
 const FAQ = [
-  { q: "How is usage counted?", a: "Each unique business captured and enriched counts once against your monthly quota. Re-checking or auditing an existing lead is free." },
+  { q: "How are credits counted?", a: "One balance covers everything: finding a lead costs 1 credit, a quick audit 3, and a full website report 10. Enriching emails/socials and WhatsApp checks are free. Unused credits top up to your plan's monthly pool." },
   { q: "Can I change plans?", a: "Yes, upgrade or downgrade anytime. Changes take effect immediately and your quota updates to the new plan." },
   { q: "How do I cancel?", a: "Subscriptions are managed through Whop. Open the checkout/portal from any plan button to manage or cancel. No contracts." },
 ];
@@ -39,9 +39,10 @@ export default function BillingClient() {
   const active = !!ent?.active;
   const current = PLANS.find((p) => p.id === planKey);
 
-  const quota = current?.quota;
-  const remaining = ent?.remaining;
-  const unlimited = active && (remaining === null || planKey === "p99");
+  // Unified credits: one balance pays for leads (1), audits (3) and reports (10).
+  const quota = ent?.quota; // credit allotment (null = unlimited)
+  const remaining = ent?.remaining; // credits left (null = unlimited)
+  const unlimited = active && remaining === null;
   const used = quota && remaining != null ? Math.max(0, quota - remaining) : 0;
   const pct = quota && remaining != null ? Math.min(100, (used / quota) * 100) : active ? 100 : 0;
 
@@ -49,7 +50,7 @@ export default function BillingClient() {
     <AppShell
       active="billing"
       title="Billing & plans"
-      subtitle="Manage your subscription and monthly lead quota"
+      subtitle="Manage your subscription and credits"
     >
       <div className="mx-auto max-w-5xl space-y-8 p-4 sm:p-6 lg:p-8">
         {/* Current plan + usage */}
@@ -100,19 +101,19 @@ export default function BillingClient() {
                   <Skeleton className="h-8 w-40" />
                 ) : (
                   <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold">{unlimited ? "∞" : used.toLocaleString()}</span>
+                    <span className="text-3xl font-bold">{unlimited ? "∞" : Number(remaining || 0).toLocaleString()}</span>
                     <span className="text-sm text-muted-foreground">
-                      {unlimited ? "leads · unlimited" : quota ? `/ ${quota.toLocaleString()} leads` : "leads"}
+                      {unlimited ? "credits · unlimited" : quota ? `/ ${quota.toLocaleString()} credits` : "credits"}
                     </span>
                   </div>
                 )}
                 <Progress value={pct} indicatorClassName={pct >= 90 && !unlimited ? "bg-amber-500" : "bg-primary"} />
                 <p className="text-xs text-muted-foreground">
                   {!active
-                    ? "Activate a plan to unlock your monthly lead quota."
+                    ? "Activate a plan to unlock your monthly credits."
                     : unlimited
                       ? "You're on the unlimited plan, so find as many leads as you need."
-                      : `${Number(remaining || 0).toLocaleString()} leads remaining this cycle.`}
+                      : `${Number(remaining || 0).toLocaleString()} credits remaining this cycle (1 credit = 1 lead, report = 10, audit = 3).`}
                 </p>
               </div>
             </div>

@@ -52,19 +52,19 @@ export default function AccountWidget({ collapsed = false }) {
   const email = me?.user?.email || "";
   const initial = (email || "?").slice(0, 1).toUpperCase();
 
-  const quota = planKey ? PLAN_QUOTA[planKey] : undefined;
-  const remaining = ent?.remaining;
-  const unlimited = ent?.active && (remaining === null || planKey === "p49");
+  // Unified credits: one balance pays for leads (1), audits (3) and reports (10).
+  const quota = ent?.quota; // credit allotment (null = unlimited)
+  const remaining = ent?.remaining; // credits left (null = unlimited)
+  const unlimited = ent?.active && remaining === null;
   const used = quota && remaining != null ? Math.max(0, quota - remaining) : 0;
   const pct = quota && remaining != null ? Math.min(100, (used / quota) * 100) : ent?.active ? 100 : 0;
   // Colour the balance: < 40% of allotment left → amber, < 20% → red.
-  const leadsTone = balanceTone(ent?.remaining, ent?.quota);
-  const creditsTone = balanceTone(ent?.credits, ent?.creditsAllotment);
+  const tone = balanceTone(remaining, quota);
   const quotaText = !ent || !ent.active
     ? "No active plan"
     : unlimited
-      ? "Unlimited leads"
-      : `${Number(remaining || 0).toLocaleString()} leads left`;
+      ? "Unlimited credits"
+      : `${Number(remaining || 0).toLocaleString()} credits`;
 
   const PLANS = [
     { id: "p19", label: "Starter ($19)" },
@@ -130,16 +130,10 @@ export default function AccountWidget({ collapsed = false }) {
 
         <div className="mt-3 space-y-1.5">
           <div className="flex items-center justify-between text-[11px]">
-            <span className={cn("font-medium", ent?.active ? leadsTone === "ok" ? "text-foreground" : TONE_TEXT[leadsTone] : "text-amber-600")}>{quotaText}</span>
+            <span className={cn("font-medium", ent?.active ? tone === "ok" ? "text-foreground" : TONE_TEXT[tone] : "text-amber-600")}>{quotaText}</span>
             {!unlimited && quota ? <span className="text-muted-foreground">{used.toLocaleString()}/{quota.toLocaleString()}</span> : null}
           </div>
-          <Progress value={pct} className="h-1.5" indicatorClassName={ent?.active ? TONE_BAR[leadsTone] : "bg-amber-500"} />
-          {ent?.active && ent?.creditsAllotment ? (
-            <div className="flex items-center justify-between pt-0.5 text-[11px]">
-              <span className="text-muted-foreground">Credits</span>
-              <span className={cn("font-medium", TONE_TEXT[creditsTone])}>{Number(ent.credits || 0).toLocaleString()}</span>
-            </div>
-          ) : null}
+          <Progress value={pct} className="h-1.5" indicatorClassName={ent?.active ? TONE_BAR[tone] : "bg-amber-500"} />
           {!ent?.active && (
             <Link
               href="/billing"

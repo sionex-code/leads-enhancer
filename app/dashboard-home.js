@@ -264,8 +264,8 @@ function CreditsPill() {
     : !ent?.active
       ? "No active plan"
       : unlimited
-        ? "Unlimited leads"
-        : `${Number(remaining || 0).toLocaleString()} leads left`;
+        ? "Unlimited credits"
+        : `${Number(remaining || 0).toLocaleString()} credits`;
   return (
     <Link
       href="/billing"
@@ -624,7 +624,7 @@ export default function Dashboard({ view = "" }) {
     // Pre-flight: never let a scrape even start once the lead balance is spent
     // (the server enforces this too, but the modal makes it explicit up front).
     if (stages.includes("scrape") && entitlement && entitlement.remaining !== null && entitlement.remaining <= 0) {
-      setCreditModal({ title: "Out of leads", message: "You've used all the leads in your current plan.", detail: "Upgrade your plan to find more leads." });
+      setCreditModal({ title: "Out of credits", message: "You don't have any credits left (finding a lead costs 1 credit).", detail: "Top up or upgrade your plan to find more leads." });
       return false;
     }
     setBusy(`Starting ${stages.join(", ")}`);
@@ -649,9 +649,9 @@ export default function Dashboard({ view = "" }) {
       if (data.capped) {
         setCreditModal({
           info: true,
-          title: "Lead limit applied",
-          message: `You have ${Number(data.remaining).toLocaleString()} lead${data.remaining === 1 ? "" : "s"} left, so this run is capped to ${Number(data.max).toLocaleString()}.`,
-          detail: "Upgrade your plan to scrape more in a single run.",
+          title: "Credit limit applied",
+          message: `You have ${Number(data.remaining).toLocaleString()} credit${data.remaining === 1 ? "" : "s"} left, so this run is capped to ${Number(data.max).toLocaleString()} leads.`,
+          detail: "Top up or upgrade your plan to find more in a single run.",
         });
       }
       return true;
@@ -659,7 +659,7 @@ export default function Dashboard({ view = "" }) {
       setError(err.message);
       if (err.code === "no_plan" || err.code === "quota_exceeded") {
         setNeedPlan(true);
-        setCreditModal({ title: err.code === "no_plan" ? "No active plan" : "Out of leads", message: err.message, detail: "Choose a plan to continue finding leads." });
+        setCreditModal({ title: err.code === "no_plan" ? "No active plan" : "Out of credits", message: err.message, detail: "Choose a plan to continue finding leads." });
       }
       return false;
     } finally {

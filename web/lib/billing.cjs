@@ -3,20 +3,22 @@
 // decide whether a user may run jobs, how many leads they have left this period,
 // and how many report credits they hold.
 //
-// Plans (monthly price · lead quota · report credits granted per period):
-//   p19  $19  ·  5,000 leads   ·  500 credits
-//   p35  $35  ·  50,000 leads  ·  1,500 credits
-//   p49  $49  ·  unlimited     ·  4,000 credits
-// Free (no active plan): a global, admin-tunable monthly grant (default 100).
-// Each website report costs REPORT_COST credits.
+// UNIFIED CREDIT MODEL: one balance (`credits`) pays for everything.
+//   find a lead   = LEAD_COST   (1) credit
+//   quick audit   = AUDIT_COST  (3) credits
+//   full report   = REPORT_COST (10) credits
+// Plans grant a monthly credit pool (= the old lead quota so capacity is the same):
+//   p19 $19 · 5,000 credits · p35 $35 · 50,000 credits · p49 $49 · unlimited
+// Free (no active plan): an admin-tunable monthly grant (default 300).
 const { pool } = require("./pg.cjs");
 
-const PLAN_QUOTAS = { p19: 5000, p35: 50000, p49: null }; // null = unlimited
+const PLAN_QUOTAS = { p19: 5000, p35: 50000, p49: null }; // null = unlimited; also the credit pool
 const PLAN_PRICES = { p19: 19, p35: 35, p49: 49 };
-const PLAN_CREDITS = { p19: 500, p35: 1500, p49: 4000 }; // monthly report credits
+const PLAN_CREDITS = { p19: 5000, p35: 50000, p49: null }; // monthly credit pool (null = unlimited)
 const PLAN_LABELS = { p19: "Starter", p35: "Growth", p49: "Scale" };
 const REPORT_COST = 10; // credits per full website report (audit + AI + chatbot)
-const AUDIT_COST = 3; // credits per quick audit (desktop + mobile Lighthouse scores only)
+const AUDIT_COST = 3; // credits per quick audit (desktop + mobile speed/SEO scores only)
+const LEAD_COST = 1; // credits per new lead found
 
 const now = () => new Date().toISOString();
 const monthKey = (iso) => (iso ? String(iso).slice(0, 7) : ""); // YYYY-MM
@@ -93,8 +95,10 @@ function isPaidActive(m) {
 }
 
 // What a user's monthly credit grant should be: a per-user override wins, then the
-// active paid plan's allotment, then the global free grant (if enabled).
+// active paid plan's allotment, then the global free grant (if enabled). Returns
+// null for unlimited plans (p49), which are never charged or capped.
 function effectiveMonthly(m, free) {
+  if (isPaidActive(m) && PLAN_CREDITS[m.plan] === null) return null; // unlimited
   if (m && m.credits_monthly != null) return Math.max(0, m.credits_monthly);
   if (isPaidActive(m)) return PLAN_CREDITS[m.plan] || 0;
   return free.enabled ? free.amount : 0;
@@ -136,12 +140,18 @@ async function ensureCredits(userId) {
   if (due) {
     const grant = effectiveMonthly(m, free);
     const ts = now();
-    const upd = await pool().query(
-      `UPDATE memberships SET credits = GREATEST(credits, $1), credits_renewed_at = $2, updated_at = $2
-         WHERE user_id = $3 RETURNING *`,
-      [grant, ts, userId]
-    );
-    m = upd.rows[0] || m;
+    if (grant == null) {
+      // Unlimited plan — no finite balance to maintain; just stamp the period.
+      const upd = await pool().query(`UPDATE memberships SET credits_renewed_at = $1, updated_at = $1 WHERE user_id = $2 RETURNING *`, [ts, userId]);
+      m = upd.rows[0] || m;
+    } else {
+      const upd = await pool().query(
+        `UPDATE memberships SET credits = GREATEST(credits, $1), credits_renewed_at = $2, updated_at = $2
+           WHERE user_id = $3 RETURNING *`,
+        [grant, ts, userId]
+      );
+      m = upd.rows[0] || m;
+    }
   }
   return m;
 }
@@ -158,7 +168,9 @@ async function getCredits(userId) {
 async function consumeCredits(userId, n) {
   n = Math.max(0, Math.floor(n || 0));
   if (n === 0) return { ok: true, credits: await getCredits(userId) };
-  await ensureCredits(userId); // make sure the row + monthly grant exist first
+  const m = await ensureCredits(userId); // make sure the row + monthly grant exist first
+  // Unlimited plans (p49: leads_quota null) are never charged.
+  if (m && m.status === "active" && m.leads_quota === null) return { ok: true, credits: m.credits || 0 };
   const { rows } = await pool().query(
     `UPDATE memberships SET credits = credits - $1, updated_at = $2
        WHERE user_id = $3 AND credits >= $1 RETURNING credits`,
@@ -213,21 +225,35 @@ async function getEntitlement(userId) {
     return { active: false, plan: null, quota: 0, used: 0, remaining: 0, credits: m ? m.credits || 0 : 0, creditsMonthly: m ? m.credits_monthly : null, creditsAllotment };
   }
   if (m.current_period_end && Date.parse(m.current_period_end) < Date.now()) {
-    return { active: false, plan: m.plan, quota: m.leads_quota, used: m.leads_used, remaining: 0, credits: m.credits || 0, creditsMonthly: m.credits_monthly, creditsAllotment };
+    return { active: false, plan: m.plan, quota: 0, used: 0, remaining: 0, credits: m.credits || 0, creditsMonthly: m.credits_monthly, creditsAllotment, unlimited: false };
   }
-  const quota = m.leads_quota; // null = unlimited
-  const used = m.leads_used || 0;
-  const remaining = quota === null ? null : Math.max(0, quota - used);
-  return { active: true, plan: m.plan, quota, used, remaining, credits: m.credits || 0, creditsMonthly: m.credits_monthly, creditsAllotment };
+  // Unified credits: `credits` is the single balance and `remaining` mirrors it so
+  // the scrape gate / cap work on credits. Unlimited plans (leads_quota null) have
+  // remaining = null (never gated). `used` is for the progress bar only.
+  const unlimited = m.leads_quota === null;
+  const credits = m.credits || 0;
+  return {
+    active: true,
+    plan: m.plan,
+    unlimited,
+    quota: unlimited ? null : creditsAllotment,
+    used: unlimited ? 0 : Math.max(0, (creditsAllotment || 0) - credits),
+    remaining: unlimited ? null : credits,
+    credits,
+    creditsMonthly: m.credits_monthly,
+    creditsAllotment: unlimited ? null : creditsAllotment,
+  };
 }
 
-// Increment leads_used after N new leads are persisted for a user. Safe no-op if
-// the user has no membership row. Called from the data layer on insert.
+// Charge for N newly-found leads (LEAD_COST credits each). Called from the data
+// layer after leads are persisted. Unlimited plans (leads_quota null) aren't
+// charged; finite balances clamp at 0 (the scrape was already capped to credits).
 async function consumeLeads(userId, n) {
   if (!n || n <= 0) return;
   await pool().query(
-    `UPDATE memberships SET leads_used = leads_used + $1, updated_at = $2 WHERE user_id = $3`,
-    [n, now(), userId]
+    `UPDATE memberships SET credits = GREATEST(0, credits - $1), updated_at = $2
+       WHERE user_id = $3 AND leads_quota IS NOT NULL`,
+    [n * LEAD_COST, now(), userId]
   );
 }
 
@@ -354,6 +380,7 @@ module.exports = {
   PLAN_LABELS,
   REPORT_COST,
   AUDIT_COST,
+  LEAD_COST,
   planFromWhopId,
   quotaForPlan,
   getSetting,

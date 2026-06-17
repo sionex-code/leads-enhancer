@@ -9,13 +9,13 @@ export async function POST(request) {
   const { userId, response } = await requireUser();
   if (response) return response;
 
-  // Gate behind an active membership + remaining lead quota.
+  // Gate behind an active membership + remaining credits (1 credit per lead).
   const entitlement = await billing.getEntitlement(userId);
   if (!entitlement.active) {
     return Response.json({ error: "You need an active plan to find leads. Choose a plan to continue.", code: "no_plan" }, { status: 402 });
   }
   if (entitlement.remaining !== null && entitlement.remaining <= 0) {
-    return Response.json({ error: "Monthly lead quota reached. Upgrade your plan to find more leads.", code: "quota_exceeded" }, { status: 402 });
+    return Response.json({ error: "You're out of credits. Top up or upgrade your plan to find more leads.", code: "quota_exceeded" }, { status: 402 });
   }
 
   const body = await request.json();
