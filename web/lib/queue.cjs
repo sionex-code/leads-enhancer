@@ -12,6 +12,13 @@ const store = require("./store.cjs");
 
 const MAX_CONCURRENT = Number(process.env.MAX_CONCURRENT_JOBS || 6);
 const TICK_MS = Number(process.env.QUEUE_TICK_MS || 2000);
+// How long a claimed-but-not-yet-spawned job (status=running, pid=null) may sit
+// before we treat the spawn as dead and free its slot. promoteOne sets the pid
+// within milliseconds of claiming, so anything older than this never spawned
+// (supervisor died mid-promote, spawn threw before pid write, etc.) and would
+// otherwise hold a concurrency slot forever — the cause of "waiting for a free
+// slot" with nothing actually running.
+const STALE_CLAIM_MS = Number(process.env.QUEUE_STALE_CLAIM_MS || 120000);
 
 let _timer = null;
 let _ticking = false;
@@ -63,14 +70,28 @@ async function runningCount() {
 // done vs failed by inspecting the project's on-disk state, then notifies.
 async function reapFinished() {
   const { rows } = await pool().query(
-    `SELECT id, user_id, project_slug, params, pid FROM jobs WHERE status = 'running'`
+    `SELECT id, user_id, project_slug, params, pid, started_at FROM jobs WHERE status = 'running'`
   );
   if (process.env.QUEUE_DEBUG === "1") {
     console.log("[queue] reap: running jobs", rows.map((r) => ({ id: r.id, pid: r.pid, alive: r.pid ? store.processAlive(r.pid) : null })));
   }
   for (const job of rows) {
-    // A job with no pid yet was just claimed (spawn in flight) — leave it.
-    if (job.pid === null || job.pid === undefined) continue;
+    // A job with no pid yet was just claimed (spawn in flight) — leave it for a
+    // short grace period, but if it's been pid-less longer than that the spawn
+    // never completed and the slot would leak forever, so fail it to free the slot.
+    if (job.pid === null || job.pid === undefined) {
+      const ageMs = job.started_at ? Date.now() - new Date(job.started_at).getTime() : Infinity;
+      if (ageMs < STALE_CLAIM_MS) continue;
+      await pool().query(
+        `UPDATE jobs SET status = 'failed', error = $1, finished_at = now() WHERE id = $2`,
+        ["spawn never started (no pid) — slot reclaimed", job.id]
+      );
+      await pool().query(
+        `INSERT INTO notifications (user_id, type, payload) VALUES ($1, 'job_failed', $2)`,
+        [job.user_id, { jobId: job.id, slug: job.project_slug, name: job.params?.name || job.project_slug, status: "failed", error: "spawn never started" }]
+      );
+      continue;
+    }
     if (store.processAlive(job.pid)) continue;
 
     let status = "done";
