@@ -27,7 +27,26 @@ export async function POST(request) {
     return Response.json({ error: "None of the selected leads have a website to report on" }, { status: 400 });
   }
 
-  const count = leads.length;
+  // Reuse existing reports: if a report already exists on disk for a lead's domain,
+  // skip it — no charge, no regenerate. The user can open the existing one. Reports
+  // are named "<sanitized-domain>-<ts>.html" (see startReportJob); the same domain
+  // set powers the "Report ✓" badge in the leads list.
+  const sanitizeDomain = (d) => String(d || "").replace(/[^a-z0-9.-]/gi, "_");
+  const reported = new Set();
+  try {
+    for (const r of siteReport.listReports()) {
+      if (r.file.includes("-lighthouse")) continue;
+      reported.add(r.file.replace(/-\d+\.html$/, ""));
+    }
+  } catch {}
+  const todo = leads.filter((l) => !(l.domain && reported.has(sanitizeDomain(l.domain))));
+  const skipped = leads.length - todo.length;
+  if (!todo.length) {
+    const credits = await billing.getCredits(userId);
+    return Response.json({ jobIds: [], count: 0, skipped, charged: 0, credits, cached: true });
+  }
+
+  const count = todo.length;
   const cost = billing.REPORT_COST * count;
   const charge = await billing.consumeCredits(userId, cost);
   if (!charge.ok) {
@@ -41,8 +60,8 @@ export async function POST(request) {
   const MAX = siteReport.MAX_SITES || 5;
   const jobIds = [];
   let refund = 0;
-  for (let i = 0; i < leads.length; i += MAX) {
-    const chunk = leads.slice(i, i + MAX);
+  for (let i = 0; i < todo.length; i += MAX) {
+    const chunk = todo.slice(i, i + MAX);
     try {
       jobIds.push(siteReport.startReportJob(chunk));
     } catch {
@@ -52,5 +71,5 @@ export async function POST(request) {
   let credits = charge.credits;
   if (refund) credits = await billing.addCredits(userId, refund);
 
-  return Response.json({ jobIds, count, charged: cost - refund, credits });
+  return Response.json({ jobIds, count, skipped, charged: cost - refund, credits });
 }

@@ -28,7 +28,18 @@ export async function POST(request) {
     return Response.json({ error: "None of the selected leads have a website to audit" }, { status: 400 });
   }
 
-  const count = leads.length;
+  // Reuse existing audits: a lead that already has both desktop + mobile scores is
+  // audited, so skip it — no charge, no re-run; the saved scores stand. Only
+  // un-audited leads are billable. (This is the audit equivalent of the enrichment
+  // cache: re-clicking Audit doesn't re-spend credits on work already done.)
+  const todo = leads.filter((l) => l.desktop_performance == null || l.mobile_performance == null);
+  const skipped = leads.length - todo.length;
+  if (!todo.length) {
+    const credits = await billing.getCredits(userId);
+    return Response.json({ jobIds: [], count: 0, skipped, charged: 0, credits, cached: true });
+  }
+
+  const count = todo.length;
   const cost = billing.AUDIT_COST * count;
   const charge = await billing.consumeCredits(userId, cost);
   if (!charge.ok) {
@@ -45,8 +56,8 @@ export async function POST(request) {
   const MAX = siteReport.MAX_AUDIT_SITES || 20;
   const jobIds = [];
   let refund = 0;
-  for (let i = 0; i < leads.length; i += MAX) {
-    const chunk = leads.slice(i, i + MAX);
+  for (let i = 0; i < todo.length; i += MAX) {
+    const chunk = todo.slice(i, i + MAX);
     try {
       jobIds.push(siteReport.startAuditJob(chunk, { onResult }));
     } catch {
@@ -56,5 +67,5 @@ export async function POST(request) {
   let credits = charge.credits;
   if (refund) credits = await billing.addCredits(userId, refund);
 
-  return Response.json({ jobIds, count, charged: cost - refund, credits });
+  return Response.json({ jobIds, count, skipped, charged: cost - refund, credits });
 }

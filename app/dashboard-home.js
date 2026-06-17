@@ -978,6 +978,12 @@ export default function Dashboard({ view = "" }) {
   // How many captured leads have a website — drives the project toolbar
   // Audit/Report buttons (which now run the same bulk flow as the leads page).
   const leadsWithSite = leads.filter((l) => l.website).length;
+  // Of those, how many still NEED an audit (no desktop+mobile scores yet). The
+  // Audit button bills/runs only these, so once everything is audited it shows
+  // "Audit (0)" and disables — proof the cache is being reused.
+  const auditableCount = leads.filter(
+    (l) => l.website && !(l.desktop?.performance != null && l.mobile?.performance != null)
+  ).length;
   // Live "Queued for Ns" timer: while a project sits queued nothing rewrites its
   // state, so updatedAt stays at enqueue time and this grows on each poll.
   const queuedFor =
@@ -1066,9 +1072,16 @@ export default function Dashboard({ view = "" }) {
   // the project toolbar Audit/Report buttons (every captured lead) — one code path
   // so the two never drift apart.
   async function runBatchForLeads(kind, leadObjs) {
-    const billable = (leadObjs || []).filter((l) => l.website);
     const noun = kind === "audit" ? "audit" : "report";
-    if (!billable.length) { alert(`None of these leads have a website to ${noun}.`); return; }
+    const withSite = (leadObjs || []).filter((l) => l.website);
+    if (!withSite.length) { alert(`None of these leads have a website to ${noun}.`); return; }
+    // Cache-aware: don't bill or re-run work already done. For audits we know the
+    // scores client-side, so drop already-audited leads up front. The server also
+    // enforces this and, for reports, skips leads whose domain already has one.
+    const billable = kind === "audit"
+      ? withSite.filter((l) => !(l.desktop?.performance != null && l.mobile?.performance != null))
+      : withSite;
+    if (!billable.length) { showToast(`All selected are already audited — reused from cache (free).`); return; }
     const unit = kind === "audit" ? AUDIT_COST : REPORT_COST;
     const endpoint = kind === "audit" ? "/api/leads/audit/bulk" : "/api/leads/report/bulk";
     const cost = billable.length * unit;
@@ -1077,12 +1090,12 @@ export default function Dashboard({ view = "" }) {
       const affordable = Math.floor(have / unit);
       setCreditModal({
         title: "Not enough credits",
-        message: `${billable.length} ${noun}${billable.length === 1 ? "" : "s"} need ${cost} credits, but you have ${have}.`,
+        message: `${billable.length} ${noun}${billable.length === 1 ? "" : "s"} need up to ${cost} credits, but you have ${have}.`,
         detail: affordable > 0 ? `Audit/report up to ${affordable} ${noun}${affordable === 1 ? "" : "s"}, or top up your credits.` : "Top up your credits to continue.",
       });
       return;
     }
-    if (!confirm(`Run ${billable.length} ${noun}${billable.length === 1 ? "" : "s"}?\n\nThis will use ${cost} credits (${billable.length} × ${unit}). You have ${have}, leaving ${have - cost}.`)) return;
+    if (!confirm(`Run up to ${billable.length} ${noun}${billable.length === 1 ? "" : "s"}?\n\nUses up to ${cost} credits (${billable.length} × ${unit}) — already-completed ${noun}s are reused for free. You have ${have}.`)) return;
     setBulkBusy(kind);
     try {
       const pairs = await ensureSelectedIds(billable);
@@ -1092,6 +1105,9 @@ export default function Dashboard({ view = "" }) {
       const data = await jsonFetch(endpoint, { method: "POST", body: JSON.stringify({ ids }) });
       if (typeof data.credits === "number") setCredits(data.credits);
       setSelectedLeads(new Set());
+      // Tell the user what was reused vs freshly run (server skips already-done).
+      if (data.skipped) showToast(`Reused ${data.skipped} already-done · ${data.count} new ${noun}${data.count === 1 ? "" : "s"}`);
+      if (!data.count) return; // everything was cached — nothing to run
       const jobIds = data.jobIds || [];
       setBatch({ kind, jobIds, total: data.count, done: 0, failed: 0, latest: "Starting…", finished: false });
       if (jobIds.length) pollBatch(jobIds, data.count, kind);
@@ -1272,11 +1288,17 @@ export default function Dashboard({ view = "" }) {
               <Button variant="secondary" disabled={!!busy || formRunning} onClick={() => run(["whatsapp"])}><MessageCircle size={16} /> WhatsApp</Button>
               <Button
                 variant="secondary"
-                disabled={!!bulkBusy || batchRunning || !leadsWithSite}
+                disabled={!!bulkBusy || batchRunning || !auditableCount}
                 onClick={() => runBatchForLeads("audit", leads)}
-                title={leadsWithSite ? `Audit ${leadsWithSite} site(s) — desktop + mobile scores (${leadsWithSite * AUDIT_COST} credits)` : "No captured leads with a website to audit"}
+                title={
+                  !leadsWithSite
+                    ? "No captured leads with a website to audit"
+                    : !auditableCount
+                      ? "All sites already audited — scores reused from cache"
+                      : `Audit ${auditableCount} site(s) — desktop + mobile scores (${auditableCount * AUDIT_COST} credits); already-audited are skipped`
+                }
               >
-                {bulkBusy === "audit" ? <Loader2 size={16} className="animate-spin" /> : <BarChart3 size={16} />} Audit{leadsWithSite ? ` (${leadsWithSite})` : ""}
+                {bulkBusy === "audit" ? <Loader2 size={16} className="animate-spin" /> : <BarChart3 size={16} />} Audit{auditableCount ? ` (${auditableCount})` : ""}
               </Button>
               <Button
                 variant="secondary"
