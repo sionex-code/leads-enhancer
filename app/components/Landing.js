@@ -22,7 +22,7 @@ import { Badge } from "./ui/badge";
 const FEATURES = [
   { icon: MapPin, title: "Scrape Google Maps", body: "Pull business name, phone, website, address, rating, reviews and hours for any niche + location. Fast, deduped, resumable." },
   { icon: Mail, title: "Enrich contacts", body: "Crawl each lead's site for emails, social profiles and WhatsApp so your list is ready to outreach the moment it lands." },
-  { icon: Activity, title: "Website health", body: "Real-Chrome audits, HTTP status and chatbot detection to surface prospects whose sites clearly need work." },
+  { icon: Activity, title: "Website health", body: "Real-browser audits, HTTP status and chatbot detection to surface prospects whose sites clearly need work." },
   { icon: ListChecks, title: "Workflow built in", body: "Watchlists, email decisions, outreach status and notes keep your pipeline organized from scrape to closed." },
   { icon: Zap, title: "Runs in the cloud", body: "Jobs run on our servers and queue automatically. Start a scrape, close the tab, and get notified when it's done." },
   { icon: ShieldCheck, title: "Your data, isolated", body: "Every account's leads and projects are private and protected. Never shared, never resold." },
@@ -154,7 +154,7 @@ export default function Landing({ checkout = {} }) {
       {/* Trust bar */}
       <section className="border-y border-border/60 bg-card/30">
         <div className="container flex flex-wrap items-center justify-center gap-x-10 gap-y-3 py-6 text-sm text-muted-foreground">
-          <span className="flex items-center gap-2"><Globe2 className="h-4 w-4 text-primary" /> Real-Chrome website audits</span>
+          <span className="flex items-center gap-2"><Globe2 className="h-4 w-4 text-primary" /> Real-browser website audits</span>
           <span className="flex items-center gap-2"><MessageCircle className="h-4 w-4 text-primary" /> WhatsApp detection</span>
           <span className="flex items-center gap-2"><Mail className="h-4 w-4 text-primary" /> Email + social enrichment</span>
           <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-primary" /> Private &amp; isolated data</span>

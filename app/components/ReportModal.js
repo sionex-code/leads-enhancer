@@ -107,7 +107,7 @@ export default function ReportModal({ lead, onClose }) {
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-primary/5 px-5 py-3">
             <div className="text-sm">
               <span className="font-medium text-foreground">Generate this report?</span>{" "}
-              <span className="text-muted-foreground">Uses <strong className="text-foreground">{REPORT_COST} credits</strong> and takes ~1–2 minutes (real-Chrome audit + AI summary + chatbot check).</span>
+              <span className="text-muted-foreground">Uses <strong className="text-foreground">{REPORT_COST} credits</strong> and takes ~1–2 minutes (real-browser audit + AI summary + chatbot check).</span>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>Cancel</Button>

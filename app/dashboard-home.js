@@ -109,7 +109,7 @@ function Score({ label, value }) {
     return <span className="inline-flex items-center rounded-md bg-muted/60 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{label} -</span>;
   const tone = SCORE_TONE[scoreClass(value)] || "bg-muted/60 text-muted-foreground";
   return (
-    <span className={cn("inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-semibold", tone)} title={`${label}: ${value}/100 (real-Chrome audit)`}>
+    <span className={cn("inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-semibold", tone)} title={`${label}: ${value}/100 (real-browser audit)`}>
       {label} {value}
     </span>
   );
@@ -148,7 +148,7 @@ function ScoreLegend() {
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
       <strong className="font-medium text-foreground">Website health</strong>
-      <span>real-Chrome audit score (0-100, higher is better). Perf = page speed, SEO = search readiness.</span>
+      <span>real-browser audit score (0-100, higher is better). Perf = page speed, SEO = search readiness.</span>
       <span className="inline-flex items-center rounded-md bg-emerald-500/15 px-1.5 py-0.5 font-medium text-emerald-600">90-100 Good</span>
       <span className="inline-flex items-center rounded-md bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-600">50-89 Needs work</span>
       <span className="inline-flex items-center rounded-md bg-red-500/15 px-1.5 py-0.5 font-medium text-red-600">0-49 Poor</span>
@@ -1259,7 +1259,7 @@ export default function Dashboard({ view = "" }) {
               <Button variant="secondary" disabled={!!busy || formRunning} onClick={() => run(["report"])}><FileText size={16} /> Report</Button>
               <Button variant="outline" disabled={!!busy || running || !selected} onClick={() => projectAction("resume")}><RotateCcw size={16} /> Resume</Button>
               <Button variant="outline" disabled={!!busy || !running} onClick={() => projectAction("stop")}><PauseCircle size={16} /> Stop</Button>
-              <Button variant="destructive" disabled={!!busy || runningCount === 0} onClick={stopAllProjects} title="Stop every running project and any audit/Chrome processes still running in the background">
+              <Button variant="destructive" disabled={!!busy || runningCount === 0} onClick={stopAllProjects} title="Stop all running projects">
                 <OctagonX size={16} /> Stop all{runningCount > 0 ? ` (${runningCount})` : ""}
               </Button>
               {status?.files?.report && (

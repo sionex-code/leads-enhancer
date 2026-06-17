@@ -453,7 +453,7 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot }) 
           </DrawerCard>
 
           <DrawerCard title="Independent report">
-            <p className="text-xs text-muted-foreground">Fast real-Chrome audit (desktop + mobile): speed, layout, mobile, SEO, security, support-chat, summarized by AI, with the raw report attached. <span className="font-medium text-foreground">Costs {REPORT_COST} credits.</span></p>
+            <p className="text-xs text-muted-foreground">Fast real-browser audit (desktop + mobile): speed, layout, mobile, SEO, security, support-chat, summarized by AI, with the raw report attached. <span className="font-medium text-foreground">Costs {REPORT_COST} credits.</span></p>
             <div className="mt-2 space-y-1.5">
               {reports.map((r) => (
                 <a key={r.file} className="flex items-center gap-2 text-sm text-primary hover:underline" href={`${BASE_PATH}/api/agent/reports/${r.file}`} target="_blank" rel="noreferrer">
@@ -631,7 +631,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
       return;
     }
     const label = action === "chatbot" ? "chatbot scan" : "status check";
-    if (action === "chatbot" && !confirm(`Run a ${label} on ${ids.length} lead(s)? This opens Chrome and can take a while.`)) return;
+    if (action === "chatbot" && !confirm(`Run a ${label} on ${ids.length} lead(s)? This can take a while.`)) return;
     setBatchBusy(action);
     try {
       const data = await jsonFetch(`/api/leads/scan`, { method: "POST", body: JSON.stringify({ ids, action }) });
