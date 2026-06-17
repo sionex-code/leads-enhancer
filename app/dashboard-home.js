@@ -7,6 +7,7 @@ import AppShell from "./components/app/AppShell";
 import AnimatedNumber from "./components/AnimatedNumber";
 import ReportModal from "./components/ReportModal";
 import ListsDialog from "./components/leads/ListsDialog";
+import { Socials, WhatsAppBadge } from "./components/leads/social-icons";
 import { useMe } from "./components/AccountWidget";
 import { QUICK_COUNTRIES, QUICK_SERVICES } from "./lib/quickSearchData";
 import {
@@ -113,38 +114,8 @@ function Score({ label, value }) {
   );
 }
 
-const SOCIAL_FIELDS = [
-  ["facebook", "FB"],
-  ["instagram", "IG"],
-  ["linkedin", "LI"],
-  ["twitter", "X"],
-  ["youtube", "YT"],
-  ["tiktok", "TT"],
-  ["pinterest", "Pin"],
-  ["whatsapp", "WA"],
-  ["telegram", "TG"],
-];
-
-function Socials({ lead }) {
-  const present = SOCIAL_FIELDS.filter(([key]) => lead[key]);
-  if (!present.length) return <span className="text-xs text-muted-foreground">-</span>;
-  return (
-    <div className="flex flex-wrap gap-1">
-      {present.map(([key, label]) => (
-        <a
-          key={key}
-          href={lead[key]}
-          target="_blank"
-          rel="noreferrer"
-          title={lead[key]}
-          className="inline-flex items-center rounded-md border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
-        >
-          {label}
-        </a>
-      ))}
-    </div>
-  );
-}
+// Colored brand social icons + the WhatsApp reachability badge live in a shared
+// component so the dashboard and the Leads manager look identical.
 
 // Per-row actions on the captured-leads table: grab email/socials, check
 // WhatsApp, run a quick audit (Health scores), open the website report, and
@@ -1363,8 +1334,7 @@ export default function Dashboard({ view = "" }) {
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
                       {lead.phone && <span>{lead.phone}</span>}
-                      {lead.whatsappExists === "yes" && <Badge variant="success">WA ✓</Badge>}
-                      {lead.whatsappExists === "no" && <Badge variant="destructive">WA ✗</Badge>}
+                      <WhatsAppBadge state={lead.whatsappExists} title={lead.whatsappId || undefined} />
                       {lead.website && <a className="text-primary hover:underline" href={lead.website} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{lead.domain || "site"}</a>}
                     </div>
                     {lead.email && <div className="mt-1 text-sm"><a className="text-primary hover:underline" href={`mailto:${lead.email}`} onClick={(e) => e.stopPropagation()}>{lead.email}</a></div>}
@@ -1417,8 +1387,7 @@ export default function Dashboard({ view = "" }) {
                         <TableCell>
                           <div className="flex items-center gap-1.5">
                             {lead.phone || "-"}
-                            {lead.whatsappExists === "yes" && <Badge variant="success" title={lead.whatsappId || "On WhatsApp"}>WA ✓</Badge>}
-                            {lead.whatsappExists === "no" && <Badge variant="destructive" title="Not on WhatsApp">WA ✗</Badge>}
+                            <WhatsAppBadge state={lead.whatsappExists} title={lead.whatsappId || undefined} />
                           </div>
                           {lead.rating ? <div className="text-xs text-muted-foreground">Rating {lead.rating}</div> : null}
                         </TableCell>

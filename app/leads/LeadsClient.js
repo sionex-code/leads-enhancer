@@ -37,6 +37,7 @@ import { Textarea } from "../components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Sheet, SheetContent } from "../components/ui/sheet";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/table";
+import { Socials, WhatsAppBadge } from "../components/leads/social-icons";
 import { cn } from "../lib/utils";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
@@ -167,39 +168,6 @@ function EmailBadge({ status }) {
   const value = status || "unset";
   const tone = value === "send" ? "good" : value === "do_not_send" ? "bad" : value === "later" ? "avg" : "muted";
   return <Pill tone={tone}>{EMAIL_STATUS[value] || value}</Pill>;
-}
-
-const SOCIAL_FIELDS = [
-  ["facebook", "Facebook"],
-  ["instagram", "Instagram"],
-  ["linkedin", "LinkedIn"],
-  ["twitter", "X / Twitter"],
-  ["youtube", "YouTube"],
-  ["tiktok", "TikTok"],
-  ["pinterest", "Pinterest"],
-  ["whatsapp", "WhatsApp"],
-  ["telegram", "Telegram"],
-];
-
-function Socials({ lead, full = false }) {
-  const present = SOCIAL_FIELDS.filter(([key]) => lead[key]);
-  if (!present.length) return <span className="text-xs text-muted-foreground">-</span>;
-  return (
-    <div className="flex flex-wrap gap-1">
-      {present.map(([key, label]) => (
-        <a
-          key={key}
-          href={lead[key]}
-          target="_blank"
-          rel="noreferrer"
-          title={lead[key]}
-          className="inline-flex items-center rounded-md border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
-        >
-          {full ? label : label.slice(0, 2).toUpperCase()}
-        </a>
-      ))}
-    </div>
-  );
 }
 
 function QuickLeadActions({ lead, onPatch, onLists, compact = false }) {
@@ -428,7 +396,7 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot }) 
 
           <DrawerCard title="Contact">
             <div className="space-y-1.5 text-sm">
-              {lead.phone && <div className="flex items-center gap-2"><Phone size={13} className="text-muted-foreground" /> {lead.phone} {waState(lead) === "yes" && <Pill tone="good">WA yes</Pill>}{waState(lead) === "no" && <Pill tone="bad">WA no</Pill>}</div>}
+              {lead.phone && <div className="flex items-center gap-2"><Phone size={13} className="text-muted-foreground" /> {lead.phone} <WhatsAppBadge state={waState(lead)} title={lead.whatsapp_status} /></div>}
               {lead.email && <div className="flex items-center gap-2"><Mail size={13} className="text-muted-foreground" /> <a className="text-primary hover:underline" href={`mailto:${lead.email}`}>{lead.email}</a></div>}
               {lead.all_emails && lead.all_emails !== lead.email && <div className="text-xs text-muted-foreground">Also: {lead.all_emails}</div>}
               {lead.address && <div className="flex items-center gap-2"><MapPin size={13} className="text-muted-foreground" /> {lead.address}</div>}
@@ -1149,7 +1117,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
                       {lead.phone && <span>{lead.phone}</span>}
-                      {waState(lead) === "yes" && <Pill tone="good">WA yes</Pill>}
+                      <WhatsAppBadge state={waState(lead)} title={lead.whatsapp_status} />
                       {lead.domain && <span className="text-xs text-muted-foreground">{lead.domain}</span>}
                     </div>
                     {lead.email && <div className="mt-1 truncate text-sm text-primary">{lead.email}</div>}
@@ -1225,8 +1193,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                         <TableCell>
                           <div className="flex items-center gap-1.5">
                             {lead.phone || "-"}
-                            {waState(lead) === "yes" && <Pill tone="good">WA yes</Pill>}
-                            {waState(lead) === "no" && <Pill tone="bad">WA no</Pill>}
+                            <WhatsAppBadge state={waState(lead)} title={lead.whatsapp_status} />
                           </div>
                           {lead.email ? <a onClick={(e) => e.stopPropagation()} className="text-xs text-primary hover:underline" href={`mailto:${lead.email}`}>{lead.email}</a> : <span className="text-xs text-muted-foreground">{lead.enrich_status || "no email"}</span>}
                         </TableCell>
