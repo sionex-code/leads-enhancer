@@ -979,6 +979,15 @@ export default function Dashboard({ view = "" }) {
   // when a status fetch is mid-flight or briefly stale after switching projects.
   const running = !!status?.state?.activeAlive || !!selectedProject?.running;
   const runningCount = projects.filter((p) => p.running).length;
+  // How many captured leads have a website — drives the project toolbar
+  // Audit/Report buttons (which now run the same bulk flow as the leads page).
+  const leadsWithSite = leads.filter((l) => l.website).length;
+  // Live "Queued for Ns" timer: while a project sits queued nothing rewrites its
+  // state, so updatedAt stays at enqueue time and this grows on each 1.5s poll.
+  const queuedFor =
+    status?.state?.queued && !running && status?.state?.updatedAt
+      ? Math.max(0, Math.round((Date.now() - Date.parse(status.state.updatedAt)) / 1000))
+      : 0;
 
   // --- Bulk selection over the captured-leads table (keyed by leadKey) ---
   const leadKeysOnPage = leads.map(leadKey);
@@ -1055,13 +1064,16 @@ export default function Dashboard({ view = "" }) {
     }));
   }
 
-  // Charge + launch a bulk batch (audit or report) for the selected rows with a
-  // website. Saves them to the DB first (for ids), then drives the shared card.
-  async function runBulkBatch(kind) {
-    const billable = reportableLeads;
-    if (!billable.length) { alert("None of the selected leads have a website."); return; }
-    const unit = kind === "audit" ? AUDIT_COST : REPORT_COST;
+  // Charge + launch a bulk batch (audit or report) over an explicit set of leads
+  // that have a website. Saves them to the DB first (for ids), then drives the
+  // shared progress card. Used by BOTH the bulk-selection bar (selected rows) and
+  // the project toolbar Audit/Report buttons (every captured lead) — one code path
+  // so the two never drift apart.
+  async function runBatchForLeads(kind, leadObjs) {
+    const billable = (leadObjs || []).filter((l) => l.website);
     const noun = kind === "audit" ? "audit" : "report";
+    if (!billable.length) { alert(`None of these leads have a website to ${noun}.`); return; }
+    const unit = kind === "audit" ? AUDIT_COST : REPORT_COST;
     const endpoint = kind === "audit" ? "/api/leads/audit/bulk" : "/api/leads/report/bulk";
     const cost = billable.length * unit;
     const have = credits ?? 0;
@@ -1086,6 +1098,9 @@ export default function Dashboard({ view = "" }) {
       setBulkBusy("");
     }
   }
+
+  // Bulk-selection bar entry point: run over just the checked rows.
+  const runBulkBatch = (kind) => runBatchForLeads(kind, reportableLeads);
 
   // Save the selected rows, then open the shared "Add to list" dialog in bulk mode.
   async function bulkAddToList() {
@@ -1251,8 +1266,22 @@ export default function Dashboard({ view = "" }) {
               <Button variant="secondary" disabled={!!busy || formRunning} onClick={() => run(["scrape"])}><Search size={16} /> Find leads</Button>
               <Button variant="secondary" disabled={!!busy || formRunning} onClick={() => run(["enrich"])}><Zap size={16} /> Enrich</Button>
               <Button variant="secondary" disabled={!!busy || formRunning} onClick={() => run(["whatsapp"])}><MessageCircle size={16} /> WhatsApp</Button>
-              <Button variant="secondary" disabled={!!busy || formRunning} onClick={() => run(["audit"])}><BarChart3 size={16} /> Audit</Button>
-              <Button variant="secondary" disabled={!!busy || formRunning} onClick={() => run(["report"])}><FileText size={16} /> Report</Button>
+              <Button
+                variant="secondary"
+                disabled={!!bulkBusy || batchRunning || !leadsWithSite}
+                onClick={() => runBatchForLeads("audit", leads)}
+                title={leadsWithSite ? `Audit ${leadsWithSite} site(s) — desktop + mobile scores (${leadsWithSite * AUDIT_COST} credits)` : "No captured leads with a website to audit"}
+              >
+                {bulkBusy === "audit" ? <Loader2 size={16} className="animate-spin" /> : <BarChart3 size={16} />} Audit{leadsWithSite ? ` (${leadsWithSite})` : ""}
+              </Button>
+              <Button
+                variant="secondary"
+                disabled={!!bulkBusy || batchRunning || !leadsWithSite}
+                onClick={() => runBatchForLeads("report", leads)}
+                title={leadsWithSite ? `Generate ${leadsWithSite} website report(s) (${leadsWithSite * REPORT_COST} credits)` : "No captured leads with a website to report on"}
+              >
+                {bulkBusy === "report" ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />} Report{leadsWithSite ? ` (${leadsWithSite})` : ""}
+              </Button>
               <Button variant="outline" disabled={!!busy || running || !selected} onClick={() => projectAction("resume")}><RotateCcw size={16} /> Resume</Button>
               <Button variant="outline" disabled={!!busy || !running} onClick={() => projectAction("stop")}><PauseCircle size={16} /> Stop</Button>
               <Button variant="destructive" disabled={!!busy || runningCount === 0} onClick={stopAllProjects} title="Stop every running project and any audit/Chrome processes still running in the background">
@@ -1264,7 +1293,15 @@ export default function Dashboard({ view = "" }) {
                 </Button>
               )}
             </div>
-            <div className="text-xs text-muted-foreground">{busy || (running ? "Running…" : status?.state?.message || "Ready")}</div>
+            <div className="text-xs text-muted-foreground">
+              {busy
+                ? busy
+                : running
+                  ? "Running…"
+                  : status?.state?.queued
+                    ? `Queued — waiting for a free slot${queuedFor ? ` · ${queuedFor < 60 ? `${queuedFor}s` : `${Math.floor(queuedFor / 60)}m ${queuedFor % 60}s`} so far` : ""}`
+                    : status?.state?.message || "Ready"}
+            </div>
           </CardContent>
         </Card>
 

@@ -7,11 +7,24 @@
 // One supervisor runs per server process (pm2 runs a single Node process); it is
 // started from instrumentation.js. State lives in Postgres so a restart resumes
 // cleanly: orphaned `running` jobs whose pid is gone are reconciled on the next tick.
+const os = require("os");
 const { pool } = require("./pg.cjs");
 const store = require("./store.cjs");
 
-const MAX_CONCURRENT = Number(process.env.MAX_CONCURRENT_JOBS || 6);
+const MAX_CONCURRENT = Number(process.env.MAX_CONCURRENT_JOBS || 12);
 const TICK_MS = Number(process.env.QUEUE_TICK_MS || 2000);
+// How long a claimed-but-not-yet-spawned job (status=running, pid=null) may sit
+// before we treat the spawn as dead and free its slot. promoteOne sets the pid
+// within milliseconds of claiming, so anything older than this never spawned
+// (supervisor died mid-promote, spawn threw before pid write, etc.) and would
+// otherwise hold a concurrency slot forever — the cause of "waiting for a free
+// slot" with nothing actually running.
+const STALE_CLAIM_MS = Number(process.env.QUEUE_STALE_CLAIM_MS || 120000);
+// Hard ceiling on how long a single runner may hold a concurrency slot. A runner
+// that hangs (e.g. Chrome stuck during an audit) would otherwise pin its slot
+// forever and, once all slots are pinned, wedge the whole queue on "waiting for a
+// free slot". Generous by default so a legitimately long scrape isn't killed.
+const MAX_RUN_MS = Number(process.env.QUEUE_MAX_RUN_MS || 6 * 60 * 60 * 1000);
 
 let _timer = null;
 let _ticking = false;
@@ -63,15 +76,67 @@ async function runningCount() {
 // done vs failed by inspecting the project's on-disk state, then notifies.
 async function reapFinished() {
   const { rows } = await pool().query(
-    `SELECT id, user_id, project_slug, params, pid FROM jobs WHERE status = 'running'`
+    `SELECT id, user_id, project_slug, params, pid, started_at FROM jobs WHERE status = 'running'`
   );
   if (process.env.QUEUE_DEBUG === "1") {
     console.log("[queue] reap: running jobs", rows.map((r) => ({ id: r.id, pid: r.pid, alive: r.pid ? store.processAlive(r.pid) : null })));
   }
   for (const job of rows) {
-    // A job with no pid yet was just claimed (spawn in flight) — leave it.
-    if (job.pid === null || job.pid === undefined) continue;
-    if (store.processAlive(job.pid)) continue;
+    // A job with no pid yet was just claimed (spawn in flight) — leave it for a
+    // short grace period, but if it's been pid-less longer than that the spawn
+    // never completed and the slot would leak forever, so fail it to free the slot.
+    if (job.pid === null || job.pid === undefined) {
+      const ageMs = job.started_at ? Date.now() - new Date(job.started_at).getTime() : Infinity;
+      if (ageMs < STALE_CLAIM_MS) continue;
+      await pool().query(
+        `UPDATE jobs SET status = 'failed', error = $1, finished_at = now() WHERE id = $2`,
+        ["spawn never started (no pid) — slot reclaimed", job.id]
+      );
+      await pool().query(
+        `INSERT INTO notifications (user_id, type, payload) VALUES ($1, 'job_failed', $2)`,
+        [job.user_id, { jobId: job.id, slug: job.project_slug, name: job.params?.name || job.project_slug, status: "failed", error: "spawn never started" }]
+      );
+      continue;
+    }
+    if (store.processAlive(job.pid)) {
+      // The pid is alive — but is it actually OUR runner? The runner records its
+      // own pid as the project's activePid in web-state.json. After a reboot the OS
+      // can hand that pid to an unrelated process; without this check we'd treat the
+      // stranger as a live job forever and never free the slot. A light state read
+      // (no CSV parsing) keeps this cheap on every tick.
+      let ours = true;
+      try {
+        const st = store.readState(store.safeProjectDir(job.project_slug, job.user_id));
+        ours = st && st.activePid != null && Number(st.activePid) === Number(job.pid);
+      } catch {}
+      // A job that started before the machine last booted cannot still be running —
+      // its runner died in the reboot — even if a recycled pid now looks alive and
+      // the (never-cleared) activePid still matches. This is the real fix for slots
+      // that stay pinned forever after a server restart.
+      const bootMs = Date.now() - os.uptime() * 1000;
+      if (job.started_at && new Date(job.started_at).getTime() < bootMs) ours = false;
+      const ageMs = job.started_at ? Date.now() - new Date(job.started_at).getTime() : 0;
+      // Genuinely ours and within the runtime ceiling → it's a healthy running job.
+      if (ours && ageMs < MAX_RUN_MS) continue;
+      // Ours but stuck past the ceiling → kill it so the slot can be reused. (If the
+      // pid isn't ours we must NOT kill it — just reclaim the row below.)
+      if (ours && ageMs >= MAX_RUN_MS) {
+        try { store.killTree(job.pid); } catch {}
+        await pool().query(
+          `UPDATE jobs SET status = 'failed', error = $1, finished_at = now() WHERE id = $2`,
+          ["runner exceeded max runtime — slot reclaimed", job.id]
+        );
+        await pool().query(
+          `INSERT INTO notifications (user_id, type, payload) VALUES ($1, 'job_failed', $2)`,
+          [job.user_id, { jobId: job.id, slug: job.project_slug, name: job.params?.name || job.project_slug, status: "failed", error: "exceeded max runtime" }]
+        );
+        continue;
+      }
+      if (!ours) {
+        // pid belongs to someone else now (reused after reboot) — reclaim the slot
+        // without touching that process, then fall through to settle done/failed.
+      }
+    }
 
     let status = "done";
     let error = null;
@@ -206,4 +271,32 @@ async function cancel(userId, jobId) {
   return { ok: true };
 }
 
-module.exports = { start, enqueue, tick, listJobs, cancel, queuePosition, MAX_CONCURRENT };
+// Cancel every queued/running job for one of a user's projects. Used by the Stop
+// route so a job that's still QUEUED (no runner yet) doesn't get promoted and
+// resurrect the project right after the user stopped it, and so a running job's
+// slot is freed immediately instead of waiting for the next reap. The actual
+// runner process is killed by the caller (store.killTree / store.stopAll).
+async function cancelByProject(userId, slug) {
+  const { rowCount } = await pool().query(
+    `UPDATE jobs SET status = 'canceled', finished_at = now()
+      WHERE user_id = $1 AND project_slug = $2 AND status IN ('queued', 'running')`,
+    [userId, slug]
+  );
+  if (rowCount) setImmediate(() => tick().catch(() => {}));
+  return rowCount || 0;
+}
+
+// Cancel ALL of a user's queued/running jobs (Stop all). Frees every slot they
+// hold at once; the runners themselves are killed by store.stopAll.
+async function cancelAllForUser(userId) {
+  const { rowCount } = await pool().query(
+    `UPDATE jobs SET status = 'canceled', finished_at = now()
+      WHERE user_id = $1 AND status IN ('queued', 'running')`,
+    [userId]
+  );
+  // A freed slot should be filled right away rather than on the next tick.
+  setImmediate(() => tick().catch(() => {}));
+  return rowCount || 0;
+}
+
+module.exports = { start, enqueue, tick, listJobs, cancel, cancelByProject, cancelAllForUser, queuePosition, MAX_CONCURRENT };
