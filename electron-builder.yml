@@ -1,0 +1,41 @@
+appId: com.leadops.desktop
+productName: Lead Ops
+# Override package.json "main" (which points at the CLI) with the Electron entry.
+# dependencies are emptied so electron-builder does NOT collect/symlink the
+# top-level node_modules (everything needed is already inside .next/standalone).
+# Avoids the Windows symlink-dedup EPERM that needs admin/developer mode.
+extraMetadata:
+  main: electron/main.cjs
+  dependencies: {}
+# The standalone server forks server.js from disk and loads native .node addons,
+# so the app must NOT be packed into an asar archive.
+asar: false
+# We rebuild the native better-sqlite3 inside .next/standalone ourselves (see
+# scripts/prepare-standalone.cjs), so electron-builder must not also rebuild the
+# top-level copy (it isn't shipped and the rebuild fights file locks on Windows).
+npmRebuild: false
+directories:
+  output: dist-electron
+  buildResources: build
+# App dir (resources/app): just the Electron entry. The Next standalone bundle
+# is copied into resources/standalone manually by scripts/pack-electron.cjs AFTER
+# the unpacked build — electron-builder v26 rewrites any node_modules it packs
+# into a symlinked store that fails on Windows, so the bundle must bypass it.
+files:
+  - electron/**/*
+  - package.json
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  artifactName: ${productName}-${version}-${arch}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+portable:
+  artifactName: ${productName}-${version}-portable.${ext}

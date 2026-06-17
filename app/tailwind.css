@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* shadcn/ui design tokens — LIGHT theme keyed to the LeadsFunda brand blue
+   (#3147ff). Tokens live on :root so every (Tailwind) page renders light. The
+   legacy dashboard CSS now lives only on the /agent route (app/agent/layout.js),
+   so it can no longer bleed into the new shadcn app. */
+:root {
+  --background: 220 33% 98%;
+  --foreground: 230 30% 12%;
+  --card: 0 0% 100%;
+  --card-foreground: 230 30% 12%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 230 30% 12%;
+  --primary: 230 100% 60%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 24% 94%;
+  --secondary-foreground: 230 25% 22%;
+  --muted: 220 24% 95%;
+  --muted-foreground: 230 10% 42%;
+  --accent: 220 26% 93%;
+  --accent-foreground: 230 28% 18%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 220 18% 88%;
+  --input: 220 18% 86%;
+  --ring: 230 100% 60%;
+  --radius: 0.65rem;
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+  html {
+    color-scheme: light;
+  }
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  ::selection {
+    background: hsl(var(--primary) / 0.25);
+  }
+  /* Slim, themed scrollbars to match the light UI. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 8px;
+    border: 2px solid hsl(var(--background));
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
