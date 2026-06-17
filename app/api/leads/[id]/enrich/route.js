@@ -19,7 +19,7 @@ export async function POST(_request, context) {
     // Already enriched by anyone? Reuse the shared cache instead of re-crawling —
     // the business's email/socials show instantly with no second website check.
     const cached = await db.getCachedEnrichment({ domain: lead.domain, website: lead.website, phone: lead.phone });
-    if (cached && cached.email) {
+    if (cached && db.hasUsefulCache(cached)) {
       const updated = await db.updateLeadFields(userId, id, {
         email: cached.email,
         all_emails: cached.all_emails,

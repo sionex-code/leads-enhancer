@@ -240,6 +240,13 @@ function hasUsefulEnrichment(f) {
   return !!(f.email || CACHE_SOCIALS.some((s) => f[s]));
 }
 
+// True when a cached enrichment row carries any reusable contact data (email OR a
+// social/WhatsApp link). Lets every cache-hit path reuse socials-only businesses
+// instead of re-crawling them just because they have no email.
+function hasUsefulCache(row) {
+  return hasUsefulEnrichment(cacheFieldsFrom(row || {}));
+}
+
 // One cached row by domain (preferred), else by phone (digits-only) — but a phone
 // hit is only returned when it actually carries an email.
 async function getCachedEnrichment({ domain = "", website = "", phone = "" } = {}) {
@@ -813,6 +820,7 @@ module.exports = {
   getCachedEnrichment,
   getCachedEnrichmentMap,
   saveCachedEnrichment,
+  hasUsefulCache,
   upsertLeads,
   queryLeads,
   getLead,

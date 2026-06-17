@@ -681,9 +681,12 @@ if (require.main === module)
       let filled = 0;
       for (const w of new Set(websites)) {
         const key = siteKey(w);
-        if (state.get(key)?.email) continue; // resume state already has it
+        const prev = state.get(key);
+        if (prev?.email || prev?._cached) continue; // resume/cache state already has it
         const cached = map.get(db.hostOf(w));
-        if (!cached || !cached.email) continue;
+        // Reuse any business already enriched with an email OR socials/WhatsApp —
+        // not just ones with an email — so socials-only sites aren't re-crawled.
+        if (!cached || !db.hasUsefulCache(cached)) continue;
         const result = {
           email: cached.email || "",
           allEmails: cached.all_emails || cached.email || "",
@@ -698,6 +701,7 @@ if (require.main === module)
           whatsapp: cached.whatsapp || "",
           telegram: cached.telegram || "",
           enrichStatus: (cached.enrich_status || "ok") + " (cached)",
+          _cached: true,
         };
         state.set(key, result);
         fs.appendFileSync(
@@ -734,7 +738,7 @@ if (require.main === module)
       // retries the failures — with the headless-browser fallback this time —
       // instead of immediately reporting "done". `queued` stops re-loops within
       // a single run, so it only re-tries on a fresh invocation.
-      if (prev && prev.email) continue;
+      if (prev && (prev.email || prev._cached)) continue;
       queued.add(key);
       queue.push({ key, website: w });
     }
