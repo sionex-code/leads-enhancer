@@ -30,6 +30,37 @@ function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
+// A project already exists for this user when its dir holds a project.json.
+function projectExists(name, userId) {
+  try {
+    return fs.existsSync(metaPath(safeProjectDir(slugify(name), userId)));
+  } catch {
+    return false;
+  }
+}
+
+// Random 5-char id (A–Z + digits) used to de-collide duplicate project names.
+const PROJECT_ID_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+function randomProjectId(len = 5) {
+  let s = "";
+  for (let i = 0; i < len; i++) s += PROJECT_ID_ALPHABET[Math.floor(Math.random() * PROJECT_ID_ALPHABET.length)];
+  return s;
+}
+
+// Give a brand-new project a unique name/slug for this user: if the requested
+// name's slug already exists, append a random 5-char id until it's unique so a
+// duplicate run becomes its own project instead of merging into the old one.
+function uniqueProjectName(name, userId) {
+  const base = String(name || "").trim() || "project";
+  if (!projectExists(base, userId)) return { name: base, slug: slugify(base) };
+  for (let i = 0; i < 25; i++) {
+    const candidate = `${base} ${randomProjectId(5)}`;
+    if (!projectExists(candidate, userId)) return { name: candidate, slug: slugify(candidate) };
+  }
+  const candidate = `${base} ${randomProjectId(5)}${Date.now().toString(36).slice(-3).toUpperCase()}`;
+  return { name: candidate, slug: slugify(candidate) };
+}
+
 // Per-tenant project root. On the web server, each request passes the signed-in
 // userId so users never share project dirs (two users can both have a project
 // named "plumbers-miami" without colliding). Inside the runner child, userId is
@@ -720,6 +751,8 @@ module.exports = {
   PROJECT_ROOT,
   slugify,
   ensureDir,
+  projectExists,
+  uniqueProjectName,
   safeProjectDir,
   projectDir,
   readMeta,

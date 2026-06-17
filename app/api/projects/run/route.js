@@ -21,8 +21,12 @@ export async function POST(request) {
   const body = await request.json();
   if (!body.name) return Response.json({ error: "Project name is required" }, { status: 400 });
 
+  // A new run whose name already exists becomes its own project (random 5-char
+  // id appended) instead of merging into / colliding with the existing one.
+  const { name: projectName } = store.uniqueProjectName(body.name, userId);
+
   // Reject if this user already has this project running.
-  const dir = store.safeProjectDir(store.slugify(body.name), userId);
+  const dir = store.safeProjectDir(store.slugify(projectName), userId);
   const state = store.readState(dir);
   if (state.activePid && store.processAlive(state.activePid)) {
     return Response.json({ error: "Project is already running" }, { status: 409 });
@@ -30,7 +34,7 @@ export async function POST(request) {
 
   const stages = Array.isArray(body.stages) && body.stages.length ? body.stages : ["scrape", "enrich", "whatsapp", "audit", "report"];
   const result = await queue.enqueue(userId, {
-    name: body.name,
+    name: projectName,
     query: body.query || "",
     max: body.max || "",
     stages,
