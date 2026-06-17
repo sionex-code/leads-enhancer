@@ -63,6 +63,25 @@ async function setFreeMonthlyConfig({ enabled, amount } = {}) {
   return getFreeMonthlyConfig();
 }
 
+// Free trial: brand-new accounts start `active` with a small one-off lead quota so
+// they can try the scraper before paying. `leads` = trial quota (0 disables the
+// trial → new accounts are created inactive, the old behaviour). Read only when a
+// membership row is first created, so it stays off the hot path.
+async function getFreeTrialConfig() {
+  const [enabled, leads] = await Promise.all([
+    getSetting("free_trial_enabled", "1"),
+    getSetting("free_trial_leads", "100"),
+  ]);
+  const amount = Math.max(0, parseInt(leads, 10) || 0);
+  return { enabled: (enabled === "1" || enabled === "true") && amount > 0, leads: amount };
+}
+
+async function setFreeTrialConfig({ enabled, leads } = {}) {
+  if (enabled !== undefined) await setSetting("free_trial_enabled", enabled ? "1" : "0");
+  if (leads !== undefined) await setSetting("free_trial_leads", String(Math.max(0, parseInt(leads, 10) || 0)));
+  return getFreeTrialConfig();
+}
+
 // ---- credits ----------------------------------------------------------------
 function isPaidActive(m) {
   return (
@@ -89,11 +108,23 @@ async function ensureCredits(userId) {
   let { rows } = await pool().query(`SELECT * FROM memberships WHERE user_id = $1`, [userId]);
   let m = rows[0];
   if (!m) {
-    await pool().query(
-      `INSERT INTO memberships (user_id, status, leads_used, credits, updated_at)
-         VALUES ($1, 'inactive', 0, 0, $2) ON CONFLICT (user_id) DO NOTHING`,
-      [userId, now()]
-    );
+    // First touch for this account: hand out the free trial (active + a small lead
+    // quota) when enabled, otherwise create an inactive row as before. Paid grants
+    // (Whop / admin) upsert over this later via grantMembership / setPlanForUser.
+    const trial = await getFreeTrialConfig();
+    if (trial.enabled) {
+      await pool().query(
+        `INSERT INTO memberships (user_id, status, plan, leads_quota, leads_used, credits, updated_at)
+           VALUES ($1, 'active', NULL, $2, 0, 0, $3) ON CONFLICT (user_id) DO NOTHING`,
+        [userId, trial.leads, now()]
+      );
+    } else {
+      await pool().query(
+        `INSERT INTO memberships (user_id, status, leads_used, credits, updated_at)
+           VALUES ($1, 'inactive', 0, 0, $2) ON CONFLICT (user_id) DO NOTHING`,
+        [userId, now()]
+      );
+    }
     ({ rows } = await pool().query(`SELECT * FROM memberships WHERE user_id = $1`, [userId]));
     m = rows[0];
     if (!m) return null;
@@ -323,6 +354,8 @@ module.exports = {
   setSetting,
   getFreeMonthlyConfig,
   setFreeMonthlyConfig,
+  getFreeTrialConfig,
+  setFreeTrialConfig,
   ensureCredits,
   getCredits,
   consumeCredits,
