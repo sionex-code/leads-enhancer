@@ -29,7 +29,7 @@ export async function POST(request) {
 
   const count = leads.length;
   const cost = billing.REPORT_COST * count;
-  const charge = await billing.consumeCredits(userId, cost);
+  const charge = await billing.consumeCredits(userId, cost, { reason: "report", count, project: leads[0]?.project });
   if (!charge.ok) {
     return Response.json(
       { error: `Not enough credits — ${count} report(s) need ${cost} credits and you have ${charge.credits}.`, code: "insufficient_credits", cost, count, credits: charge.credits },
@@ -50,7 +50,7 @@ export async function POST(request) {
     }
   }
   let credits = charge.credits;
-  if (refund) credits = await billing.addCredits(userId, refund);
+  if (refund) credits = await billing.addCredits(userId, refund, { reason: "refund", project: leads[0]?.project });
 
   return Response.json({ jobIds, count, charged: cost - refund, credits });
 }

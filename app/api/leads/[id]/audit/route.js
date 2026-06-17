@@ -19,7 +19,7 @@ export async function POST(_request, context) {
   if (!lead.website) return Response.json({ error: "This lead has no website to audit" }, { status: 400 });
 
   const cost = billing.AUDIT_COST;
-  const charge = await billing.consumeCredits(userId, cost);
+  const charge = await billing.consumeCredits(userId, cost, { reason: "audit", count: 1, project: lead.project });
   if (!charge.ok) {
     return Response.json(
       { error: `Not enough credits — this audit needs ${cost} credits and you have ${charge.credits}.`, code: "insufficient_credits", cost, credits: charge.credits },
@@ -33,7 +33,7 @@ export async function POST(_request, context) {
     });
     return Response.json({ jobId, charged: cost, credits: charge.credits });
   } catch (err) {
-    const credits = await billing.addCredits(userId, cost); // refund — job never started
+    const credits = await billing.addCredits(userId, cost, { reason: "refund", count: 1, project: lead.project }); // refund — job never started
     return Response.json({ error: String(err.message || err), credits }, { status: 500 });
   }
 }

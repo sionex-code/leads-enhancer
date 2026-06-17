@@ -1,6 +1,7 @@
 "use client";
 
-import { Check, Crown, Sparkles, Zap, ShieldCheck, ArrowUpRight, Star } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, Crown, Sparkles, Zap, ShieldCheck, ArrowUpRight, Star, Receipt, ChevronLeft, ChevronRight, Loader2, BarChart3, FileText, RotateCcw, Gift, Plus } from "lucide-react";
 import AppShell from "../components/app/AppShell";
 import { useMe } from "../components/AccountWidget";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
@@ -29,6 +30,108 @@ const FAQ = [
 
 function checkoutHref(planId) {
   return `${BASE_PATH}/api/billing/checkout?plan=${planId}`;
+}
+
+// How each ledger reason renders: icon + label + amount tone.
+const TXN_META = {
+  audit: { label: "Audit", Icon: BarChart3 },
+  report: { label: "Report", Icon: FileText },
+  refund: { label: "Refund", Icon: RotateCcw },
+  topup: { label: "Top-up", Icon: Plus },
+  adjust: { label: "Adjustment", Icon: Plus },
+  grant: { label: "Monthly credits", Icon: Gift },
+  admin: { label: "Admin adjustment", Icon: Plus },
+  spend: { label: "Spend", Icon: Receipt },
+};
+
+function fmtWhen(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+// Paginated credit-spend history. Compact one-line rows: what was done, on which
+// project, how many credits, and the running balance afterwards.
+function CreditHistory() {
+  const [page, setPage] = useState(1);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const pageSize = 12;
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch(`${BASE_PATH}/api/billing/history?page=${page}&pageSize=${pageSize}`)
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled) setData(d); })
+      .catch(() => { if (!cancelled) setData({ rows: [], total: 0, pages: 1 }); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [page]);
+
+  const rows = data?.rows || [];
+  const pages = data?.pages || 1;
+  const total = data?.total || 0;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary"><Receipt className="h-5 w-5" /></div>
+          <div>
+            <CardTitle className="text-base">Credit history</CardTitle>
+            <CardDescription>{total ? `${total.toLocaleString()} entr${total === 1 ? "y" : "ies"} · audits, reports, top-ups & monthly grants` : "Your credit spend will appear here."}</CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {loading && !data ? (
+          <div className="flex items-center justify-center py-10 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /></div>
+        ) : rows.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">No credit activity yet.</p>
+        ) : (
+          <div className="divide-y divide-border/60">
+            {rows.map((t) => {
+              const meta = TXN_META[t.reason] || TXN_META.spend;
+              const Icon = meta.Icon;
+              const spend = t.delta < 0;
+              const countLabel = t.count && t.count > 1 ? ` · ${t.count}×` : "";
+              return (
+                <div key={t.id} className="flex items-center gap-3 py-2.5">
+                  <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-md", spend ? "bg-muted text-muted-foreground" : "bg-emerald-500/15 text-emerald-600")}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium text-foreground">
+                      {meta.label}{countLabel}
+                      {t.project ? <span className="font-normal text-muted-foreground"> · {t.project}</span> : null}
+                    </div>
+                    <div className="text-xs text-muted-foreground">{fmtWhen(t.created_at)}</div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className={cn("text-sm font-semibold tabular-nums", spend ? "text-foreground" : "text-emerald-600")}>
+                      {spend ? "" : "+"}{t.delta} credits
+                    </div>
+                    {t.balance_after != null && <div className="text-xs text-muted-foreground tabular-nums">balance {t.balance_after}</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {pages > 1 && (
+          <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-3">
+            <span className="text-xs text-muted-foreground">Page {page} of {pages}</span>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))}><ChevronLeft className="h-4 w-4" /> Prev</Button>
+              <Button variant="outline" size="sm" disabled={page >= pages || loading} onClick={() => setPage((p) => Math.min(pages, p + 1))}>Next <ChevronRight className="h-4 w-4" /></Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function BillingClient() {
@@ -174,6 +277,9 @@ export default function BillingClient() {
             })}
           </div>
         </div>
+
+        {/* Credit spend history */}
+        <CreditHistory />
 
         {/* Trust + FAQ */}
         <div className="grid gap-5 lg:grid-cols-[1fr_1.4fr]">

@@ -119,10 +119,25 @@ async function getCredits(userId) {
   return m ? m.credits || 0 : 0;
 }
 
+// Append a row to the credit-spend ledger. Best-effort: a ledger hiccup must
+// never fail the actual credit operation. delta < 0 = spend, > 0 = grant/topup/refund.
+async function recordCreditTxn(userId, { delta, reason, count = null, project = null, balanceAfter = null }) {
+  try {
+    await pool().query(
+      `INSERT INTO credit_transactions (user_id, delta, reason, count, project, balance_after, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [userId, Math.trunc(delta), String(reason || "spend"), count == null ? null : Math.trunc(count), project || null, balanceAfter == null ? null : Math.trunc(balanceAfter), now()]
+    );
+  } catch (err) {
+    console.warn("[billing] credit ledger write failed:", err.message);
+  }
+}
+
 // Atomically spend `n` credits. Returns { ok, credits }. ok=false (without
 // charging) when the balance is insufficient — the conditional UPDATE makes this
-// race-safe across concurrent report requests.
-async function consumeCredits(userId, n) {
+// race-safe across concurrent report requests. `meta` ({ reason, count, project })
+// is recorded to the credit-spend ledger on success.
+async function consumeCredits(userId, n, meta = {}) {
   n = Math.max(0, Math.floor(n || 0));
   if (n === 0) return { ok: true, credits: await getCredits(userId) };
   await ensureCredits(userId); // make sure the row + monthly grant exist first
@@ -135,11 +150,13 @@ async function consumeCredits(userId, n) {
     const { rows: cur } = await pool().query(`SELECT credits FROM memberships WHERE user_id = $1`, [userId]);
     return { ok: false, credits: cur[0] ? cur[0].credits || 0 : 0 };
   }
+  await recordCreditTxn(userId, { delta: -n, reason: meta.reason || "spend", count: meta.count, project: meta.project, balanceAfter: rows[0].credits });
   return { ok: true, credits: rows[0].credits };
 }
 
-// Add credits (admin top-up, or refunding a report that failed to start).
-async function addCredits(userId, n) {
+// Add credits (admin top-up, or refunding a report that failed to start). `meta`
+// ({ reason, count, project }) is recorded to the ledger.
+async function addCredits(userId, n, meta = {}) {
   n = Math.floor(n || 0);
   if (!n) return getCredits(userId);
   await ensureCredits(userId);
@@ -147,7 +164,22 @@ async function addCredits(userId, n) {
     `UPDATE memberships SET credits = GREATEST(0, credits + $1), updated_at = $2 WHERE user_id = $3 RETURNING credits`,
     [n, now(), userId]
   );
-  return rows[0] ? rows[0].credits : 0;
+  const credits = rows[0] ? rows[0].credits : 0;
+  await recordCreditTxn(userId, { delta: n, reason: meta.reason || (n > 0 ? "topup" : "adjust"), count: meta.count, project: meta.project, balanceAfter: credits });
+  return credits;
+}
+
+// Paginated credit-spend history for a user, newest first. Returns { rows, total }.
+async function listCreditTransactions(userId, { limit = 20, offset = 0 } = {}) {
+  limit = Math.min(100, Math.max(1, Number(limit) || 20));
+  offset = Math.max(0, Number(offset) || 0);
+  const totalRes = await pool().query(`SELECT COUNT(*)::int AS c FROM credit_transactions WHERE user_id = $1`, [userId]);
+  const { rows } = await pool().query(
+    `SELECT id, delta, reason, count, project, balance_after, created_at
+       FROM credit_transactions WHERE user_id = $1 ORDER BY id DESC LIMIT $2 OFFSET $3`,
+    [userId, limit, offset]
+  );
+  return { rows, total: totalRes.rows[0].c };
 }
 
 // Set an absolute credit balance (admin).
@@ -327,6 +359,8 @@ module.exports = {
   getCredits,
   consumeCredits,
   addCredits,
+  recordCreditTxn,
+  listCreditTransactions,
   setUserCredits,
   setUserMonthlyCredits,
   getEntitlement,

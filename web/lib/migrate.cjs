@@ -75,6 +75,22 @@ const STATEMENTS = [
    )`,
   `CREATE INDEX IF NOT EXISTS idx_list_members_lead ON list_members (lead_id)`,
 
+  // ---- credit-spend ledger (per-user history) ----
+  `CREATE TABLE IF NOT EXISTS credit_transactions (
+     id serial PRIMARY KEY,
+     user_id text NOT NULL,
+     delta integer NOT NULL,
+     reason text NOT NULL,
+     count integer,
+     project text,
+     balance_after integer,
+     created_at text NOT NULL
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_credit_txn_user ON credit_transactions (user_id, id DESC)`,
+
+  // ---- account ban flag (admin) ----
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS banned integer NOT NULL DEFAULT 0`,
+
   // sensible defaults for the free monthly grant (only inserted if absent)
   `INSERT INTO app_settings (key, value, updated_at)
      VALUES ('free_monthly_credits_enabled', '1', now()::text)
