@@ -1,5 +1,6 @@
 name: Deploy to VPS
 on:
+  push: { branches: [master] }
   workflow_dispatch: {}
 concurrency: { group: deploy-leadsfunda, cancel-in-progress: false }
 env:
