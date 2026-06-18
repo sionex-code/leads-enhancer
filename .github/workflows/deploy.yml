@@ -35,7 +35,15 @@ jobs:
       # Extract over the app dir (output/, leads.db and .chrome-profile are never
       # touched), install, rebuild with the /leads base path, restart pm2.
       - name: Deploy
+        env:
+          # next build needs DATABASE_URL at build time (the Auth.js adapter
+          # constructs the pg pool when its route's page data is collected).
+          # .env.local is gitignored so it isn't in the tarball; inject the secret
+          # here. base64-encoded so the connection string's special chars survive
+          # the runner→ssh→remote-shell hops without any quoting surprises.
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
+          DB_B64=$(printf '%s' "$DATABASE_URL" | base64 -w0)
           ssh -i ~/.ssh/id_ed25519 "$VPS_USER@$VPS_HOST" "
             set -e
             cd $APP_DIR
@@ -45,6 +53,7 @@ jobs:
             tar xzf /tmp/gmaps-deploy.tgz
             rm /tmp/gmaps-deploy.tgz
             npm install --no-audit --no-fund
+            export DATABASE_URL=\$(printf '%s' '$DB_B64' | base64 -d)
             NEXT_PUBLIC_BASE_PATH=/leads npm run build
             pm2 restart gmaps-leads-ui --update-env
           "
