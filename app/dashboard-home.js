@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AppShell from "./components/app/AppShell";
@@ -33,7 +34,9 @@ import {
   CreditCard,
   ArrowRight,
   SlidersHorizontal,
+  MapPin,
 } from "lucide-react";
+
 import { Button } from "./components/ui/button";
 import { Card, CardContent } from "./components/ui/card";
 import { Badge } from "./components/ui/badge";
@@ -42,6 +45,8 @@ import { Select } from "./components/ui/select";
 import { Progress } from "./components/ui/progress";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "./components/ui/table";
 import { cn, waMeLink } from "./lib/utils";
+
+const LeadsMap = dynamic(() => import("./components/LeadsMap"), { ssr: false });
 
 const blankForm = {
   name: "Austin Real Estate Leads",
@@ -321,57 +326,158 @@ function CreditsPill() {
   );
 }
 
-function QuickScrapeHome({ busy, onScrape, onOpenDashboard, error, needPlan }) {
-  const [countryCode, setCountryCode] = useState(QUICK_COUNTRIES[0].code);
+// Build a fallback catalog entry from the QUICK_ constants so the form still
+// works when the catalog API is unreachable or returns nothing.
+function buildFallbackCatalog() {
+  return {
+    countries: QUICK_COUNTRIES.map((c) => ({
+      code: c.code,
+      name: c.label,
+      leadCount: 0,
+      cities: c.cities.map((name) => ({ id: null, name, admin: "", lat: null, lng: null, leadCount: 0 })),
+    })),
+    services: QUICK_SERVICES.map((name) => ({ name, category: "", leadCount: 0 })),
+  };
+}
+
+function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
+  // ── Catalog state ─────────────────────────────────────────────────────────
+  const [catalog, setCatalog] = useState(null); // null = loading
+  const [, setCatalogError] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    fetch(`${BASE_PATH}/api/catalog`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!alive) return;
+        if (d && (d.countries?.length || d.services?.length)) {
+          setCatalog(d);
+        } else {
+          setCatalogError(true);
+          setCatalog(buildFallbackCatalog());
+        }
+      })
+      .catch(() => {
+        if (!alive) return;
+        setCatalogError(true);
+        setCatalog(buildFallbackCatalog());
+      });
+    return () => { alive = false; };
+  }, []);
+
+  // Resolved data: catalog when available, else fallback (shown while loading too)
+  const resolved = catalog || buildFallbackCatalog();
+  const catalogCountries = resolved.countries || [];
+  const catalogServices = resolved.services || [];
+
+  // ── Form state ─────────────────────────────────────────────────────────────
+  const [countryCode, setCountryCode] = useState(() => catalogCountries[0]?.code || QUICK_COUNTRIES[0].code);
   const country = useMemo(
-    () => QUICK_COUNTRIES.find((item) => item.code === countryCode) || QUICK_COUNTRIES[0],
-    [countryCode]
+    () => catalogCountries.find((c) => c.code === countryCode) || catalogCountries[0] || { code: "", name: "", cities: [] },
+    [catalogCountries, countryCode]
   );
-  const [service, setService] = useState(QUICK_SERVICES[0]);
-  const [city, setCity] = useState(QUICK_COUNTRIES[0].cities[10] || QUICK_COUNTRIES[0].cities[0]);
+
+  const [service, setService] = useState(() => catalogServices[0]?.name || QUICK_SERVICES[0]);
+  // cityObj = { id, name, admin, lat, lng } from the catalog
+  const [cityObj, setCityObj] = useState(() => country.cities?.[10] || country.cities?.[0] || null);
   const [citySearch, setCitySearch] = useState("");
   const [showChips, setShowChips] = useState(false);
   const [max, setMax] = useState("30");
-  const [query, setQuery] = useState(buildQuickQuery(QUICK_SERVICES[0], city, QUICK_COUNTRIES[0]));
+  const [minRating, setMinRating] = useState("");
+  const [radiusKm, setRadiusKm] = useState(10);
+  // center for the area picker map — kept in sync with selected city
+  const [center, setCenter] = useState(() =>
+    cityObj?.lat != null && cityObj?.lng != null
+      ? { lat: cityObj.lat, lng: cityObj.lng }
+      : { lat: 30.2672, lng: -97.7431 } // Austin TX fallback
+  );
+
+  // Build query text from current selections (same shape as before)
+  const buildQuery = (svc, cObj, cntry) => {
+    const cityName = cObj?.name || "";
+    const suffix = QUICK_COUNTRIES.find((q) => q.code === cntry?.code)?.querySuffix || cntry?.name || "";
+    return `${svc} in ${cityName} ${suffix}`.replace(/\s+/g, " ").trim();
+  };
+  const [query, setQuery] = useState(() => buildQuery(service, cityObj, country));
+
+  // When catalog loads, resync selections to first available entry
+  useEffect(() => {
+    if (!catalog) return;
+    const firstCountry = catalog.countries?.[0];
+    const firstService = catalog.services?.[0]?.name;
+    if (firstCountry) {
+      setCountryCode(firstCountry.code);
+      const firstCity = firstCountry.cities?.[10] || firstCountry.cities?.[0] || null;
+      setCityObj(firstCity);
+      if (firstCity?.lat != null) setCenter({ lat: firstCity.lat, lng: firstCity.lng });
+      if (firstService) {
+        setService(firstService);
+        setQuery(buildQuery(firstService, firstCity, firstCountry));
+      } else {
+        setQuery(buildQuery(service, firstCity, firstCountry));
+      }
+    } else if (firstService) {
+      setService(firstService);
+      setQuery(buildQuery(firstService, cityObj, country));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalog]);
 
   const shownCities = useMemo(() => {
     const q = citySearch.trim().toLowerCase();
-    return q ? country.cities.filter((item) => item.toLowerCase().includes(q)) : country.cities;
+    return q
+      ? (country.cities || []).filter((c) => (c.name || "").toLowerCase().includes(q))
+      : (country.cities || []);
   }, [citySearch, country]);
 
-  function setCountry(nextCode) {
-    const nextCountry = QUICK_COUNTRIES.find((item) => item.code === nextCode) || QUICK_COUNTRIES[0];
-    const nextCity = nextCountry.cities[0];
+  function changeCountry(nextCode) {
+    const nextCountry = catalogCountries.find((c) => c.code === nextCode) || catalogCountries[0];
+    if (!nextCountry) return;
+    const nextCity = nextCountry.cities?.[0] || null;
     setCountryCode(nextCountry.code);
-    setCity(nextCity);
+    setCityObj(nextCity);
     setCitySearch("");
-    setQuery(buildQuickQuery(service, nextCity, nextCountry));
+    if (nextCity?.lat != null) setCenter({ lat: nextCity.lat, lng: nextCity.lng });
+    setQuery(buildQuery(service, nextCity, nextCountry));
   }
 
   function selectService(nextService) {
     setService(nextService);
-    setQuery(buildQuickQuery(nextService, city, country));
+    setQuery(buildQuery(nextService, cityObj, country));
   }
 
-  function selectCity(nextCity) {
-    setCity(nextCity);
-    setQuery(buildQuickQuery(service, nextCity, country));
+  function selectCity(nextCityObj) {
+    setCityObj(nextCityObj);
+    if (nextCityObj?.lat != null && nextCityObj?.lng != null) {
+      setCenter({ lat: nextCityObj.lat, lng: nextCityObj.lng });
+    }
+    setQuery(buildQuery(service, nextCityObj, country));
   }
 
   function submit(e) {
     e.preventDefault();
-    const cleanQuery = query.trim() || buildQuickQuery(service, city, country);
-    // If the query still matches the chip selection, use the clean "City Service
-    // Leads" name. If the user typed their own query, derive the name from it.
-    const isCustom = cleanQuery !== buildQuickQuery(service, city, country);
-    const name = isCustom ? projectNameFromQuery(cleanQuery) : quickProjectName(service, city);
-    onScrape({
-      ...blankForm,
+    const cleanQuery = query.trim() || buildQuery(service, cityObj, country);
+    const isCustom = cleanQuery !== buildQuery(service, cityObj, country);
+    const name = isCustom ? projectNameFromQuery(cleanQuery) : quickProjectName(service, cityObj?.name || "");
+    onFind({
       name,
       query: cleanQuery,
+      cityId: cityObj?.id || null,
+      countryCode: country.code || "",
+      service,
+      minRating: minRating ? Number(minRating) : undefined,
+      centerLat: center.lat,
+      centerLng: center.lng,
+      radiusKm: Number(radiusKm) || 10,
       max,
     });
   }
+
+  // The chip browser uses the same city objects from the catalog
+  const chipCityLabel = (c) => `${c.name}${c.admin ? ", " + c.admin : ""}`;
+  // For the select dropdown value we use city id (or name as fallback)
+  const citySelectVal = cityObj?.id ?? cityObj?.name ?? "";
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:py-16">
@@ -389,7 +495,7 @@ function QuickScrapeHome({ busy, onScrape, onOpenDashboard, error, needPlan }) {
         <Badge variant="outline" className="mb-4 gap-1.5"><Zap className="h-3 w-3 text-primary" /> Google Maps lead engine</Badge>
         <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">What leads do you want to find?</h1>
         <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
-          Pick a service and city, or type your own query, and we'll pull the leads, enrich contacts, and audit their sites.
+          Pick a service and city, or type your own query, and we'll pull the leads instantly from our warehouse.
         </p>
       </div>
 
@@ -419,39 +525,81 @@ function QuickScrapeHome({ busy, onScrape, onOpenDashboard, error, needPlan }) {
           />
         </div>
         <Button type="submit" size="lg" className="h-12" disabled={!!busy || !query.trim()}>
-          <Play size={16} /> Find leads
+          {busy ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />} Find leads
         </Button>
       </form>
 
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         <label className="space-y-1">
           <span className="text-xs text-muted-foreground">Service</span>
           <Select value={service} onChange={(e) => selectService(e.target.value)}>
-            {QUICK_SERVICES.map((item) => (
-              <option key={item} value={item}>{item}</option>
+            {catalogServices.map((item) => (
+              <option key={item.name} value={item.name}>{item.name}</option>
             ))}
           </Select>
         </label>
         <label className="space-y-1">
           <span className="text-xs text-muted-foreground">Country</span>
-          <Select value={countryCode} onChange={(e) => setCountry(e.target.value)}>
-            {QUICK_COUNTRIES.map((item) => (
-              <option key={item.code} value={item.code}>{item.label}</option>
+          <Select value={countryCode} onChange={(e) => changeCountry(e.target.value)}>
+            {catalogCountries.map((item) => (
+              <option key={item.code} value={item.code}>{item.name}</option>
             ))}
           </Select>
         </label>
         <label className="space-y-1">
           <span className="text-xs text-muted-foreground">City</span>
-          <Select value={city} onChange={(e) => selectCity(e.target.value)}>
-            {country.cities.map((item) => (
-              <option key={item} value={item}>{item}</option>
+          <Select
+            value={citySelectVal}
+            onChange={(e) => {
+              const val = e.target.value;
+              const found = (country.cities || []).find((c) => String(c.id ?? c.name) === val);
+              if (found) selectCity(found);
+            }}
+          >
+            {(country.cities || []).map((c) => (
+              <option key={c.id ?? c.name} value={c.id ?? c.name}>{c.name}{c.admin ? `, ${c.admin}` : ""}</option>
             ))}
           </Select>
+        </label>
+        <label className="space-y-1">
+          <span className="text-xs text-muted-foreground">Min rating</span>
+          <Select value={minRating} onChange={(e) => setMinRating(e.target.value)}>
+            <option value="">Any</option>
+            <option value="3">3.0+</option>
+            <option value="3.5">3.5+</option>
+            <option value="4">4.0+</option>
+            <option value="4.5">4.5+</option>
+          </Select>
+        </label>
+        <label className="space-y-1">
+          <span className="text-xs text-muted-foreground">Radius (km)</span>
+          <Input
+            type="number"
+            min={1}
+            max={50}
+            value={radiusKm}
+            onChange={(e) => setRadiusKm(Number(e.target.value) || 10)}
+          />
         </label>
         <label className="space-y-1">
           <span className="text-xs text-muted-foreground">Leads</span>
           <Input value={max} onChange={(e) => setMax(e.target.value)} />
         </label>
+      </div>
+
+      {/* Area picker map */}
+      <div className="mt-4">
+        <div className="mb-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <MapPin className="h-3.5 w-3.5" />
+          <span>Drag the pin to refine the search center</span>
+        </div>
+        <LeadsMap
+          interactive
+          center={center}
+          radiusKm={Number(radiusKm) || 10}
+          onCenterChange={setCenter}
+          height={260}
+        />
       </div>
 
       {/* Dropdowns are the default; the chip browser below is an optional, collapsed view. */}
@@ -473,8 +621,8 @@ function QuickScrapeHome({ busy, onScrape, onOpenDashboard, error, needPlan }) {
             <CardContent className="p-4">
               <h2 className="mb-3 text-sm font-semibold">Service</h2>
               <div className="flex flex-wrap gap-1.5">
-                {QUICK_SERVICES.map((item) => (
-                  <Chip key={item} active={service === item} onClick={() => selectService(item)}>{item}</Chip>
+                {catalogServices.map((item) => (
+                  <Chip key={item.name} active={service === item.name} onClick={() => selectService(item.name)}>{item.name}</Chip>
                 ))}
               </div>
             </CardContent>
@@ -483,12 +631,12 @@ function QuickScrapeHome({ busy, onScrape, onOpenDashboard, error, needPlan }) {
           <Card>
             <CardContent className="p-4">
               <div className="mb-3 flex flex-wrap gap-1.5">
-                {QUICK_COUNTRIES.map((item) => (
-                  <Chip key={item.code} active={countryCode === item.code} onClick={() => setCountry(item.code)}>{item.short}</Chip>
+                {catalogCountries.map((item) => (
+                  <Chip key={item.code} active={countryCode === item.code} onClick={() => changeCountry(item.code)}>{item.code}</Chip>
                 ))}
               </div>
               <div className="mb-3 flex items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold">{country.label}</h2>
+                <h2 className="text-sm font-semibold">{country.name}</h2>
                 <Input
                   value={citySearch}
                   onChange={(e) => setCitySearch(e.target.value)}
@@ -497,8 +645,14 @@ function QuickScrapeHome({ busy, onScrape, onOpenDashboard, error, needPlan }) {
                 />
               </div>
               <div className="flex max-h-72 flex-wrap gap-1.5 overflow-y-auto">
-                {shownCities.map((item) => (
-                  <Chip key={item} active={city === item} onClick={() => selectCity(item)}>{item}</Chip>
+                {shownCities.map((c) => (
+                  <Chip
+                    key={c.id ?? c.name}
+                    active={cityObj?.id != null ? cityObj.id === c.id : cityObj?.name === c.name}
+                    onClick={() => selectCity(c)}
+                  >
+                    {chipCityLabel(c)}
+                  </Chip>
                 ))}
               </div>
             </CardContent>
@@ -691,6 +845,40 @@ export default function Dashboard({ view = "" }) {
     // error we stay on the find-leads home so the plan prompt is right there.
     const ok = await run(["scrape"], nextForm);
     if (ok) router.push("/dashboard?view=projects");
+  }
+
+  // POST to /api/projects/find (warehouse-backed instant delivery).
+  // Same plan/quota error handling as run(); same navigation on success.
+  async function startFindLeads(findParams) {
+    setBusy("Finding leads");
+    setError("");
+    setNeedPlan(false);
+    try {
+      const data = await jsonFetch("/api/projects/find", {
+        method: "POST",
+        body: JSON.stringify({
+          name: findParams.name,
+          query: findParams.query,
+          cityId: findParams.cityId,
+          countryCode: findParams.countryCode,
+          service: findParams.service,
+          minRating: findParams.minRating,
+          centerLat: findParams.centerLat,
+          centerLng: findParams.centerLng,
+          radiusKm: findParams.radiusKm,
+          max: findParams.max,
+        }),
+      });
+      setSelected(data.slug);
+      await loadProjects();
+      await loadStatus(data.slug);
+      router.push("/dashboard?view=projects");
+    } catch (err) {
+      setError(err.message);
+      if (err.code === "no_plan" || err.code === "quota_exceeded") setNeedPlan(true);
+    } finally {
+      setBusy("");
+    }
   }
 
   async function projectAction(action, method = "POST") {
@@ -1203,7 +1391,7 @@ export default function Dashboard({ view = "" }) {
   if (simpleMode) {
     return (
       <AppShell active="new" title="Find leads" subtitle="Start a Google Maps lead project">
-        <QuickScrapeHome busy={busy} onScrape={startQuickScrape} onOpenDashboard={() => router.push("/dashboard?view=projects")} error={error} needPlan={needPlan} />
+        <QuickScrapeHome busy={busy} onFind={startFindLeads} onOpenDashboard={() => router.push("/dashboard?view=projects")} error={error} needPlan={needPlan} />
       </AppShell>
     );
   }
@@ -1320,13 +1508,16 @@ export default function Dashboard({ view = "" }) {
                 </Button>
               )}
             </div>
-            <div className="text-xs text-muted-foreground">
+            <div className={cn(
+              "text-xs",
+              status?.state?.queued && !busy && !running ? "font-medium text-amber-600" : "text-muted-foreground"
+            )}>
               {busy
                 ? busy
                 : running
                   ? "Running…"
                   : status?.state?.queued
-                    ? `Queued — waiting for a free slot${queuedFor ? ` · ${queuedFor < 60 ? `${queuedFor}s` : `${Math.floor(queuedFor / 60)}m ${queuedFor % 60}s`} so far` : ""}`
+                    ? <span>Queued — waiting for a free slot{queuedFor ? <span className="ml-1 text-muted-foreground font-normal">· {queuedFor < 60 ? `${queuedFor}s` : `${Math.floor(queuedFor / 60)}m ${queuedFor % 60}s`} so far</span> : ""}</span>
                     : status?.state?.message || "Ready"}
             </div>
           </CardContent>
@@ -1359,10 +1550,15 @@ export default function Dashboard({ view = "" }) {
         {status?.state?.dbSync && (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border bg-card/40 px-3 py-2 text-xs text-muted-foreground">
             <CreditCard size={13} className="shrink-0 text-primary" />
-            <span className="font-medium text-foreground">{Number(status.state.dbSync.inserted || 0).toLocaleString()} new leads</span>
-            <span>charged to your plan ·</span>
-            <span className="font-medium text-foreground">{Number(status.state.dbSync.updated || 0).toLocaleString()} already in your leads</span>
-            <span>(free — matched by website / phone / name)</span>
+            <span>
+              <b className="font-semibold text-foreground">{Number(status.state.dbSync.inserted || 0).toLocaleString()} new leads</b>
+              {" "}added to this project
+            </span>
+            <span>·</span>
+            <span>
+              <b className="font-semibold text-foreground">{Number(status.state.dbSync.updated || 0).toLocaleString()}</b>
+              {" "}were already in your saved leads (no extra charge)
+            </span>
           </div>
         )}
 
@@ -1407,6 +1603,25 @@ export default function Dashboard({ view = "" }) {
           </div>
         )}
 
+        {/* Workspace results map — shows when at least one lead has lat/lng */}
+        {(() => {
+          const geoLeads = leads.filter((l) => Number.isFinite(parseFloat(l.lat)) && Number.isFinite(parseFloat(l.lng)));
+          if (!geoLeads.length) return null;
+          const avgLat = geoLeads.reduce((s, l) => s + parseFloat(l.lat), 0) / geoLeads.length;
+          const avgLng = geoLeads.reduce((s, l) => s + parseFloat(l.lng), 0) / geoLeads.length;
+          const mapCenter = { lat: avgLat, lng: avgLng };
+          const mapPoints = geoLeads.map((l) => ({ lat: parseFloat(l.lat), lng: parseFloat(l.lng), name: l.name || "" }));
+          return (
+            <LeadsMap
+              center={mapCenter}
+              radiusKm={10}
+              points={mapPoints}
+              height={320}
+              className="w-full"
+            />
+          );
+        })()}
+
         <Card className="overflow-hidden">
           {!leads.length ? (
             <div className="p-10 text-center text-sm text-muted-foreground">No leads loaded</div>
@@ -1416,22 +1631,43 @@ export default function Dashboard({ view = "" }) {
               <div className="space-y-3 p-3 md:hidden">
                 {leads.map((lead, index) => {
                   const key = leadKey(lead);
+                  const waYes = lead.whatsappExists === "yes";
+                  const waNo = lead.whatsappExists === "no";
+                  const ownerReplied = lead.owner_replied;
                   return (
                   <div className={cn("cursor-pointer rounded-lg border bg-card/60 p-3", selectedLeads.has(key) ? "border-primary/50 bg-primary/5" : "border-border")} key={`m-${lead.name}-${index}`} onClick={() => toggleLead(key)}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-start gap-2">
                         <input type="checkbox" aria-label={`Select ${lead.name || "lead"}`} checked={selectedLeads.has(key)} onClick={(e) => e.stopPropagation()} onChange={() => toggleLead(key)} className="mt-0.5 accent-[hsl(var(--primary))]" />
-                        <strong className="text-sm font-medium">{lead.mapsUrl ? <a className="text-primary hover:underline" href={lead.mapsUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{lead.name || "Unknown"}</a> : lead.name || "Unknown"}</strong>
+                        {/* #3 row index */}
+                        <span className="shrink-0 text-[10px] text-muted-foreground">#{index + 1}</span>
+                        {/* #4 truncate long name */}
+                        <strong className="line-clamp-1 max-w-[200px] text-sm font-medium" title={lead.name || "Unknown"}>
+                          {lead.mapsUrl ? <a className="text-primary hover:underline" href={lead.mapsUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{lead.name || "Unknown"}</a> : lead.name || "Unknown"}
+                        </strong>
                       </div>
                       <span className="text-xs text-muted-foreground">{lead.category || ""}</span>
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
                       {lead.phone && <span>{lead.phone}</span>}
-                      {lead.whatsappExists === "yes" && <Badge variant="success">WA ✓</Badge>}
-                      {lead.whatsappExists === "no" && <Badge variant="destructive">WA ✗</Badge>}
-                      {lead.website && <a className="text-primary hover:underline" href={lead.website} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{lead.domain || "site"}</a>}
+                      {/* #9 WhatsApp icon only */}
+                      {(waYes || waNo) && (
+                        <MessageCircle
+                          size={14}
+                          className={waYes ? "text-emerald-600" : "text-muted-foreground"}
+                          title={waYes ? (lead.whatsappId || "On WhatsApp") : "Not on WhatsApp"}
+                        />
+                      )}
+                      {lead.website && <a className="max-w-[160px] truncate text-primary hover:underline" href={lead.website} target="_blank" rel="noreferrer" title={lead.website} onClick={(e) => e.stopPropagation()}>{lead.domain || "site"}</a>}
                     </div>
-                    {lead.email && <div className="mt-1 text-sm"><a className="text-primary hover:underline" href={`mailto:${lead.email}`} onClick={(e) => e.stopPropagation()}>{lead.email}</a></div>}
+                    {lead.email && <div className="mt-1 text-sm"><a className="max-w-[200px] truncate text-primary hover:underline" href={`mailto:${lead.email}`} title={lead.email} onClick={(e) => e.stopPropagation()}>{lead.email}</a></div>}
+                    {/* #11 rating / reviews / owner reply chips */}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                      {lead.rating != null && <span className="inline-flex items-center gap-0.5 rounded-md bg-amber-500/10 px-1.5 py-0.5 font-medium text-amber-700"><Star size={10} fill="currentColor" /> {lead.rating}</span>}
+                      {lead.reviews != null && <span>{Number(lead.reviews).toLocaleString()} reviews</span>}
+                      {ownerReplied === 1 && <span className="text-emerald-600">Owner replied ({lead.owner_reply_count || 0})</span>}
+                      {ownerReplied === 0 && <span>Owner: no reply</span>}
+                    </div>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       <Score label="Perf" value={lead.desktop?.performance} />
                       <Score label="SEO" value={lead.desktop?.seo} />
@@ -1448,7 +1684,7 @@ export default function Dashboard({ view = "" }) {
                 })}
               </div>
 
-              {/* Desktop table */}
+              {/* Desktop table — columns: # | Name | Contact | Rating | Reviews | Owner reply | Website | Socials | Health | Actions */}
               <div className="hidden md:block">
                 <Table>
                   <TableHeader>
@@ -1456,10 +1692,14 @@ export default function Dashboard({ view = "" }) {
                       <TableHead className="w-8">
                         <input type="checkbox" aria-label="Select all leads" checked={allLeadsSelected} disabled={!leadKeysOnPage.length} onChange={toggleAllLeads} className="accent-[hsl(var(--primary))]" />
                       </TableHead>
+                      {/* #3 row index column */}
+                      <TableHead className="w-8 text-center">#</TableHead>
                       <TableHead>Name</TableHead>
                       <TableHead>Contact</TableHead>
+                      <TableHead>Rating</TableHead>
+                      <TableHead>Reviews</TableHead>
+                      <TableHead>Owner reply</TableHead>
                       <TableHead>Website</TableHead>
-                      <TableHead>Email</TableHead>
                       <TableHead>Socials</TableHead>
                       <TableHead>Desktop health</TableHead>
                       <TableHead>Mobile health</TableHead>
@@ -1469,27 +1709,72 @@ export default function Dashboard({ view = "" }) {
                   <TableBody>
                     {leads.map((lead, index) => {
                       const key = leadKey(lead);
+                      const waYes = lead.whatsappExists === "yes";
+                      const waNo = lead.whatsappExists === "no";
+                      const ownerReplied = lead.owner_replied;
                       return (
                       <TableRow key={`${lead.name}-${index}`} className={cn("cursor-pointer", selectedLeads.has(key) && "bg-primary/5")} onClick={() => toggleLead(key)}>
                         <TableCell className="w-8" onClick={(e) => e.stopPropagation()}>
                           <input type="checkbox" aria-label={`Select ${lead.name || "lead"}`} checked={selectedLeads.has(key)} onChange={() => toggleLead(key)} className="accent-[hsl(var(--primary))]" />
                         </TableCell>
-                        <TableCell>
-                          {lead.mapsUrl ? <a className="font-medium text-primary hover:underline" href={lead.mapsUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{lead.name || "Unknown"}</a> : <span className="font-medium">{lead.name || "Unknown"}</span>}
-                          <div className="text-xs text-muted-foreground">{lead.category || lead.address || ""}</div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1.5">
-                            {lead.phone || "-"}
-                            {lead.whatsappExists === "yes" && <Badge variant="success" title={lead.whatsappId || "On WhatsApp"}>WA ✓</Badge>}
-                            {lead.whatsappExists === "no" && <Badge variant="destructive" title="Not on WhatsApp">WA ✗</Badge>}
+                        {/* #3 row number */}
+                        <TableCell className="w-8 text-center text-xs text-muted-foreground">{index + 1}</TableCell>
+                        {/* #4 truncate long name */}
+                        <TableCell className="max-w-[200px]">
+                          <div className="truncate font-medium" title={lead.name || "Unknown"}>
+                            {lead.mapsUrl ? <a className="text-primary hover:underline" href={lead.mapsUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{lead.name || "Unknown"}</a> : lead.name || "Unknown"}
                           </div>
-                          {lead.rating ? <div className="text-xs text-muted-foreground">Rating {lead.rating}</div> : null}
+                          <div className="truncate text-xs text-muted-foreground" title={lead.category || lead.address || ""}>{lead.category || lead.address || ""}</div>
                         </TableCell>
+                        {/* #11 Contact = email + phone only (no rating, no WA text) */}
+                        <TableCell>
+                          <div className="flex items-center gap-1.5 text-sm">
+                            {lead.phone || <span className="text-xs text-muted-foreground">-</span>}
+                            {/* #9 WhatsApp icon only */}
+                            {(waYes || waNo) && (
+                              <MessageCircle
+                                size={14}
+                                className={waYes ? "text-emerald-600" : "text-muted-foreground"}
+                                title={waYes ? (lead.whatsappId || "On WhatsApp") : "Not on WhatsApp"}
+                              />
+                            )}
+                          </div>
+                          {/* #12 email truncated with tooltip */}
+                          {lead.email
+                            ? <a className="block max-w-[160px] truncate text-xs text-primary hover:underline" href={`mailto:${lead.email}`} title={lead.email} onClick={(e) => e.stopPropagation()}>{lead.email}</a>
+                            : <span className="text-xs text-muted-foreground">{lead.enrichStatus || "-"}</span>
+                          }
+                        </TableCell>
+                        {/* #11 Rating column */}
+                        <TableCell className="text-sm">
+                          {lead.rating != null
+                            ? <span className="inline-flex items-center gap-0.5 font-medium"><Star size={12} className="text-amber-500" fill="currentColor" /> {lead.rating}</span>
+                            : <span className="text-xs text-muted-foreground">-</span>
+                          }
+                        </TableCell>
+                        {/* #11 Reviews column */}
+                        <TableCell className="text-sm">
+                          {lead.reviews != null
+                            ? Number(lead.reviews).toLocaleString()
+                            : <span className="text-xs text-muted-foreground">-</span>
+                          }
+                        </TableCell>
+                        {/* #11 Owner reply column */}
+                        <TableCell className="text-sm">
+                          {ownerReplied === 1
+                            ? <span className="text-emerald-600">Yes ({lead.owner_reply_count || 0})</span>
+                            : ownerReplied === 0
+                              ? <span className="text-muted-foreground">No</span>
+                              : <span className="text-muted-foreground">-</span>
+                          }
+                        </TableCell>
+                        {/* #12 Website truncated with tooltip */}
                         <TableCell onClick={(e) => e.stopPropagation()}>
-                          {lead.website ? <a className="text-primary hover:underline" href={lead.website} target="_blank" rel="noreferrer">{lead.domain || lead.website}</a> : <span className="text-xs text-muted-foreground">No website</span>}
+                          {lead.website
+                            ? <a className="block max-w-[140px] truncate text-primary hover:underline" href={lead.website} target="_blank" rel="noreferrer" title={lead.website}>{lead.domain || lead.website}</a>
+                            : <span className="text-xs text-muted-foreground">-</span>
+                          }
                         </TableCell>
-                        <TableCell>{lead.email || <span className="text-xs text-muted-foreground">{lead.enrichStatus || "-"}</span>}</TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}><Socials lead={lead} /></TableCell>
                         <TableCell><div className="flex flex-wrap gap-1"><Score label="Perf" value={lead.desktop?.performance} /><Score label="SEO" value={lead.desktop?.seo} /></div></TableCell>
                         <TableCell><div className="flex flex-wrap gap-1"><Score label="Perf" value={lead.mobile?.performance} /><Score label="SEO" value={lead.mobile?.seo} /></div></TableCell>

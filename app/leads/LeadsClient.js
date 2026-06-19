@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import AppShell from "../components/app/AppShell";
 import AnimatedNumber from "../components/AnimatedNumber";
 import ReportModal from "../components/ReportModal";
@@ -38,6 +39,8 @@ import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Sheet, SheetContent } from "../components/ui/sheet";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/table";
 import { cn, waMeLink } from "../lib/utils";
+
+const LeadsMap = dynamic(() => import("../components/LeadsMap"), { ssr: false });
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 const PAGE_SIZE = 120;
@@ -441,12 +444,31 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot }) 
 
           <DrawerCard title="Contact">
             <div className="space-y-1.5 text-sm">
-              {lead.phone && <div className="flex items-center gap-2"><Phone size={13} className="text-muted-foreground" /> {lead.phone} {waState(lead) === "yes" && <Pill tone="good">WA yes</Pill>}{waState(lead) === "no" && <Pill tone="bad">WA no</Pill>}</div>}
+              {lead.phone && (
+                <div className="flex items-center gap-2">
+                  <Phone size={13} className="text-muted-foreground" />
+                  {lead.phone}
+                  {waState(lead) === "yes" && <MessageCircle size={14} className="text-emerald-600" title="On WhatsApp" />}
+                  {waState(lead) === "no" && <MessageCircle size={14} className="text-muted-foreground" title="Not on WhatsApp" />}
+                </div>
+              )}
               {lead.email && <div className="flex items-center gap-2"><Mail size={13} className="text-muted-foreground" /> <a className="text-primary hover:underline" href={`mailto:${lead.email}`}>{lead.email}</a></div>}
               {lead.all_emails && lead.all_emails !== lead.email && <div className="text-xs text-muted-foreground">Also: {lead.all_emails}</div>}
               {lead.address && <div className="flex items-center gap-2"><MapPin size={13} className="text-muted-foreground" /> {lead.address}</div>}
               {lead.website && <div className="flex items-center gap-2"><ExternalLink size={13} className="text-muted-foreground" /> <a className="text-primary hover:underline" href={lead.website} target="_blank" rel="noreferrer">{lead.domain || lead.website}</a></div>}
-              {lead.maps_url && <div><a className="text-primary hover:underline" href={lead.maps_url} target="_blank" rel="noreferrer">Open on Google Maps</a></div>}
+              {Number.isFinite(lead.lat) && Number.isFinite(lead.lng) && (
+                <div className="mt-3">
+                  <LeadsMap
+                    center={{ lat: lead.lat, lng: lead.lng }}
+                    radiusKm={1}
+                    points={[{ lat: lead.lat, lng: lead.lng, name: lead.name || "Lead" }]}
+                    interactive={false}
+                    height={200}
+                    className="rounded-lg overflow-hidden border border-border"
+                  />
+                </div>
+              )}
+              {lead.maps_url && <div className="mt-1.5"><a className="text-primary hover:underline" href={lead.maps_url} target="_blank" rel="noreferrer">Open on Google Maps</a></div>}
             </div>
           </DrawerCard>
 
@@ -1138,7 +1160,10 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
             <>
               {/* Mobile cards */}
               <div className="space-y-3 p-3 md:hidden">
-                {rows.map((lead) => (
+                {rows.map((lead, idx) => {
+                  const wa = waState(lead);
+                  const ownerReplied = lead.owner_replied;
+                  return (
                   <div className={cn("cursor-pointer rounded-lg border bg-card/60 p-3", selected.has(lead.id) ? "border-primary/50 bg-primary/5" : "border-border")} key={`m-${lead.id}`} onClick={() => toggleSelect(lead.id)}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-start gap-2">
@@ -1150,9 +1175,12 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                           onChange={() => toggleSelect(lead.id)}
                           className="mt-0.5 accent-[hsl(var(--primary))]"
                         />
-                        <button type="button" className="text-left text-sm font-medium hover:text-primary hover:underline" onClick={(e) => { e.stopPropagation(); setActive(lead); }} title="Open lead details">{lead.name || "Unknown"}</button>
+                        <div>
+                          <span className="mr-1 text-[10px] text-muted-foreground">#{page * PAGE_SIZE + idx + 1}</span>
+                          <button type="button" className="text-left text-sm font-medium hover:text-primary hover:underline" onClick={(e) => { e.stopPropagation(); setActive(lead); }} title="Open lead details">{lead.name || "Unknown"}</button>
+                        </div>
                       </div>
-                      <span className="text-xs text-muted-foreground">{lead.category || lead.address || lead.project || ""}</span>
+                      <span className="line-clamp-1 max-w-[120px] text-xs text-muted-foreground" title={lead.category || lead.address || lead.project || ""}>{lead.category || lead.address || lead.project || ""}</span>
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       <WorkflowBadge lead={lead} />
@@ -1162,14 +1190,27 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
                       {lead.phone && <span>{lead.phone}</span>}
-                      {waState(lead) === "yes" && <Pill tone="good">WA yes</Pill>}
-                      {lead.domain && <span className="text-xs text-muted-foreground">{lead.domain}</span>}
+                      {wa === "yes" && <MessageCircle size={14} className="text-emerald-600" title="On WhatsApp" />}
+                      {wa === "no" && <MessageCircle size={14} className="text-muted-foreground" title="Not on WhatsApp" />}
+                      {lead.domain && <span className="max-w-[120px] truncate text-xs text-muted-foreground" title={lead.domain}>{lead.domain}</span>}
                     </div>
-                    {lead.email && <div className="mt-1 truncate text-sm text-primary">{lead.email}</div>}
+                    {lead.email && <div className="mt-1 truncate text-sm text-primary" title={lead.email}>{lead.email}</div>}
                     {lead.notes && <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{lead.notes}</div>}
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       <StatusPill lead={lead} />
                       <ChatbotBadge lead={lead} />
+                      {lead.rating != null && (
+                        <Pill tone="muted"><Star size={11} className="text-amber-500" fill="currentColor" /> {lead.rating}</Pill>
+                      )}
+                      {lead.reviews != null && (
+                        <Pill tone="muted">{Number(lead.reviews).toLocaleString()} rev</Pill>
+                      )}
+                      {ownerReplied === 1 && (
+                        <Pill tone="good">Owner replied {lead.owner_reply_count != null ? `(${lead.owner_reply_count})` : ""}</Pill>
+                      )}
+                      {ownerReplied === 0 && (
+                        <Pill tone="muted">No reply</Pill>
+                      )}
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-border/60 pt-2">
                       <QuickLeadActions lead={lead} onPatch={patchLead} onLists={(l) => setListDialog({ lead: l })} compact />
@@ -1189,7 +1230,8 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                       />
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Desktop table */}
@@ -1207,8 +1249,12 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                           className="accent-[hsl(var(--primary))]"
                         />
                       </TableHead>
+                      <TableHead className="w-8 text-muted-foreground">#</TableHead>
                       <TableHead>Lead</TableHead>
                       <TableHead>Contact</TableHead>
+                      <TableHead>Rating</TableHead>
+                      <TableHead>Reviews</TableHead>
+                      <TableHead>Owner Reply</TableHead>
                       <TableHead>Workflow</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Website</TableHead>
@@ -1218,7 +1264,10 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {rows.map((lead) => (
+                    {rows.map((lead, idx) => {
+                      const wa = waState(lead);
+                      const ownerReplied = lead.owner_replied;
+                      return (
                       <TableRow key={lead.id} className={cn("cursor-pointer", selected.has(lead.id) && "bg-primary/5")} onClick={() => toggleSelect(lead.id)}>
                         <TableCell className="w-8" onClick={(e) => e.stopPropagation()}>
                           <input
@@ -1230,18 +1279,48 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                             title="Select lead"
                           />
                         </TableCell>
-                        <TableCell>
-                          <button type="button" className="text-left font-medium hover:text-primary hover:underline" onClick={(e) => { e.stopPropagation(); setActive(lead); }} title="Open lead details">{lead.name || "Unknown"}</button>
-                          <div className="text-xs text-muted-foreground">{lead.category || lead.address || ""}</div>
+                        <TableCell className="w-8 text-xs text-muted-foreground tabular-nums">
+                          {page * PAGE_SIZE + idx + 1}
+                        </TableCell>
+                        <TableCell className="max-w-[180px]">
+                          <button type="button" className="block max-w-full truncate text-left font-medium hover:text-primary hover:underline" onClick={(e) => { e.stopPropagation(); setActive(lead); }} title={lead.name || "Unknown"}>{lead.name || "Unknown"}</button>
+                          <div className="truncate text-xs text-muted-foreground" title={lead.category || lead.address || ""}>{lead.category || lead.address || ""}</div>
                           {lead.notes && <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{lead.notes}</div>}
                         </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1.5">
-                            {lead.phone || "-"}
-                            {waState(lead) === "yes" && <Pill tone="good">WA yes</Pill>}
-                            {waState(lead) === "no" && <Pill tone="bad">WA no</Pill>}
+                        <TableCell className="max-w-[180px]">
+                          {lead.email ? (
+                            <a onClick={(e) => e.stopPropagation()} className="block max-w-full truncate text-xs text-primary hover:underline" href={`mailto:${lead.email}`} title={lead.email}>{lead.email}</a>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">{lead.enrich_status || "no email"}</span>
+                          )}
+                          <div className="mt-0.5 flex items-center gap-1.5 text-xs">
+                            <span>{lead.phone || "-"}</span>
+                            {wa === "yes" && <MessageCircle size={14} className="shrink-0 text-emerald-600" title="On WhatsApp" />}
+                            {wa === "no" && <MessageCircle size={14} className="shrink-0 text-muted-foreground" title="Not on WhatsApp" />}
                           </div>
-                          {lead.email ? <a onClick={(e) => e.stopPropagation()} className="text-xs text-primary hover:underline" href={`mailto:${lead.email}`}>{lead.email}</a> : <span className="text-xs text-muted-foreground">{lead.enrich_status || "no email"}</span>}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {lead.rating != null ? (
+                            <span className="flex items-center gap-1"><Star size={12} className="text-amber-500" fill="currentColor" />{lead.rating}</span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {lead.reviews != null ? (
+                            <span>{Number(lead.reviews).toLocaleString()}</span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {ownerReplied === 1 ? (
+                            <span className="text-emerald-600">Yes {lead.owner_reply_count != null ? `(${lead.owner_reply_count})` : ""}</span>
+                          ) : ownerReplied === 0 ? (
+                            <span className="text-muted-foreground">No</span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap items-center gap-1">
@@ -1252,9 +1331,13 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                           </div>
                         </TableCell>
                         <TableCell><EmailBadge status={lead.email_status} /></TableCell>
-                        <TableCell onClick={(e) => e.stopPropagation()}>
+                        <TableCell onClick={(e) => e.stopPropagation()} className="max-w-[160px]">
                           <div className="flex flex-wrap items-center gap-1.5">
-                            {lead.website ? <a className="text-primary hover:underline" href={lead.website} target="_blank" rel="noreferrer">{lead.domain || lead.website}</a> : <span className="text-xs text-muted-foreground">none</span>}
+                            {lead.website ? (
+                              <a className="max-w-[120px] truncate text-primary hover:underline" href={lead.website} target="_blank" rel="noreferrer" title={lead.website}>{lead.domain || lead.website}</a>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">none</span>
+                            )}
                             <StatusPill lead={lead} />
                             <ChatbotBadge lead={lead} />
                           </div>
@@ -1286,7 +1369,8 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                           />
                         </TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>

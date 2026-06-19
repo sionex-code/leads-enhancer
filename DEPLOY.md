@@ -14,6 +14,8 @@ Copy `.env.example` → `.env` and fill in:
 - `NEXTAUTH_URL=https://leadsfunda.com`, `AUTH_TRUST_HOST=true`
 - `WHOP_API_KEY`, `WHOP_WEBHOOK_SECRET`, `WHOP_PLAN_19/49/99`, `WHOP_CHECKOUT_19/49/99`
 - `MAX_CONCURRENT_JOBS=6`, `FEATURE_AGENT=0`
+- `WAREHOUSE_URL` — base URL of the warehouse server (default `http://127.0.0.1:3200`); omit if co-located on the same VPS.
+- `WAREHOUSE_TOKEN` — copy from `gmaps-scraper-standalone/.warehouse-token.txt` on the worker VPS.
 
 ## 2. Google OAuth (Google Cloud Console → Credentials → the OAuth client)
 - Authorized JavaScript origin: `https://leadsfunda.com`

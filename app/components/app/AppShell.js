@@ -104,17 +104,18 @@ export default function AppShell({ active, title, subtitle, actions, sidebarExtr
           collapsed ? "w-[72px]" : "w-64"
         )}
       >
-        <div className={cn("flex h-16 items-center border-b border-border/60 px-4", collapsed ? "justify-center" : "justify-between")}>
+        <div className={cn("flex h-16 items-center border-b border-border/60", collapsed ? "justify-center gap-1 px-2" : "justify-between px-4")}>
           <Brand collapsed={collapsed} />
-          {!collapsed && (
-            <button
-              onClick={toggleCollapsed}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              title="Collapse sidebar"
-            >
-              <PanelLeftClose className="h-4 w-4" />
-            </button>
-          )}
+          <button
+            onClick={toggleCollapsed}
+            className={cn(
+              "inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+              collapsed && "mt-0"
+            )}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </button>
         </div>
 
         <div className={cn("px-3 py-4", collapsed && "px-2")}>
@@ -125,16 +126,6 @@ export default function AppShell({ active, title, subtitle, actions, sidebarExtr
           <div className="min-h-0 flex-1 overflow-y-auto px-3">{sidebarExtra}</div>
         ) : (
           <div className="min-h-0 flex-1" />
-        )}
-
-        {collapsed && (
-          <button
-            onClick={toggleCollapsed}
-            className="mx-auto mb-1 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            title="Expand sidebar"
-          >
-            <PanelLeftOpen className="h-4 w-4" />
-          </button>
         )}
 
         <div className="border-t border-border/60">

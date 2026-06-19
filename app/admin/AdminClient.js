@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Loader2, RefreshCw, Search, ShieldCheck, Users, Crown, LogOut, Network, Plus, Trash2, Ban, CreditCard, Activity, Tag, Check, CircleDot } from "lucide-react";
+import { Loader2, RefreshCw, Search, ShieldCheck, Users, Crown, LogOut, Network, Plus, Trash2, Ban, CreditCard, Activity, Tag, Check, CircleDot, Database } from "lucide-react";
 import { Card, CardContent } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
@@ -289,6 +289,102 @@ function PackagePricing() {
   );
 }
 
+// Controls whether lead queries are served from the warehouse only, or fall back
+// to a real-time scrape when the warehouse has no results.
+const SOURCE_OPTIONS = [
+  { value: "warehouse", label: "Warehouse only", desc: "Serve leads from the pre-built warehouse. Never triggers a live scrape." },
+  { value: "warehouse_fallback", label: "Warehouse + realtime fallback", desc: "Try warehouse first; fall back to a live Google Maps scrape when empty." },
+];
+
+function LeadSourceSettings() {
+  const [mode, setMode] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [err, setErr] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      const d = await jsonFetch("/api/admin/settings");
+      setMode(d.lead_source_mode || "warehouse");
+    } catch (e) {
+      setErr(e.message);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function save(value) {
+    setBusy(true);
+    setSaved(false);
+    setErr("");
+    try {
+      await jsonFetch("/api/admin/settings", {
+        method: "POST",
+        body: JSON.stringify({ lead_source_mode: value }),
+      });
+      setMode(value);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardContent className="space-y-3 p-4">
+        <div className="flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary"><Database className="h-5 w-5" /></div>
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold">Lead source mode</h3>
+            <p className="text-xs text-muted-foreground">Controls how search results are served to users.</p>
+          </div>
+          {saved && (
+            <span className="flex items-center gap-1 text-xs font-medium text-emerald-600">
+              <Check size={14} /> Saved
+            </span>
+          )}
+          {busy && <Loader2 size={16} className="animate-spin text-muted-foreground" />}
+        </div>
+
+        {mode === null && !err ? (
+          <div className="py-2 text-center text-sm text-muted-foreground"><Loader2 className="mx-auto h-4 w-4 animate-spin" /></div>
+        ) : (
+          <div className="space-y-2">
+            {SOURCE_OPTIONS.map((opt) => (
+              <label
+                key={opt.value}
+                className={cn(
+                  "flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors",
+                  mode === opt.value ? "border-primary/50 bg-primary/5" : "border-border hover:bg-accent/40"
+                )}
+              >
+                <input
+                  type="radio"
+                  name="lead_source_mode"
+                  value={opt.value}
+                  checked={mode === opt.value}
+                  disabled={busy}
+                  onChange={() => save(opt.value)}
+                  className="mt-0.5 accent-[hsl(var(--primary))]"
+                />
+                <div>
+                  <div className="text-sm font-medium">{opt.label}</div>
+                  <div className="text-xs text-muted-foreground">{opt.desc}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+        )}
+
+        {err && <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-red-600">{err}</div>}
+      </CardContent>
+    </Card>
+  );
+}
+
 function StatCard({ icon: Icon, value, label }) {
   return (
     <Card>
@@ -420,11 +516,12 @@ export default function AdminClient() {
           <StatCard icon={Crown} value={activeCount} label="Active plans" />
         </div>
 
-        {/* Live operations across all users + editable package pricing. */}
+        {/* Live operations across all users + editable package pricing + lead source. */}
         <div className="grid gap-4 lg:grid-cols-2">
           <OperationsMonitor />
           <PackagePricing />
         </div>
+        <LeadSourceSettings />
 
         <Card>
           <CardContent className="p-4">

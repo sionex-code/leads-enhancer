@@ -133,10 +133,12 @@ const LEAD_COLUMNS = [
   "desktop_performance", "desktop_seo", "desktop_accessibility", "desktop_best_practices",
   "mobile_performance", "mobile_seo", "mobile_accessibility", "mobile_best_practices",
   "project", "query",
+  "lat", "lng", "owner_replied", "owner_reply_count",
 ];
 const INT_COLUMNS = new Set([
   "desktop_performance", "desktop_seo", "desktop_accessibility", "desktop_best_practices",
   "mobile_performance", "mobile_seo", "mobile_accessibility", "mobile_best_practices",
+  "owner_replied", "owner_reply_count",
 ]);
 
 // Map a CSV/lead object (camelCase or snake) onto our snake_case column names.
@@ -190,6 +192,10 @@ function normalizeLead(lead) {
     mobile_best_practices: numOrNull(g("mobile_best_practices")),
     project: g("project"),
     query: g("query"),
+    lat: numOrNull(g("lat")),
+    lng: numOrNull(g("lng")),
+    owner_replied: numOrNull(g("owner_replied", "ownerReplied")),
+    owner_reply_count: numOrNull(g("owner_reply_count", "ownerReplyCount")),
   };
 }
 
