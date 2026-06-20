@@ -48,13 +48,16 @@
   }
   /* Slim, themed scrollbars to match the light UI. */
   ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 8px;
+    height: 8px;
   }
   ::-webkit-scrollbar-thumb {
-    background: hsl(var(--border));
+    background: hsl(var(--primary) / 0.6);
     border-radius: 8px;
     border: 2px solid hsl(var(--background));
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.85);
   }
   ::-webkit-scrollbar-track {
     background: transparent;

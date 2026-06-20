@@ -37,13 +37,17 @@ body {
 }
 
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #273052;
+  background: var(--accent);
   border-radius: 8px;
   border: 2px solid var(--bg);
+  opacity: 0.7;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #0d9488;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
