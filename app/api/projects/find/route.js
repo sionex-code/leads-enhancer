@@ -236,11 +236,14 @@ export async function POST(request) {
     },
   });
 
-  // Fallback: if mode is warehouse_fallback and we got fewer rows than requested,
-  // also enqueue the realtime scraper to top up (best-effort, never fails the response).
+  // Fallback: only when the warehouse has NOTHING for this area do we enqueue a
+  // live Google Maps scrape (matches the admin "fall back ... when empty" mode).
+  // When the warehouse already returned leads they're delivered instantly with no
+  // queue — so the user never sees "waiting for a free slot" on a successful find.
+  // (best-effort, never fails the response).
   try {
     const mode = await settings.getLeadSourceMode();
-    if (mode === "warehouse_fallback" && rows.length < max) {
+    if (mode === "warehouse_fallback" && rows.length === 0) {
       await queue.enqueue(userId, {
         name: projectName,
         query: query || "",
