@@ -54,6 +54,10 @@ export default function LeadsMap({
   const circleRef = useRef(null);
   const markerRef = useRef(null);
   const pinsLayerRef = useRef(null);
+  // Tracks the last center/radius we actually applied, so an unrelated parent
+  // re-render (which hands us a fresh `center` object with identical values)
+  // never re-runs setView and snaps the user's manual zoom back.
+  const lastViewRef = useRef({ lat: null, lng: null, radiusKm: null });
 
   // ── 1. Mount map (runs once) ──────────────────────────────────────────────
   useEffect(() => {
@@ -114,7 +118,10 @@ export default function LeadsMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // mount only
 
-  // ── 2. Update center + radius when props change ───────────────────────────
+  // ── 2. Update center + radius when they actually change ───────────────────
+  // Depends on primitive lat/lng/radius (NOT the `center` object) so identical
+  // values from a re-render are a no-op. A genuine recenter keeps the user's
+  // current zoom; only a radius change refits the zoom to the new area.
   useEffect(() => {
     const map = mapRef.current;
     const circle = circleRef.current;
@@ -123,19 +130,24 @@ export default function LeadsMap({
 
     const lat = center.lat ?? 0;
     const lng = center.lng ?? 0;
-    const zoom = zoomFromRadius(radiusKm);
-
-    map.setView([lat, lng], zoom);
+    const last = lastViewRef.current;
+    const centerMoved = last.lat !== lat || last.lng !== lng;
+    const radiusChanged = last.radiusKm !== radiusKm;
 
     if (circle) {
       circle.setLatLng([lat, lng]);
       circle.setRadius(radiusKm * 1000);
     }
-
     if (marker) {
       marker.setLatLng([lat, lng]);
     }
-  }, [center, radiusKm]);
+
+    if (centerMoved || radiusChanged) {
+      const zoom = radiusChanged ? zoomFromRadius(radiusKm) : map.getZoom();
+      map.setView([lat, lng], zoom);
+    }
+    lastViewRef.current = { lat, lng, radiusKm };
+  }, [center?.lat, center?.lng, radiusKm]);
 
   // ── 3. Rebuild pins whenever points array changes ─────────────────────────
   useEffect(() => {

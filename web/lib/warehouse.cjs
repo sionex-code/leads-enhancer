@@ -56,16 +56,68 @@ function haversineKm(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// ---- catalog (cached 5 minutes) ------------------------------------------------
+// ---- catalog (stale-while-revalidate) ------------------------------------------
+//
+// The per-city / per-service counts require a full sequential scan of the ~2.5M-row
+// leads table (≈9s). To keep that off the request path we serve a cached snapshot
+// and refresh it in the BACKGROUND when stale, persist it to disk so restarts are
+// instant, and warm it on boot. A user therefore never waits on the heavy query
+// (only the very first cold boot with no disk cache does, in the background).
+
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 
 let _catalogCache = null;
 let _catalogAt = 0;
-const CATALOG_TTL_MS = 5 * 60 * 1000;
+let _catalogInflight = null;
+const CATALOG_TTL_MS = 30 * 60 * 1000; // serve a cached snapshot up to 30 min old
+const CATALOG_DISK = path.join(os.tmpdir(), "leadsfunda-catalog-cache.json");
+
+function _loadDiskCache() {
+  if (_catalogCache) return;
+  try {
+    const obj = JSON.parse(fs.readFileSync(CATALOG_DISK, "utf8"));
+    if (obj && obj.data && obj.at) { _catalogCache = obj.data; _catalogAt = obj.at; }
+  } catch { /* no disk cache yet — fine */ }
+}
+
+function _saveDiskCache() {
+  try {
+    fs.writeFileSync(CATALOG_DISK, JSON.stringify({ at: _catalogAt, data: _catalogCache }));
+  } catch { /* best effort */ }
+}
+
+// Kick a background refresh; concurrent callers share one in-flight compute.
+function refreshCatalog() {
+  if (_catalogInflight) return _catalogInflight;
+  _catalogInflight = computeCatalog()
+    .then((data) => {
+      _catalogCache = data;
+      _catalogAt = Date.now();
+      _saveDiskCache();
+      return data;
+    })
+    .catch((err) => {
+      console.error("[warehouse] catalog refresh failed:", err.message);
+      throw err;
+    })
+    .finally(() => { _catalogInflight = null; });
+  return _catalogInflight;
+}
 
 async function catalog() {
-  const now = Date.now();
-  if (_catalogCache && now - _catalogAt < CATALOG_TTL_MS) return _catalogCache;
+  _loadDiskCache();
+  const age = Date.now() - _catalogAt;
+  if (_catalogCache && age < CATALOG_TTL_MS) return _catalogCache; // fresh
+  if (_catalogCache) {
+    refreshCatalog().catch(() => {}); // stale: refresh in background, keep serving stale
+    return _catalogCache;
+  }
+  return refreshCatalog(); // cold (no cache anywhere): must wait this once
+}
 
+async function computeCatalog() {
   const pool = getPool();
 
   // Per-city lead counts
@@ -132,18 +184,29 @@ async function catalog() {
     leadCount: Number(r.lead_count),
   }));
 
-  _catalogCache = { countries, services };
-  _catalogAt = now;
-  return _catalogCache;
+  return { countries, services };
+}
+
+// Warm the cache on boot (from disk if present, else compute once in the
+// background) so the first real request is served instantly.
+_loadDiskCache();
+if (!_catalogCache || Date.now() - _catalogAt >= CATALOG_TTL_MS) {
+  refreshCatalog().catch(() => {});
 }
 
 // ---- queryLeads ----------------------------------------------------------------
 
-const LEAD_COLUMNS = `
-  id, name, category, rating, reviews, website, phone, address,
-  plus_code, hours, image_urls, maps_url, place_id, lat, lng,
-  email, socials, owner_replied, owner_reply_count, city_id, service_id
-`.trim();
+// Qualify every column with `leads.` — when a service/country filter adds a JOIN
+// (services/cities/countries all have id, name, category, lat, lng), bare column
+// names like `id` would be ambiguous (Postgres error 42702). The result column
+// names are unchanged (Postgres drops the table qualifier), so toLeadRow/buildCsv
+// keep working.
+const LEAD_COL_NAMES = [
+  "id", "name", "category", "rating", "reviews", "website", "phone", "address",
+  "plus_code", "hours", "image_urls", "maps_url", "place_id", "lat", "lng",
+  "email", "socials", "owner_replied", "owner_reply_count", "city_id", "service_id",
+];
+const LEAD_COLUMNS = LEAD_COL_NAMES.map((c) => `leads.${c}`).join(", ");
 
 /**
  * Query warehouse leads with optional filters.

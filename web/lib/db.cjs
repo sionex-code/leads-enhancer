@@ -140,6 +140,10 @@ const INT_COLUMNS = new Set([
   "mobile_performance", "mobile_seo", "mobile_accessibility", "mobile_best_practices",
   "owner_replied", "owner_reply_count",
 ]);
+// All numeric columns (integer + double precision). lat/lng are double precision,
+// so they must merge with a plain COALESCE, not NULLIF(EXCLUDED.col, '') which
+// would cast '' to the numeric type and error.
+const NUMERIC_COLUMNS = new Set([...INT_COLUMNS, "lat", "lng"]);
 
 // Map a CSV/lead object (camelCase or snake) onto our snake_case column names.
 function normalizeLead(lead) {
@@ -307,36 +311,82 @@ async function saveCachedEnrichment(src = {}) {
   );
 }
 
+// ---- shared WhatsApp-status cache (global, cross-tenant) ---------------------
+// A phone checked once by ANY user is reused by everyone, so we never re-run the
+// WhatsApp lookup for the same number. Keyed by the normalized international
+// number (digits only) the route already computes.
+async function getCachedWhatsapp(phone) {
+  const p = String(phone || "").replace(/[^\d]/g, "");
+  if (!p) return null;
+  const { rows } = await q(`SELECT status, whatsapp_id FROM whatsapp_cache WHERE phone = $1`, [p]);
+  return rows[0] || null;
+}
+
+async function saveCachedWhatsapp(phone, status, whatsappId) {
+  const p = String(phone || "").replace(/[^\d]/g, "");
+  if (!p) return;
+  await q(
+    `INSERT INTO whatsapp_cache (phone, status, whatsapp_id, checked_at)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (phone) DO UPDATE SET
+         status = EXCLUDED.status, whatsapp_id = EXCLUDED.whatsapp_id, checked_at = EXCLUDED.checked_at`,
+    [p, status || "", whatsappId || "", now()]
+  );
+}
+
 // Upsert a batch for a user. Field-by-field merge via ON CONFLICT: a new non-empty
 // value overwrites, a new empty/null value never wipes an existing one.
 async function upsertLeads(userId, leadObjs) {
   const insertCols = ["user_id", "dedup_key", ...LEAD_COLUMNS, "first_seen", "last_updated"];
-  const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(", ");
-  // Merge rule per column on conflict.
+  // Merge rule per column on conflict. Numeric columns (int + double precision)
+  // must use a plain COALESCE: NULLIF(EXCLUDED.<col>, '') would force Postgres to
+  // cast '' (text) to the column's numeric type, failing with
+  // "invalid input syntax for type double precision: \"\"".
   const setClause = LEAD_COLUMNS.map((c) =>
-    INT_COLUMNS.has(c)
+    NUMERIC_COLUMNS.has(c)
       ? `${c} = COALESCE(EXCLUDED.${c}, leads.${c})`
       : `${c} = COALESCE(NULLIF(EXCLUDED.${c}, ''), leads.${c})`
   ).join(", ");
-  const sql = `
-    INSERT INTO leads (${insertCols.join(", ")})
-    VALUES (${placeholders})
+  // Build a single multi-row upsert for `rowCount` rows. Writing the whole batch
+  // in one statement avoids a separate Supabase round-trip per lead (~250ms each
+  // from the VPS) — the dominant cost of a find. ON CONFLICT still returns one row
+  // per affected lead, so we can count inserts vs updates from RETURNING.
+  const buildSql = (rowCount) => {
+    const cpr = insertCols.length;
+    const tuples = [];
+    for (let r = 0; r < rowCount; r++) {
+      tuples.push("(" + insertCols.map((_, c) => `$${r * cpr + c + 1}`).join(", ") + ")");
+    }
+    return `INSERT INTO leads (${insertCols.join(", ")})
+    VALUES ${tuples.join(", ")}
     ON CONFLICT (user_id, dedup_key) DO UPDATE SET
       ${setClause}, last_updated = EXCLUDED.last_updated
     RETURNING (xmax = 0) AS inserted`;
+  };
 
-  // Normalize + dedup-key every row up front, dropping rows with no identity.
+  // Normalize + dedup-key every row up front, dropping rows with no identity, and
+  // dedupe by key WITHIN the batch — a multi-row ON CONFLICT can't touch the same
+  // (user_id, dedup_key) twice. Later non-empty fields overwrite earlier ones,
+  // matching the field-by-field merge the ON CONFLICT clause performs.
   // `ownEnrichment` records whether the scrape/import itself carried enrichment,
   // so we only write back to the shared cache data we actually discovered (not
   // values we just filled in from the cache).
-  const prepared = [];
+  const byKey = new Map();
   for (const raw of leadObjs) {
     const key = dedupKey(raw);
     if (!key) continue;
     const norm = normalizeLead(raw);
-    const ownEnrichment = hasUsefulEnrichment(cacheFieldsFrom(norm));
-    prepared.push({ key, norm, ownEnrichment });
+    const existing = byKey.get(key);
+    if (existing) {
+      for (const c of LEAD_COLUMNS) {
+        if (norm[c] !== "" && norm[c] != null) existing.norm[c] = norm[c];
+      }
+      existing.ownEnrichment = existing.ownEnrichment || hasUsefulEnrichment(cacheFieldsFrom(norm));
+    } else {
+      byKey.set(key, { key, norm, ownEnrichment: hasUsefulEnrichment(cacheFieldsFrom(norm)) });
+    }
   }
+  const prepared = [...byKey.values()];
   if (!prepared.length) return { inserted: 0, updated: 0 };
 
   // (a) Populate from the shared enrichment cache: any business already enriched
@@ -359,30 +409,70 @@ async function upsertLeads(userId, leadObjs) {
 
   const ts = now();
   let inserted = 0;
-  let updated = 0;
-  const client = await pool().connect();
-  try {
-    await client.query("BEGIN");
-    for (const p of prepared) {
-      const values = [userId, p.key, ...LEAD_COLUMNS.map((c) => p.norm[c]), ts, ts];
-      const res = await client.query(sql, values);
-      if (res.rows[0] && res.rows[0].inserted) inserted++;
-      else updated++;
+  let returned = 0;
+  // 500 rows × ~45 cols ≈ 22.5k params, well under Postgres' 65535-param limit.
+  const CHUNK = 500;
+  const runChunk = async (runner, slice) => {
+    const params = [];
+    for (const p of slice) params.push(userId, p.key, ...LEAD_COLUMNS.map((c) => p.norm[c]), ts, ts);
+    const res = await runner(buildSql(slice.length), params);
+    for (const row of res.rows) { returned++; if (row.inserted) inserted++; }
+  };
+  if (prepared.length <= CHUNK) {
+    // A single statement is atomic on its own — skip BEGIN/COMMIT round-trips.
+    await runChunk(q, prepared);
+  } else {
+    const client = await pool().connect();
+    try {
+      await client.query("BEGIN");
+      for (let i = 0; i < prepared.length; i += CHUNK) {
+        await runChunk((text, p) => client.query(text, p), prepared.slice(i, i + CHUNK));
+      }
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
     }
-    await client.query("COMMIT");
-  } catch (e) {
-    await client.query("ROLLBACK");
-    throw e;
-  } finally {
-    client.release();
   }
+  const updated = returned - inserted;
 
   // (b) Save freshly-enriched businesses back to the shared cache so the next
-  // user who scrapes the same domain reuses it. Only rows whose enrichment came
-  // from this scrape/import (not ones we just filled from the cache above).
+  // user who scrapes the same domain reuses it — in one batched upsert rather than
+  // a round-trip per domain. Only rows whose enrichment came from this
+  // scrape/import (not values we just filled from the cache above).
   try {
+    const cacheRows = [];
+    const seenDomains = new Set();
     for (const p of prepared) {
-      if (p.ownEnrichment) await saveCachedEnrichment(p.norm);
+      if (!p.ownEnrichment) continue;
+      const domain = hostOf(p.norm.domain || p.norm.website || "");
+      if (!domain || seenDomains.has(domain)) continue;
+      const f = cacheFieldsFrom(p.norm);
+      if (!hasUsefulEnrichment(f)) continue;
+      seenDomains.add(domain);
+      const phone = String(p.norm.phone || "").replace(/[^\d]/g, "") || null;
+      cacheRows.push([domain, phone, ...CACHE_FIELDS.map((c) => f[c]), "scrape", ts, ts]);
+    }
+    if (cacheRows.length) {
+      const cacheCols = ["domain", "phone", ...CACHE_FIELDS, "source", "created_at", "updated_at"];
+      const cacheSet = ["phone", ...CACHE_FIELDS]
+        .map((c) => `${c} = COALESCE(NULLIF(EXCLUDED.${c}, ''), enrichment_cache.${c})`)
+        .join(", ");
+      const cpr = cacheCols.length;
+      const CHUNK2 = 800;
+      for (let i = 0; i < cacheRows.length; i += CHUNK2) {
+        const slice = cacheRows.slice(i, i + CHUNK2);
+        const tuples = slice.map((_, r) =>
+          "(" + cacheCols.map((__, c) => `$${r * cpr + c + 1}`).join(", ") + ")"
+        ).join(", ");
+        await q(
+          `INSERT INTO enrichment_cache (${cacheCols.join(", ")}) VALUES ${tuples}
+             ON CONFLICT (domain) DO UPDATE SET ${cacheSet}, updated_at = EXCLUDED.updated_at`,
+          slice.flat()
+        );
+      }
     }
   } catch (err) {
     console.warn("[db] enrichment cache save failed:", err.message);
@@ -824,6 +914,8 @@ module.exports = {
   deleteProxy,
   setProxyEnabled,
   getCachedEnrichment,
+  getCachedWhatsapp,
+  saveCachedWhatsapp,
   getCachedEnrichmentMap,
   saveCachedEnrichment,
   hasUsefulCache,

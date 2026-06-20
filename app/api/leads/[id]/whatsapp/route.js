@@ -27,7 +27,20 @@ export async function POST(request, context) {
   }
 
   try {
+    // Shared cache: if this number was already checked by anyone, reuse the result
+    // instead of running the WhatsApp lookup again (permanent, cross-tenant).
+    const cached = await db.getCachedWhatsapp(number);
+    if (cached && cached.status) {
+      const updated = await db.updateLeadFields(userId, id, {
+        whatsapp_status: cached.status,
+        whatsapp_id: cached.whatsapp_id,
+      });
+      return Response.json({ lead: updated, cached: true });
+    }
+
     const r = await waLib.checkNumber(number);
+    // Persist to the shared cache so every later check of this number is free.
+    await db.saveCachedWhatsapp(number, r.status, r.whatsappId);
     const updated = await db.updateLeadFields(userId, id, {
       whatsapp_status: r.status,
       whatsapp_id: r.whatsappId,

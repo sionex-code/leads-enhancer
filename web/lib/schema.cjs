@@ -153,6 +153,17 @@ const enrichmentCache = pgTable(
   (t) => [index("idx_enrichment_cache_phone").on(t.phone)]
 );
 
+// Global, cross-tenant WhatsApp-status cache. A phone number checked once by ANY
+// user is reused by everyone (and by future finds) instead of re-running the
+// WhatsApp lookup — keyed by the normalized international number (digits only).
+const whatsappCache = pgTable("whatsapp_cache", {
+  id: serial("id").primaryKey(),
+  phone: text("phone").notNull().unique(),
+  status: text("status"),
+  whatsappId: text("whatsapp_id"),
+  checkedAt: text("checked_at").notNull(),
+});
+
 // ---- Pending Whop grants (paid before signing in, or unmatched) --------------
 // When a Whop webhook arrives with no user_id metadata and no matching user yet,
 // we stash the grant keyed by the buyer email and reconcile it the next time that
@@ -339,6 +350,7 @@ module.exports = {
   appSettings,
   proxies,
   enrichmentCache,
+  whatsappCache,
   gmailAccounts,
   projects,
   jobs,

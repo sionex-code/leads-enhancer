@@ -701,6 +701,8 @@ export default function Dashboard({ view = "" }) {
   // 1.5s status polls. Mirrors the Leads manager: row-click toggles, header all.
   const [selectedLeads, setSelectedLeads] = useState(() => new Set());
   const [bulkBusy, setBulkBusy] = useState("");
+  // Progress for a realtime (queue-free) enrich/whatsapp batch: { kind, done, total }.
+  const [realtimeBatch, setRealtimeBatch] = useState(null);
   const [credits, setCredits] = useState(null);
   // Captured rows being added to a list in bulk — saved to the DB first so they
   // have ids; { ids, keys } drives the shared dialog + the "listed" overlay.
@@ -1317,6 +1319,39 @@ export default function Dashboard({ view = "" }) {
   // Bulk-selection bar entry point: run over just the checked rows.
   const runBulkBatch = (kind) => runBatchForLeads(kind, reportableLeads);
 
+  // Realtime (queue-free) batch enrich / WhatsApp over the captured leads. Reuses
+  // the same per-lead realtime endpoints as the single-row buttons — nothing is
+  // added to the job queue and no browser runner is spawned. Enrichment results
+  // persist to the shared cache, so a business enriched once is reused for every
+  // user and every future find.
+  async function runRealtimeBatch(kind) {
+    const targets = (leads || []).filter((l) => (kind === "enrich" ? l.website : l.phone));
+    if (!targets.length) {
+      alert(kind === "enrich" ? "No captured leads have a website to enrich." : "No captured leads have a phone to check on WhatsApp.");
+      return;
+    }
+    const handler = kind === "enrich" ? enrichCaptured : whatsappCaptured;
+    setBulkBusy(kind);
+    setRealtimeBatch({ kind, done: 0, total: targets.length });
+    let idx = 0;
+    let done = 0;
+    const worker = async () => {
+      while (idx < targets.length) {
+        const lead = targets[idx++];
+        try { await handler(lead); } catch { /* per-row handler already surfaces its own error */ }
+        done++;
+        setRealtimeBatch((b) => (b ? { ...b, done } : b));
+      }
+    };
+    try {
+      await Promise.all(Array.from({ length: Math.min(5, targets.length) }, worker));
+    } finally {
+      setBulkBusy("");
+      setRealtimeBatch(null);
+      refreshCredits();
+    }
+  }
+
   // Save the selected rows, then open the shared "Add to list" dialog in bulk mode.
   async function bulkAddToList() {
     if (!selectedLeadObjs.length) return;
@@ -1479,8 +1514,12 @@ export default function Dashboard({ view = "" }) {
                 <Play size={16} /> Run all
               </Button>
               <Button variant="secondary" disabled={!!busy || formRunning} onClick={() => run(["scrape"])}><Search size={16} /> Find leads</Button>
-              <Button variant="secondary" disabled={!!busy || formRunning} onClick={() => run(["enrich"])}><Zap size={16} /> Enrich</Button>
-              <Button variant="secondary" disabled={!!busy || formRunning} onClick={() => run(["whatsapp"])}><MessageCircle size={16} /> WhatsApp</Button>
+              <Button variant="secondary" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("enrich")} title="Grab email + socials for every captured lead (realtime, no queue; shared with all users)">
+                {bulkBusy === "enrich" ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />} Enrich{realtimeBatch?.kind === "enrich" ? ` (${realtimeBatch.done}/${realtimeBatch.total})` : ""}
+              </Button>
+              <Button variant="secondary" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("whatsapp")} title="Check WhatsApp for every captured lead with a phone (realtime, no queue; cached for all users)">
+                {bulkBusy === "whatsapp" ? <Loader2 size={16} className="animate-spin" /> : <MessageCircle size={16} />} WhatsApp{realtimeBatch?.kind === "whatsapp" ? ` (${realtimeBatch.done}/${realtimeBatch.total})` : ""}
+              </Button>
               <Button
                 variant="secondary"
                 disabled={!!bulkBusy || batchRunning || !leadsWithSite}
