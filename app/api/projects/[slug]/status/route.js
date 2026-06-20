@@ -1,5 +1,6 @@
 import store from "../../../../../web/lib/store.cjs";
 import queue from "../../../../../web/lib/queue.cjs";
+import db from "../../../../../web/lib/db.cjs";
 import { requireUser } from "../../../../../web/lib/session.js";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,14 @@ export async function GET(_request, context) {
   // "waiting for a free slot" if the background supervisor interval isn't running.
   queue.kick();
   try {
-    return Response.json(store.loadStatus(slug, userId));
+    const status = store.loadStatus(slug, userId);
+    // The workspace renders from the raw warehouse CSV, so enrichment/WhatsApp the
+    // user ran after the find would disappear on reload. Restore it from the shared
+    // caches (best-effort: never let a cache hiccup 500 the status poll).
+    try {
+      await db.fillLeadsFromCaches(status.leads);
+    } catch {}
+    return Response.json(status);
   } catch (err) {
     return Response.json({ error: err.message }, { status: 404 });
   }

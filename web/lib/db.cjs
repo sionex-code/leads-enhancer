@@ -346,6 +346,38 @@ async function getCachedWhatsappMap(phones = []) {
   return map;
 }
 
+// Networks restored from the enrichment cache onto a lead.
+const FILL_SOCIALS = ["facebook", "instagram", "linkedin", "twitter", "youtube", "tiktok", "pinterest", "whatsapp", "telegram"];
+
+// Backfill flat (CSV-shaped) lead objects IN PLACE from the shared caches. The
+// project workspace renders from the raw warehouse CSV, so enrichment/WhatsApp a
+// user runs after the find would vanish on reload (the session overlay is gone) —
+// this restores it from the permanent caches. Only fills leads still missing the
+// data, so a fully-loaded project costs nothing.
+async function fillLeadsFromCaches(leads) {
+  if (!Array.isArray(leads) || !leads.length) return;
+  const needEnrich = leads.filter((l) => l.website && !l.email && !l.enrich_status);
+  const needWa = leads.filter((l) => l.phone && !l.whatsapp_status);
+  if (!needEnrich.length && !needWa.length) return;
+  const [enrichMap, waMap] = await Promise.all([
+    needEnrich.length ? getCachedEnrichmentMap(needEnrich.map((l) => l.website)) : new Map(),
+    needWa.length ? getCachedWhatsappMap(needWa.map((l) => l.phone)) : new Map(),
+  ]);
+  for (const l of needEnrich) {
+    const ce = enrichMap.get(hostOf(l.website));
+    if (!ce) continue;
+    if (!l.email) l.email = ce.email || "";
+    if (!l.all_emails) l.all_emails = ce.all_emails || "";
+    if (!l.contact_page) l.contact_page = ce.contact_page || "";
+    if (!l.enrich_status) l.enrich_status = ce.enrich_status || "";
+    for (const k of FILL_SOCIALS) if (!l[k] && ce[k]) l[k] = ce[k];
+  }
+  for (const l of needWa) {
+    const cw = waMap.get(String(l.phone || "").replace(/[^\d]/g, ""));
+    if (cw && cw.status) { l.whatsapp_status = cw.status; l.whatsapp_id = cw.whatsapp_id || ""; }
+  }
+}
+
 // Upsert a batch for a user. Field-by-field merge via ON CONFLICT: a new non-empty
 // value overwrites, a new empty/null value never wipes an existing one.
 async function upsertLeads(userId, leadObjs) {
@@ -929,6 +961,7 @@ module.exports = {
   getCachedWhatsapp,
   saveCachedWhatsapp,
   getCachedWhatsappMap,
+  fillLeadsFromCaches,
   getCachedEnrichmentMap,
   saveCachedEnrichment,
   hasUsefulCache,
