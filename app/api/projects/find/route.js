@@ -198,10 +198,10 @@ export async function POST(request) {
       running: false,
       queued: false,
       activePid: null,
-      message: "Lead warehouse is unavailable. Please try again shortly.",
+      message: "Lead service is unavailable. Please try again shortly.",
     });
     return Response.json(
-      { error: "Lead warehouse is unavailable. Please try again shortly.", code: "warehouse_unavailable" },
+      { error: "Lead service is unavailable. Please try again shortly.", code: "warehouse_unavailable" },
       { status: 502 }
     );
   }
@@ -228,7 +228,7 @@ export async function POST(request) {
     queued: false,
     activePid: null,
     publicId,
-    message: "Leads loaded from warehouse",
+    message: "Leads loaded",
     finishedAt: new Date().toISOString(),
     stages: {
       scrape: { status: "done" },

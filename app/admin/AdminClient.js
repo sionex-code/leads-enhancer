@@ -370,8 +370,8 @@ function PackagePricing() {
 // Controls whether lead queries are served from the warehouse only, or fall back
 // to a real-time scrape when the warehouse has no results.
 const SOURCE_OPTIONS = [
-  { value: "warehouse", label: "Warehouse only", desc: "Serve leads from the pre-built warehouse. Never triggers a live scrape." },
-  { value: "warehouse_fallback", label: "Warehouse + realtime fallback", desc: "Try warehouse first; fall back to a live Google Maps scrape when empty." },
+  { value: "warehouse", label: "Database only", desc: "Serve leads from the pre-built lead database. Never triggers a live scrape." },
+  { value: "warehouse_fallback", label: "Database + live fallback", desc: "Try the database first; fall back to a live Google Maps scrape when empty." },
 ];
 
 function LeadSourceSettings() {

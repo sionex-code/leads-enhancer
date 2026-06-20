@@ -527,7 +527,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
         <Badge variant="outline" className="mb-4 gap-1.5"><Zap className="h-3 w-3 text-primary" /> Google Maps lead engine</Badge>
         <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">What leads do you want to find?</h1>
         <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
-          Pick a service and city, or type your own query, and we'll pull the leads instantly from our warehouse.
+          Pick a service and city, or type your own query, and we'll pull matching leads instantly.
         </p>
       </div>
 
@@ -1588,7 +1588,7 @@ export default function Dashboard({ view = "" }) {
         </div>
       )}
       <FindResultAlert result={findResult} onClose={() => setFindResult(null)} />
-      <div className="space-y-5 p-4 sm:p-6">
+      <div className="space-y-5 overflow-x-clip p-4 sm:p-6">
         {/* Mobile project switcher */}
         {projects.length > 0 && (
           <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:hidden">
@@ -1650,22 +1650,6 @@ export default function Dashboard({ view = "" }) {
               </Button>
               <Button variant="secondary" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("whatsapp")} title="Check WhatsApp for captured numbers not checked yet (realtime, no queue; cached for all users)">
                 {bulkBusy === "whatsapp" ? <Loader2 size={16} className="animate-spin" /> : <MessageCircle size={16} />} WhatsApp{realtimeBatch?.kind === "whatsapp" ? ` (${realtimeBatch.done}/${realtimeBatch.total})` : ""}
-              </Button>
-              <Button
-                variant="secondary"
-                disabled={!!bulkBusy || batchRunning || !leadsWithSite}
-                onClick={() => runBatchForLeads("audit", leads)}
-                title={leadsWithSite ? `Audit ${leadsWithSite} site(s) — desktop + mobile scores (${leadsWithSite * AUDIT_COST} credits)` : "No captured leads with a website to audit"}
-              >
-                {bulkBusy === "audit" ? <Loader2 size={16} className="animate-spin" /> : <BarChart3 size={16} />} Audit{leadsWithSite ? ` (${leadsWithSite})` : ""}
-              </Button>
-              <Button
-                variant="secondary"
-                disabled={!!bulkBusy || batchRunning || !leadsWithSite}
-                onClick={() => runBatchForLeads("report", leads)}
-                title={leadsWithSite ? `Generate ${leadsWithSite} website report(s) (${leadsWithSite * REPORT_COST} credits)` : "No captured leads with a website to report on"}
-              >
-                {bulkBusy === "report" ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />} Report{leadsWithSite ? ` (${leadsWithSite})` : ""}
               </Button>
               {running ? (
                 <Button variant="outline" disabled={!!busy} onClick={() => projectAction("stop")}><PauseCircle size={16} /> Stop</Button>

@@ -1078,7 +1078,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
 
   return (
     <AppShell active={activeNav} title={pageTitle} subtitle={subtitle} actions={actions} sidebarExtra={sidebarStats}>
-      <div className="space-y-4 p-4 sm:p-6">
+      <div className="space-y-4 overflow-x-clip p-4 sm:p-6">
         {/* Toolbar */}
         <Card>
           <CardContent className="space-y-3 p-4">
