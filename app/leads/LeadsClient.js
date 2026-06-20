@@ -247,7 +247,7 @@ function DrawerCard({ title, children }) {
   );
 }
 
-function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot }) {
+function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot, onCharged }) {
   const [reports, setReports] = useState([]);
   const [job, setJob] = useState(null);
   const [error, setError] = useState("");
@@ -319,6 +319,8 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot }) 
     setError("");
     try {
       const data = await jsonFetch(`/api/leads/${lead.id}/report`, { method: "POST" });
+      // Report credits are charged up front — reflect the new balance immediately.
+      if (typeof data.credits === "number") onCharged?.(data.credits);
       setJob({ id: data.jobId, status: "running", log: [] });
       pollJob(data.jobId);
     } catch (err) {
@@ -1342,7 +1344,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
         </div>
       </div>
 
-      {reportLead && <ReportModal lead={reportLead} onClose={() => { setReportLead(null); load(); }} />}
+      {reportLead && <ReportModal lead={reportLead} onClose={() => { setReportLead(null); load(); }} onCharged={(c) => { if (typeof c === "number") setCredits(c); }} />}
       {listDialog && (
         <ListsDialog
           lead={listDialog.lead}
@@ -1360,6 +1362,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
           onPatch={patchLead}
           onStatus={checkStatusOne}
           onChatbot={scanChatbotOne}
+          onCharged={(c) => { if (typeof c === "number") setCredits(c); }}
           onDeleted={(id) => {
             setActive(null);
             setRows((r) => r.filter((x) => x.id !== id));

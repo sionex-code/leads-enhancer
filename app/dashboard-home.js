@@ -1126,6 +1126,8 @@ export default function Dashboard({ view = "" }) {
     try {
       const saved = await ensureLeadId(lead);
       const data = await jsonFetch(`/api/leads/${saved.id}/audit`, { method: "POST" });
+      // Audit credits are charged up front — reflect the new balance immediately.
+      if (typeof data.credits === "number") setCredits(data.credits);
       await new Promise((resolve) => {
         const tick = async () => {
           const job = await jsonFetch(`/api/agent/jobs/${data.jobId}`).catch(() => null);
@@ -1852,7 +1854,7 @@ export default function Dashboard({ view = "" }) {
           )}
         </Card>
       </div>
-      {reportLead && <ReportModal lead={reportLead} onClose={() => setReportLead(null)} />}
+      {reportLead && <ReportModal lead={reportLead} onClose={() => setReportLead(null)} onCharged={(c) => { if (typeof c === "number") setCredits(c); }} />}
       {listsLead && (
         <ListsDialog
           lead={listsLead}

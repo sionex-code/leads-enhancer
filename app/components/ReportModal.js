@@ -36,7 +36,7 @@ function estimatePct(job) {
 // Lightweight report viewer that stays on the current page: shows the latest
 // report inline in an iframe and can (re)generate one, polling the job to
 // completion. `lead` must carry an id, name, domain and website.
-export default function ReportModal({ lead, onClose }) {
+export default function ReportModal({ lead, onClose, onCharged }) {
   const [reports, setReports] = useState([]);
   const [job, setJob] = useState(null);
   const [error, setError] = useState("");
@@ -71,6 +71,8 @@ export default function ReportModal({ lead, onClose }) {
     setError("");
     try {
       const data = await jsonFetch(`/api/leads/${lead.id}/report`, { method: "POST" });
+      // Report credits are charged up front — tell the parent so the balance updates.
+      if (typeof data.credits === "number") onCharged?.(data.credits);
       setJob({ id: data.jobId, status: "running", log: [] });
       pollJob(data.jobId);
     } catch (err) {
