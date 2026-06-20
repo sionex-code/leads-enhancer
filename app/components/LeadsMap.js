@@ -182,7 +182,10 @@ export default function LeadsMap({
       ref={containerRef}
       style={{ height }}
       className={cn(
-        "w-full overflow-hidden rounded-lg border border-border",
+        // `isolate` (isolation: isolate) keeps Leaflet's internal z-indexes
+        // (panes/controls go up to 1000) contained in their own stacking context
+        // so the map can't paint over headers/menus/content scrolling past it.
+        "relative isolate z-0 w-full overflow-hidden rounded-lg border border-border",
         className
       )}
     />
