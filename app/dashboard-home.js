@@ -1186,13 +1186,23 @@ export default function Dashboard({ view = "" }) {
   // when a status fetch is mid-flight or briefly stale after switching projects.
   const running = !!status?.state?.activeAlive || !!selectedProject?.running;
   const runningCount = projects.filter((p) => p.running).length;
+  // A project is genuinely waiting in the queue only when it's flagged queued, isn't
+  // running, and hasn't already produced a result. A stale `queued:true` left on a
+  // finished/failed/stopped project (the runner doesn't always reset it) must NOT
+  // keep showing "waiting for a free slot" — especially for instant warehouse finds.
+  const isQueued =
+    !!status?.state?.queued &&
+    !running &&
+    !status?.state?.finishedAt &&
+    status?.state?.stages?.scrape?.status !== "done" &&
+    !/^(Done|Failed|Stopped|Leads loaded)/i.test(status?.state?.message || "");
   // How many captured leads have a website — drives the project toolbar
   // Audit/Report buttons (which now run the same bulk flow as the leads page).
   const leadsWithSite = leads.filter((l) => l.website).length;
   // Live "Queued for Ns" timer: while a project sits queued nothing rewrites its
   // state, so updatedAt stays at enqueue time and this grows on each 1.5s poll.
   const queuedFor =
-    status?.state?.queued && !running && status?.state?.updatedAt
+    isQueued && status?.state?.updatedAt
       ? Math.max(0, Math.round((Date.now() - Date.parse(status.state.updatedAt)) / 1000))
       : 0;
 
@@ -1562,13 +1572,13 @@ export default function Dashboard({ view = "" }) {
             </div>
             <div className={cn(
               "text-xs",
-              status?.state?.queued && !busy && !running ? "font-medium text-amber-600" : "text-muted-foreground"
+              isQueued && !busy ? "font-medium text-amber-600" : "text-muted-foreground"
             )}>
               {busy
                 ? busy
                 : running
                   ? "Running…"
-                  : status?.state?.queued
+                  : isQueued
                     ? <span>Queued — waiting for a free slot{queuedFor ? <span className="ml-1 text-muted-foreground font-normal">· {queuedFor < 60 ? `${queuedFor}s` : `${Math.floor(queuedFor / 60)}m ${queuedFor % 60}s`} so far</span> : ""}</span>
                     : status?.state?.message || "Ready"}
             </div>

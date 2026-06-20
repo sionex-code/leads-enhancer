@@ -72,6 +72,18 @@ async function runningCount() {
   return rows[0].c;
 }
 
+// Once a job leaves the queue (finished, failed, or its slot reclaimed) the
+// project's web-state must stop advertising itself as "queued". The runner clears
+// running/activePid on exit but never resets the enqueue-time `queued` flag — which
+// is exactly what left finished projects stuck showing "waiting for a free slot".
+function clearQueuedFlag(slug, userId, extra = {}) {
+  try {
+    store.writeState(store.safeProjectDir(slug, userId), { queued: false, ...extra });
+  } catch {
+    // best-effort: a state write failure must not break job reaping.
+  }
+}
+
 // Mark finished any `running` job whose runner process has exited. Decides
 // done vs failed by inspecting the project's on-disk state, then notifies.
 async function reapFinished() {
@@ -96,6 +108,9 @@ async function reapFinished() {
         `INSERT INTO notifications (user_id, type, payload) VALUES ($1, 'job_failed', $2)`,
         [job.user_id, { jobId: job.id, slug: job.project_slug, name: job.params?.name || job.project_slug, status: "failed", error: "spawn never started" }]
       );
+      clearQueuedFlag(job.project_slug, job.user_id, {
+        running: false, activePid: null, message: "Failed: runner never started", finishedAt: new Date().toISOString(),
+      });
       continue;
     }
     if (store.processAlive(job.pid)) {
@@ -130,6 +145,7 @@ async function reapFinished() {
           `INSERT INTO notifications (user_id, type, payload) VALUES ($1, 'job_failed', $2)`,
           [job.user_id, { jobId: job.id, slug: job.project_slug, name: job.params?.name || job.project_slug, status: "failed", error: "exceeded max runtime" }]
         );
+        clearQueuedFlag(job.project_slug, job.user_id, { running: false, activePid: null });
         continue;
       }
       if (!ours) {
@@ -154,6 +170,9 @@ async function reapFinished() {
       `UPDATE jobs SET status = $1, error = $2, finished_at = now() WHERE id = $3`,
       [status, error, job.id]
     );
+    // Runner already wrote running:false + the final message; just clear the
+    // leftover queued flag so the project stops showing "waiting for a free slot".
+    clearQueuedFlag(job.project_slug, job.user_id);
     await pool().query(
       `INSERT INTO notifications (user_id, type, payload)
        VALUES ($1, $2, $3)`,
@@ -173,7 +192,7 @@ async function promoteOne() {
   try {
     await client.query("BEGIN");
     const { rows } = await client.query(
-      `SELECT id, user_id, params FROM jobs
+      `SELECT id, user_id, project_slug, params FROM jobs
         WHERE status = 'queued'
         ORDER BY priority DESC, id ASC
         FOR UPDATE SKIP LOCKED
@@ -199,6 +218,9 @@ async function promoteOne() {
         `UPDATE jobs SET status = 'failed', error = $1, finished_at = now() WHERE id = $2`,
         [String(err.message || err).slice(0, 500), job.id]
       );
+      clearQueuedFlag(job.project_slug, job.user_id, {
+        running: false, activePid: null, message: `Failed: ${String(err.message || err).slice(0, 200)}`, finishedAt: new Date().toISOString(),
+      });
       await pool().query(
         `INSERT INTO notifications (user_id, type, payload) VALUES ($1, 'job_failed', $2)`,
         [job.user_id, { jobId: job.id, status: "failed", error: String(err.message || err).slice(0, 200) }]
