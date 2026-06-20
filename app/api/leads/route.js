@@ -29,6 +29,7 @@ export async function GET(request) {
     db.queryLeads(userId, {
       search: searchParams.get("search") || "",
       hasEmail: searchParams.get("hasEmail") === "1",
+      hasWebsite: searchParams.get("hasWebsite") || "",
       minScore: Number(searchParams.get("minScore") || 0),
       project: searchParams.get("project") || "",
       country,

@@ -11,12 +11,16 @@
 // Each website report costs REPORT_COST credits.
 const { pool } = require("./pg.cjs");
 
-const PLAN_QUOTAS = { p19: 5000, p35: 50000, p49: null }; // null = unlimited
+// Unified single credit pool: every action spends from one `credits` balance.
+// A plan's monthly grant == its credit allowance (p49 = unlimited / null).
+const PLAN_QUOTAS = { p19: 5000, p35: 50000, p49: null }; // legacy alias, kept == PLAN_CREDITS
 const PLAN_PRICES = { p19: 19, p35: 35, p49: 49 };
-const PLAN_CREDITS = { p19: 500, p35: 1500, p49: 4000 }; // monthly report credits
+const PLAN_CREDITS = { p19: 5000, p35: 50000, p49: null }; // monthly credits (null = unlimited)
 const PLAN_LABELS = { p19: "Starter", p35: "Growth", p49: "Scale" };
+const LEAD_COST = 1; // credits per new lead captured
 const REPORT_COST = 10; // credits per full website report (audit + AI + chatbot)
 const AUDIT_COST = 3; // credits per quick audit (desktop + mobile Lighthouse scores only)
+const CHATBOT_COST = 5; // credits per website chatbot/live-chat scan
 
 const now = () => new Date().toISOString();
 const monthKey = (iso) => (iso ? String(iso).slice(0, 7) : ""); // YYYY-MM
@@ -73,10 +77,18 @@ function isPaidActive(m) {
   );
 }
 
-// What a user's monthly credit grant should be: a per-user override wins, then the
-// active paid plan's allotment, then the global free grant (if enabled).
+// True when the user is on a plan whose credit grant is unlimited (p49). Such
+// accounts never deduct and never track a numeric grant.
+function isUnlimited(m) {
+  return isPaidActive(m) && PLAN_CREDITS[m.plan] === null;
+}
+
+// What a user's monthly credit grant should be: a per-user override wins, then
+// unlimited plans (null = no numeric grant), then the active paid plan's
+// allotment, then the global free grant (if enabled). null = unlimited.
 function effectiveMonthly(m, free) {
   if (m && m.credits_monthly != null) return Math.max(0, m.credits_monthly);
+  if (isUnlimited(m)) return null;
   if (isPaidActive(m)) return PLAN_CREDITS[m.plan] || 0;
   return free.enabled ? free.amount : 0;
 }
@@ -103,11 +115,18 @@ async function ensureCredits(userId) {
   if (due) {
     const grant = effectiveMonthly(m, free);
     const ts = now();
-    const upd = await pool().query(
-      `UPDATE memberships SET credits = credits + $1, credits_renewed_at = $2, updated_at = $2
-         WHERE user_id = $3 RETURNING *`,
-      [grant, ts, userId]
-    );
+    // Unlimited plans (grant === null) just stamp the renewal; no number tracked.
+    const upd = grant == null
+      ? await pool().query(
+          `UPDATE memberships SET credits_renewed_at = $1, updated_at = $1
+             WHERE user_id = $2 RETURNING *`,
+          [ts, userId]
+        )
+      : await pool().query(
+          `UPDATE memberships SET credits = credits + $1, credits_renewed_at = $2, updated_at = $2
+             WHERE user_id = $3 RETURNING *`,
+          [grant, ts, userId]
+        );
     m = upd.rows[0] || m;
   }
   return m;
@@ -139,8 +158,10 @@ async function recordCreditTxn(userId, { delta, reason, count = null, project = 
 // is recorded to the credit-spend ledger on success.
 async function consumeCredits(userId, n, meta = {}) {
   n = Math.max(0, Math.floor(n || 0));
-  if (n === 0) return { ok: true, credits: await getCredits(userId) };
-  await ensureCredits(userId); // make sure the row + monthly grant exist first
+  const m = await ensureCredits(userId); // make sure the row + monthly grant exist first
+  // Unlimited plans never deduct (and we skip the ledger to avoid per-lead spam).
+  if (isUnlimited(m)) return { ok: true, unlimited: true, credits: m ? m.credits || 0 : 0 };
+  if (n === 0) return { ok: true, credits: m ? m.credits || 0 : 0 };
   const { rows } = await pool().query(
     `UPDATE memberships SET credits = credits - $1, updated_at = $2
        WHERE user_id = $3 AND credits >= $1 RETURNING credits`,
@@ -204,26 +225,36 @@ async function setUserMonthlyCredits(userId, monthly) {
 // membership (credits still work for free accounts).
 async function getEntitlement(userId) {
   const m = await ensureCredits(userId); // also lazily creates the row + grants monthly
-  if (!m || m.status !== "active") {
-    return { active: false, plan: null, quota: 0, used: 0, remaining: 0, credits: m ? m.credits || 0 : 0, creditsMonthly: m ? m.credits_monthly : null };
+  const credits = m ? m.credits || 0 : 0;
+  const creditsMonthly = m ? m.credits_monthly : null;
+  // Inactive / no plan: the single credit balance is still spendable (free grant).
+  // remaining mirrors credits so the find gate lets free users spend what they have.
+  if (!m || m.status !== "active" || (m.current_period_end && Date.parse(m.current_period_end) < Date.now())) {
+    return {
+      active: false, plan: m && m.status === "active" ? m.plan : null, unlimited: false,
+      credits, monthly: creditsMonthly, creditsMonthly,
+      quota: 0, used: 0, remaining: credits,
+    };
   }
-  if (m.current_period_end && Date.parse(m.current_period_end) < Date.now()) {
-    return { active: false, plan: m.plan, quota: m.leads_quota, used: m.leads_used, remaining: 0, credits: m.credits || 0, creditsMonthly: m.credits_monthly };
-  }
-  const quota = m.leads_quota; // null = unlimited
-  const used = m.leads_used || 0;
-  const remaining = quota === null ? null : Math.max(0, quota - used);
-  return { active: true, plan: m.plan, quota, used, remaining, credits: m.credits || 0, creditsMonthly: m.credits_monthly };
+  const unlimited = isUnlimited(m);
+  const free = await getFreeMonthlyConfig();
+  const monthly = effectiveMonthly(m, free); // null = unlimited
+  return {
+    active: true, plan: m.plan, unlimited,
+    credits, monthly, creditsMonthly,
+    // Back-compat aliases (existing UI reads these): the credit balance is now
+    // the spendable number; remaining === null means unlimited.
+    quota: monthly, used: monthly != null ? Math.max(0, monthly - credits) : 0,
+    remaining: unlimited ? null : credits,
+  };
 }
 
-// Increment leads_used after N new leads are persisted for a user. Safe no-op if
-// the user has no membership row. Called from the data layer on insert.
-async function consumeLeads(userId, n) {
+// Spend 1 credit per newly-persisted lead (unified pool). Called from the data
+// layer on insert. Unlimited plans are a no-op inside consumeCredits. Safe no-op
+// when n <= 0; the find route caps requests by available credits so this succeeds.
+async function consumeLeads(userId, n, meta = {}) {
   if (!n || n <= 0) return;
-  await pool().query(
-    `UPDATE memberships SET leads_used = leads_used + $1, updated_at = $2 WHERE user_id = $3`,
-    [n, now(), userId]
-  );
+  await consumeCredits(userId, n * LEAD_COST, { reason: "leads", count: n, project: meta.project });
 }
 
 // Upsert a membership from a Whop webhook event (grant/renew). Resetting
@@ -398,8 +429,11 @@ module.exports = {
   PLAN_PRICES,
   PLAN_CREDITS,
   PLAN_LABELS,
+  LEAD_COST,
   REPORT_COST,
   AUDIT_COST,
+  CHATBOT_COST,
+  isUnlimited,
   planFromWhopId,
   quotaForPlan,
   getSetting,

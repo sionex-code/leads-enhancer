@@ -8,7 +8,7 @@
     "start": "node scrape.js",
     "dev": "next dev -H 0.0.0.0 -p 3000",
     "build": "next build",
-    "start:web": "next start -H 0.0.0.0 -p 3000",
+    "start:web": "next start -H 0.0.0.0",
     "scrape": "node scrape.js",
     "enrich": "node enrich.js",
     "whatsapp": "node whatsapp.js",

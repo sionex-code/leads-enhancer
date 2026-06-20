@@ -19,12 +19,90 @@ const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 // p49→Growth / p99→Scale mapping was wrong and made "Scale" fail with an Invalid
 // plan error (p99 doesn't exist) while silently mislabelling p49.
 const PLAN_LABEL = { p19: "Starter", p35: "Growth", p49: "Scale" };
+// Monthly credit grant per plan (null = unlimited) — mirrors billing.cjs PLAN_CREDITS.
+const PLAN_CREDITS = { p19: 5000, p35: 50000, p49: null };
 const PLAN_OPTIONS = [
   { value: "", label: "Free (no plan)" },
   { value: "p19", label: "Starter ($19)" },
   { value: "p35", label: "Growth ($35)" },
   { value: "p49", label: "Scale ($49)" },
 ];
+
+// The user's effective monthly credit grant: a per-user override wins, else the
+// plan's allotment. null = unlimited (p49).
+function monthlyGrant(u) {
+  if (u.credits_monthly != null) return Number(u.credits_monthly);
+  if (isActive(u)) return PLAN_CREDITS[u.plan];
+  return null;
+}
+
+const TXN_LABEL = { leads: "Find leads", audit: "Audit", report: "Report", chatbot: "Chatbot scan", refund: "Refund", topup: "Top-up", adjust: "Adjustment", grant: "Monthly credits", admin: "Admin adjustment", spend: "Spend" };
+
+// Admin-only credit ledger for a single user (the billing-page history was removed
+// for end users; admins can still inspect it here).
+function CreditHistoryModal({ user, onClose }) {
+  const [page, setPage] = useState(1);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    jsonFetch(`/api/admin/users?history=${encodeURIComponent(user.id)}&page=${page}`)
+      .then((d) => { if (!cancelled) setData(d); })
+      .catch(() => { if (!cancelled) setData({ rows: [], total: 0, pages: 1 }); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [user.id, page]);
+
+  const rows = data?.rows || [];
+  const pages = data?.pages || 1;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" onClick={onClose}>
+      <Card className="w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+        <CardContent className="p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold">Credit history</div>
+              <div className="truncate text-xs text-muted-foreground">{user.email || user.id}</div>
+            </div>
+            <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>
+          </div>
+          {loading && !data ? (
+            <div className="flex items-center justify-center py-10 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /></div>
+          ) : rows.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">No credit activity yet.</p>
+          ) : (
+            <div className="divide-y divide-border/60">
+              {rows.map((t) => (
+                <div key={t.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">{TXN_LABEL[t.reason] || t.reason}{t.count > 1 ? ` · ${t.count}×` : ""}{t.project ? <span className="font-normal text-muted-foreground"> · {t.project}</span> : null}</div>
+                    <div className="text-xs text-muted-foreground">{new Date(t.created_at).toLocaleString()}</div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className={cn("font-semibold tabular-nums", t.delta < 0 ? "text-foreground" : "text-emerald-600")}>{t.delta < 0 ? "" : "+"}{t.delta}</div>
+                    {t.balance_after != null && <div className="text-xs text-muted-foreground tabular-nums">bal {t.balance_after}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {pages > 1 && (
+            <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-3 text-xs text-muted-foreground">
+              <span>Page {page} of {pages}</span>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</Button>
+                <Button variant="outline" size="sm" disabled={page >= pages || loading} onClick={() => setPage((p) => Math.min(pages, p + 1))}>Next</Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 async function jsonFetch(url, options = {}) {
   const res = await fetch(`${BASE_PATH}${url}`, {
@@ -406,6 +484,7 @@ export default function AdminClient() {
   const [search, setSearch] = useState("");
   const [busyId, setBusyId] = useState("");
   const [error, setError] = useState("");
+  const [historyUser, setHistoryUser] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -436,7 +515,7 @@ export default function AdminClient() {
       setUsers((list) =>
         list.map((u) =>
           u.id === userId
-            ? { ...u, plan: ent.plan, status: ent.active ? "active" : "inactive", leads_quota: ent.quota, leads_used: ent.used, current_period_end: null }
+            ? { ...u, plan: ent.plan, status: ent.active ? "active" : "inactive", credits: ent.credits, credits_monthly: ent.creditsMonthly, current_period_end: null }
             : u
         )
       );
@@ -494,6 +573,7 @@ export default function AdminClient() {
 
   return (
     <div className="lf min-h-screen bg-background text-foreground">
+      {historyUser && <CreditHistoryModal user={historyUser} onClose={() => setHistoryUser(null)} />}
       <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur sm:px-6">
         <Image src="/brand/leadsfunda-white.svg" alt="LeadsFunda" width={128} height={25} priority />
         <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Admin</span>
@@ -543,7 +623,7 @@ export default function AdminClient() {
                 <TableRow>
                   <TableHead>User</TableHead>
                   <TableHead>Current plan</TableHead>
-                  <TableHead>Usage</TableHead>
+                  <TableHead>Monthly credits</TableHead>
                   <TableHead className="w-[220px]">Set plan</TableHead>
                   <TableHead className="w-[200px]">Credits &amp; access</TableHead>
                 </TableRow>
@@ -551,8 +631,9 @@ export default function AdminClient() {
               <TableBody>
                 {filtered.map((u) => {
                   const active = isActive(u);
-                  // Scale (p49) is the unlimited tier — its quota is stored as null.
-                  const unlimited = active && (u.leads_quota === null || u.plan === "p49");
+                  // Scale (p49) is the unlimited tier.
+                  const unlimited = active && u.plan === "p49";
+                  const monthly = monthlyGrant(u);
                   return (
                     <TableRow key={u.id}>
                       <TableCell>
@@ -575,7 +656,7 @@ export default function AdminClient() {
                         )}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {!active ? "no plan" : unlimited ? "Unlimited" : `${Number(u.leads_used || 0).toLocaleString()} / ${Number(u.leads_quota || 0).toLocaleString()}`}
+                        {unlimited ? "Unlimited" : monthly != null ? `${monthly.toLocaleString()} / mo` : "Free grant"}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -597,6 +678,7 @@ export default function AdminClient() {
                             <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
                             <span className="font-medium tabular-nums">{Number(u.credits || 0).toLocaleString()}</span>
                             <Button variant="ghost" size="sm" className="h-6 px-1.5 text-xs" disabled={busyId === u.id} onClick={() => adjustCredits(u)}>Adjust</Button>
+                            <Button variant="ghost" size="sm" className="h-6 px-1.5 text-xs" onClick={() => setHistoryUser(u)}>History</Button>
                           </div>
                           <Button
                             variant={u.banned ? "secondary" : "ghost"}

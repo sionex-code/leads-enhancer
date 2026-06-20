@@ -137,31 +137,32 @@ export async function POST(request) {
   const { userId, response } = await requireUser();
   if (response) return response;
 
-  // Plan / quota gate — same checks as run/route.js.
+  // Credit gate — one unified pool (1 credit per new lead). Free accounts may
+  // spend their free grant; only block when truly out of credits.
   const entitlement = await billing.getEntitlement(userId);
-  if (!entitlement.active) {
+  const avail = entitlement.unlimited ? Infinity : (entitlement.credits || 0);
+  if (!entitlement.unlimited && avail <= 0) {
     return Response.json(
-      { error: "You need an active plan to find leads. Choose a plan to continue.", code: "no_plan" },
-      { status: 402 }
-    );
-  }
-  if (entitlement.remaining !== null && entitlement.remaining <= 0) {
-    return Response.json(
-      { error: "Monthly lead quota reached. Upgrade your plan to find more leads.", code: "quota_exceeded" },
+      { error: "You're out of credits. Choose a plan or top up to find more leads.", code: "no_credits" },
       { status: 402 }
     );
   }
 
   const body = await request.json().catch(() => ({}));
-  const { name, query, cityId, countryCode, service, minRating, centerLat, centerLng, radiusKm } = body || {};
+  const { name, query, cityId, countryCode, service, minRating, maxRating, centerLat, centerLng, radiusKm } = body || {};
 
   if (!name) return Response.json({ error: "Project name is required" }, { status: 400 });
 
-  const max = Math.min(Math.max(1, Math.trunc(Number(body.max) || 30)), 500);
+  // Cap the request by the hard per-find limit (10k) AND the available credits, so
+  // the post-insert charge always succeeds (1 credit per new lead).
+  const max = Math.min(Math.max(1, Math.trunc(Number(body.max) || 30)), 10000, avail);
 
   // Unique project name (appends random id if the slug already exists).
   const { name: projectName } = store.uniqueProjectName(name, userId);
   const dir = store.safeProjectDir(store.slugify(projectName), userId);
+
+  // Short public id for support references (stable per project).
+  const publicId = Math.random().toString(36).slice(2, 8).toUpperCase();
 
   // Reject if there is already a live runner for this project.
   const state = store.readState(dir);
@@ -175,6 +176,7 @@ export async function POST(request) {
     slug: store.slugify(projectName),
     query: query || "",
     max: String(max),
+    publicId,
   });
 
   // Query the warehouse. A warehouse outage must return a clean error, not a 500.
@@ -185,6 +187,7 @@ export async function POST(request) {
       countryCode,
       service,
       minRating,
+      maxRating,
       centerLat,
       centerLng,
       radiusKm,
@@ -224,6 +227,7 @@ export async function POST(request) {
     running: false,
     queued: false,
     activePid: null,
+    publicId,
     message: "Leads loaded from warehouse",
     finishedAt: new Date().toISOString(),
     stages: {

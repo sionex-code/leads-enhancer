@@ -1,4 +1,5 @@
 import db from "../../../../../web/lib/db.cjs";
+import billing from "../../../../../web/lib/billing.cjs";
 import { detectChatbot } from "../../../../../web/lib/chatbot-detect.cjs";
 import { withBrowser } from "../../../../../web/lib/browser-pool.cjs";
 import { requireUser } from "../../../../../web/lib/session.js";
@@ -18,6 +19,15 @@ export async function POST(_request, context) {
   if (!lead) return Response.json({ error: "Lead not found" }, { status: 404 });
   if (!lead.website) return Response.json({ error: "This lead has no website to scan" }, { status: 400 });
 
+  // Costs CHATBOT_COST credits per website. Charge up front; refund if the scan errors.
+  const charge = await billing.consumeCredits(userId, billing.CHATBOT_COST, { reason: "chatbot", count: 1, project: lead.project });
+  if (!charge.ok) {
+    return Response.json(
+      { error: `Not enough credits — a chatbot scan costs ${billing.CHATBOT_COST} credits and you have ${charge.credits}.`, code: "insufficient_credits", credits: charge.credits },
+      { status: 402 }
+    );
+  }
+
   try {
     const r = await withBrowser((browser) => detectChatbot(lead.website, { browser }));
     const updated = await db.updateLeadScan(userId, id, {
@@ -29,8 +39,10 @@ export async function POST(_request, context) {
       http_status_text: r.httpStatusText || null,
       http_checked_at: new Date().toISOString(),
     });
-    return Response.json({ lead: updated, detection: r });
+    return Response.json({ lead: updated, detection: r, credits: charge.credits });
   } catch (err) {
+    // Refund the charge since the scan didn't complete.
+    await billing.addCredits(userId, billing.CHATBOT_COST, { reason: "refund", project: lead.project }).catch(() => {});
     return Response.json({ error: String(err.message || err) }, { status: 500 });
   }
 }

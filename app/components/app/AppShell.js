@@ -1,34 +1,46 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
   LayoutGrid,
   Database,
-  Star,
-  CreditCard,
+  List,
   PanelLeftClose,
   PanelLeftOpen,
   Menu,
   ShieldCheck,
   Plus,
+  HelpCircle,
 } from "lucide-react";
-import AccountWidget from "../AccountWidget";
+import AccountWidget, { useMe } from "../AccountWidget";
 import useSidebarCollapse from "../useSidebarCollapse";
+import Tour from "../Tour";
 import { Sheet, SheetContent } from "../ui/sheet";
 import { cn } from "../../lib/utils";
 
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
+// First-run guided tour steps. Each targets an element by its data-tour key; a
+// missing target just centers the copy so the tour still works on any page.
+const TOUR_STEPS = [
+  { key: "nav-new", title: "Find leads", body: "Start a new Google Maps search here. Pick a service, city and rating, then hit Find leads." },
+  { key: "nav-leads", title: "Your leads", body: "Every captured lead lands here. Filter, enrich, scan and export them." },
+  { key: "nav-lists", title: "Lists & favorites", body: "Save leads into named lists, or star them as favorites for quick access." },
+  { key: "credits", title: "Credits", body: "One balance for everything: 1 credit per new lead, 3 per audit, 5 per chatbot scan, 10 per full report." },
+  { key: "tour-button", title: "Replay anytime", body: "Click Tour up here whenever you want to see this walkthrough again." },
+];
+
 // "New search" (the find-leads start page) sits above a grouped "Projects" section
-// — Projects opens the workspace (?view=projects), with Leads + Watch list under the
-// same umbrella. Billing stays on its own below.
+// — Projects opens the workspace (?view=projects), with Leads + Lists under the same
+// umbrella. Billing lives in the account menu now (not the sidebar).
 const NEW_SEARCH = { key: "new", label: "New search", href: "/dashboard", icon: Plus };
 const PROJECT_NAV = [
   { key: "dashboard", label: "Projects", href: "/dashboard?view=projects", icon: LayoutGrid },
   { key: "leads", label: "Leads", href: "/leads", icon: Database },
-  { key: "watchlist", label: "Favorites", href: "/watchlist", icon: Star },
+  { key: "lists", label: "Lists", href: "/lists", icon: List },
 ];
-const FOOTER_NAV = [{ key: "billing", label: "Billing", href: "/billing", icon: CreditCard }];
 
 function Brand({ collapsed }) {
   return (
@@ -51,6 +63,7 @@ function NavItem({ item, active, collapsed, onNavigate, prominent }) {
     <Link
       href={href}
       onClick={onNavigate}
+      data-tour={`nav-${key}`}
       title={collapsed ? label : undefined}
       className={cn(
         "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
@@ -83,10 +96,6 @@ function NavLinks({ active, collapsed, onNavigate }) {
       {PROJECT_NAV.map((item) => (
         <NavItem key={item.key} item={item} active={active} collapsed={collapsed} onNavigate={onNavigate} />
       ))}
-      <div className={cn("h-px bg-border/60", collapsed ? "mx-auto my-1.5 w-8" : "my-1.5")} />
-      {FOOTER_NAV.map((item) => (
-        <NavItem key={item.key} item={item} active={active} collapsed={collapsed} onNavigate={onNavigate} />
-      ))}
     </nav>
   );
 }
@@ -94,9 +103,31 @@ function NavLinks({ active, collapsed, onNavigate }) {
 export default function AppShell({ active, title, subtitle, actions, sidebarExtra, children }) {
   const [collapsed, toggleCollapsed] = useSidebarCollapse();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const me = useMe();
+  const [tourOpen, setTourOpen] = useState(false);
+  const [tourHandled, setTourHandled] = useState(false);
+
+  // Auto-start the tour once for users who haven't seen it.
+  useEffect(() => {
+    if (me && me.onboarded === false && !tourHandled) {
+      setTourOpen(true);
+      setTourHandled(true);
+    }
+  }, [me, tourHandled]);
+
+  const closeTour = () => {
+    setTourOpen(false);
+    setTourHandled(true);
+    fetch(`${BASE_PATH}/api/onboarding`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ onboarded: true }),
+    }).catch(() => {});
+  };
 
   return (
     <div className="lf flex min-h-screen bg-background text-foreground">
+      <Tour steps={TOUR_STEPS} open={tourOpen} onClose={closeTour} />
       {/* Desktop sidebar */}
       <aside
         className={cn(
@@ -128,7 +159,7 @@ export default function AppShell({ active, title, subtitle, actions, sidebarExtr
           <div className="min-h-0 flex-1" />
         )}
 
-        <div className="border-t border-border/60">
+        <div className="border-t border-border/60" data-tour="credits">
           <AccountWidget collapsed={collapsed} />
         </div>
       </aside>
@@ -163,7 +194,18 @@ export default function AppShell({ active, title, subtitle, actions, sidebarExtr
             {title ? <h1 className="truncate text-base font-semibold leading-tight sm:text-lg">{title}</h1> : null}
             {subtitle ? <div className="truncate text-xs text-muted-foreground sm:text-sm">{subtitle}</div> : null}
           </div>
-          {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              data-tour="tour-button"
+              onClick={() => { setTourOpen(true); }}
+              title="Start the guided tour"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <HelpCircle className="h-4 w-4" /> <span className="hidden sm:inline">Tour</span>
+            </button>
+            {actions}
+          </div>
         </header>
 
         <main className="min-w-0 flex-1">{children}</main>

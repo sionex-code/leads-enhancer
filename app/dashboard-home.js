@@ -45,6 +45,7 @@ import { Input } from "./components/ui/input";
 import { Select } from "./components/ui/select";
 import { Progress } from "./components/ui/progress";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "./components/ui/table";
+import { InfoPopover } from "./components/ui/info-popover";
 import { cn, waMeLink, waState } from "./lib/utils";
 import { Socials, WaIcon, WaPhone } from "./components/SocialIcons";
 
@@ -66,6 +67,7 @@ const blankForm = {
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 const AUDIT_COST = 3; // credits per quick audit (mirrors billing.AUDIT_COST)
 const REPORT_COST = 10; // credits per website report (mirrors billing.REPORT_COST)
+const WORKSPACE_PAGE_SIZE = 200; // captured-leads table page size
 
 // Mirror of the server-side slugify so we can match the typed project name to a
 // project in the list (and know if THAT project — not the selected one — is busy).
@@ -78,6 +80,32 @@ function slugify(value) {
       .toLowerCase()
       .slice(0, 70) || "project"
   );
+}
+
+// Title-case a service label for display (values sent to the warehouse stay raw).
+function titleCase(s) {
+  return String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// Shared rating/reviews rule (matches the Leads page): show the review count
+// (0 when empty), and only show a star rating when there is at least one review.
+const OWNER_REPLY_INFO = "Being updated soon — this feature will be available shortly. If you upgraded today, you'll get bonus credits when we release it to existing users.";
+const HEALTH_INFO = (
+  <>
+    Real-Chrome audit score (0-100, higher is better). Perf = page speed, SEO = search readiness.
+    <span className="mt-2 flex flex-wrap gap-1">
+      <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 font-medium text-emerald-600">90-100 Good</span>
+      <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-600">50-89 Needs work</span>
+      <span className="rounded bg-red-500/15 px-1.5 py-0.5 font-medium text-red-600">0-49 Poor</span>
+    </span>
+  </>
+);
+function reviewCount(lead) {
+  const n = Number(lead.reviews);
+  return Number.isFinite(n) ? n : 0;
+}
+function showRating(lead) {
+  return lead.rating != null && lead.rating !== "" && reviewCount(lead) > 0;
 }
 
 async function jsonFetch(url, options = {}) {
@@ -165,15 +193,32 @@ function CapturedActions({ lead, busy = {}, onEnrich, onWhatsapp, onAudit, onRep
   );
 }
 
-// A plain-language legend so the numbers aren't cryptic. Shown above the table.
-function ScoreLegend() {
+// Dismissible "grabbed N leads" success alert shown after a find completes.
+// Dismisses on Esc, or a tap/click anywhere on the backdrop.
+function FindResultAlert({ result, onClose }) {
+  useEffect(() => {
+    if (!result) return;
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [result, onClose]);
+  if (!result) return null;
+  const { total = 0, inserted = 0, updated = 0 } = result;
   return (
-    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-      <strong className="font-medium text-foreground">Website health</strong>
-      <span>real-Chrome audit score (0-100, higher is better). Perf = page speed, SEO = search readiness.</span>
-      <span className="inline-flex items-center rounded-md bg-emerald-500/15 px-1.5 py-0.5 font-medium text-emerald-600">90-100 Good</span>
-      <span className="inline-flex items-center rounded-md bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-600">50-89 Needs work</span>
-      <span className="inline-flex items-center rounded-md bg-red-500/15 px-1.5 py-0.5 font-medium text-red-600">0-49 Poor</span>
+    <div className="fixed inset-0 z-[60] flex items-start justify-center bg-slate-950/30 p-4 pt-24" onClick={onClose}>
+      <div className="w-full max-w-md rounded-xl border border-emerald-500/40 bg-card p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600"><CheckCircle2 className="h-6 w-6" /></div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold">Grabbed {Number(total).toLocaleString()} {total === 1 ? "lead" : "leads"}</div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              <b className="text-foreground">{Number(inserted).toLocaleString()}</b> new · <b className="text-foreground">{Number(updated).toLocaleString()}</b> already saved (no extra charge).
+            </p>
+          </div>
+          <button onClick={onClose} aria-label="Dismiss" className="text-muted-foreground transition-colors hover:text-foreground"><X className="h-4 w-4" /></button>
+        </div>
+        <p className="mt-3 text-center text-xs text-muted-foreground">Tap anywhere or press Esc to dismiss</p>
+      </div>
     </div>
   );
 }
@@ -278,15 +323,15 @@ function Chip({ active, children, ...props }) {
 function CreditsPill() {
   const me = useMe();
   const ent = me?.entitlement;
-  const remaining = ent?.remaining;
-  const unlimited = ent?.active && (remaining === null || ent?.plan === "p49");
+  const unlimited = !!ent?.unlimited;
+  const credits = Number(ent?.credits || 0);
   const label = !me
     ? "…"
-    : !ent?.active
-      ? "No active plan"
-      : unlimited
-        ? "Unlimited leads"
-        : `${Number(remaining || 0).toLocaleString()} leads left`;
+    : unlimited
+      ? "Unlimited credits"
+      : credits > 0 || ent?.active
+        ? `${credits.toLocaleString()} credits left`
+        : "No active plan";
   return (
     <Link
       href="/billing"
@@ -360,6 +405,8 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   const [showChips, setShowChips] = useState(false);
   const [max, setMax] = useState("30");
   const [minRating, setMinRating] = useState("");
+  const [maxRating, setMaxRating] = useState("");
+  const [allCities, setAllCities] = useState(false);
   const [radiusKm, setRadiusKm] = useState(10);
   // center for the area picker map — kept in sync with selected city
   const [center, setCenter] = useState(() =>
@@ -414,15 +461,16 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
     setCityObj(nextCity);
     setCitySearch("");
     if (nextCity?.lat != null) setCenter({ lat: nextCity.lat, lng: nextCity.lng });
-    setQuery(buildQuery(service, nextCity, nextCountry));
+    setQuery(buildQuery(service, allCities ? null : nextCity, nextCountry));
   }
 
   function selectService(nextService) {
     setService(nextService);
-    setQuery(buildQuery(nextService, cityObj, country));
+    setQuery(buildQuery(nextService, allCities ? null : cityObj, country));
   }
 
   function selectCity(nextCityObj) {
+    setAllCities(false);
     setCityObj(nextCityObj);
     if (nextCityObj?.lat != null && nextCityObj?.lng != null) {
       setCenter({ lat: nextCityObj.lat, lng: nextCityObj.lng });
@@ -430,29 +478,38 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
     setQuery(buildQuery(service, nextCityObj, country));
   }
 
+  // "All cities" searches the whole country (no city/radius filter).
+  function selectAllCities() {
+    setAllCities(true);
+    setQuery(buildQuery(service, null, country));
+  }
+
   function submit(e) {
     e.preventDefault();
-    const cleanQuery = query.trim() || buildQuery(service, cityObj, country);
-    const isCustom = cleanQuery !== buildQuery(service, cityObj, country);
-    const name = isCustom ? projectNameFromQuery(cleanQuery) : quickProjectName(service, cityObj?.name || "");
+    const effectiveCity = allCities ? null : cityObj;
+    const cleanQuery = query.trim() || buildQuery(service, effectiveCity, country);
+    const isCustom = cleanQuery !== buildQuery(service, effectiveCity, country);
+    const cityLabel = allCities ? (country.name || "All cities") : cityObj?.name || "";
+    const name = isCustom ? projectNameFromQuery(cleanQuery) : quickProjectName(service, cityLabel);
     onFind({
       name,
       query: cleanQuery,
-      cityId: cityObj?.id || null,
+      cityId: allCities ? null : cityObj?.id || null,
       countryCode: country.code || "",
       service,
       minRating: minRating ? Number(minRating) : undefined,
-      centerLat: center.lat,
-      centerLng: center.lng,
-      radiusKm: Number(radiusKm) || 10,
-      max,
+      maxRating: maxRating ? Number(maxRating) : undefined,
+      centerLat: allCities ? undefined : center.lat,
+      centerLng: allCities ? undefined : center.lng,
+      radiusKm: allCities ? undefined : Number(radiusKm) || 10,
+      max: String(Math.min(10000, Math.max(1, Math.trunc(Number(max) || 30)))),
     });
   }
 
   // The chip browser uses the same city objects from the catalog
   const chipCityLabel = (c) => `${c.name}${c.admin ? ", " + c.admin : ""}`;
   // For the select dropdown value we use city id (or name as fallback)
-  const citySelectVal = cityObj?.id ?? cityObj?.name ?? "";
+  const citySelectVal = allCities ? "__all__" : cityObj?.id ?? cityObj?.name ?? "";
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:py-16">
@@ -504,12 +561,12 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
         </Button>
       </form>
 
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
         <label className="space-y-1">
           <span className="text-xs text-muted-foreground">Service</span>
-          <Select value={service} onChange={(e) => selectService(e.target.value)}>
+          <Select value={service} onChange={(e) => selectService(e.target.value)} className="capitalize">
             {catalogServices.map((item) => (
-              <option key={item.name} value={item.name}>{item.name}</option>
+              <option key={item.name} value={item.name}>{titleCase(item.name)}</option>
             ))}
           </Select>
         </label>
@@ -527,17 +584,23 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
             value={citySelectVal}
             onChange={(e) => {
               const val = e.target.value;
+              if (val === "__all__") { selectAllCities(); return; }
               const found = (country.cities || []).find((c) => String(c.id ?? c.name) === val);
               if (found) selectCity(found);
             }}
           >
+            <option value="__all__">All cities</option>
             {(country.cities || []).map((c) => (
               <option key={c.id ?? c.name} value={c.id ?? c.name}>{c.name}{c.admin ? `, ${c.admin}` : ""}</option>
             ))}
           </Select>
         </label>
         <label className="space-y-1">
-          <span className="text-xs text-muted-foreground">Min rating</span>
+          <span className="text-xs text-muted-foreground">Leads (max 10,000)</span>
+          <Input type="number" min={1} max={10000} value={max} onChange={(e) => setMax(e.target.value)} />
+        </label>
+        <label className="space-y-1">
+          <span className="text-xs text-muted-foreground">Rating ≥</span>
           <Select value={minRating} onChange={(e) => setMinRating(e.target.value)}>
             <option value="">Any</option>
             <option value="3">3.0+</option>
@@ -547,18 +610,29 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
           </Select>
         </label>
         <label className="space-y-1">
-          <span className="text-xs text-muted-foreground">Radius (km)</span>
-          <Input
-            type="number"
-            min={1}
-            max={50}
-            value={radiusKm}
-            onChange={(e) => setRadiusKm(Number(e.target.value) || 10)}
-          />
+          <span className="text-xs text-muted-foreground">Rating below</span>
+          <Select value={maxRating} onChange={(e) => setMaxRating(e.target.value)}>
+            <option value="">Any</option>
+            <option value="4.5">Under 4.5</option>
+            <option value="4">Under 4.0</option>
+            <option value="3.5">Under 3.5</option>
+            <option value="3">Under 3.0</option>
+          </Select>
         </label>
-        <label className="space-y-1">
-          <span className="text-xs text-muted-foreground">Leads</span>
-          <Input value={max} onChange={(e) => setMax(e.target.value)} />
+        <label className="space-y-1 sm:col-span-2">
+          <span className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>Radius</span>
+            <span className="font-medium text-foreground">{allCities ? "country-wide" : `${radiusKm} km`}</span>
+          </span>
+          <input
+            type="range"
+            min={1}
+            max={200}
+            value={radiusKm}
+            disabled={allCities}
+            onChange={(e) => setRadiusKm(Number(e.target.value) || 1)}
+            className="h-9 w-full cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-40"
+          />
         </label>
       </div>
 
@@ -661,6 +735,9 @@ export default function Dashboard({ view = "" }) {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [needPlan, setNeedPlan] = useState(false);
+  const [findResult, setFindResult] = useState(null); // dismissible "grabbed N leads" alert
+  const [hideSyncBanner, setHideSyncBanner] = useState(false); // dismiss the dbSync banner
+  const [tablePage, setTablePage] = useState(0); // captured-leads table pagination
   // Per-row state for the captured-leads table actions (enrich / whatsapp / report
   // / remove). The leads list itself is rebuilt from project status on every poll,
   // so action results and removals are kept in an overlay keyed by a stable lead
@@ -783,6 +860,9 @@ export default function Dashboard({ view = "" }) {
     };
   }, [selected, simpleMode]);
 
+  // Reset table pagination when switching projects.
+  useEffect(() => { setTablePage(0); }, [selected]);
+
   // Keep a live credit balance for the bulk audit/report cost warnings, and stop
   // the batch poller if the page unmounts mid-run.
   useEffect(() => {
@@ -800,14 +880,9 @@ export default function Dashboard({ view = "" }) {
   function ensureCanSearch() {
     const ent = entitlement;
     if (!ent) return true;
-    if (ent.active === false) {
+    if (!ent.unlimited && (ent.credits || 0) <= 0) {
       setNeedPlan(true);
-      setError("You need an active plan to find leads. Choose a plan to continue.");
-      return false;
-    }
-    if (ent.remaining != null && ent.remaining <= 0) {
-      setNeedPlan(true);
-      setError("Monthly lead quota reached. Upgrade your plan to find more leads.");
+      setError("You're out of credits. Choose a plan or top up to find more leads.");
       return false;
     }
     return true;
@@ -836,7 +911,7 @@ export default function Dashboard({ view = "" }) {
       return true;
     } catch (err) {
       setError(err.message);
-      if (err.code === "no_plan" || err.code === "quota_exceeded") setNeedPlan(true);
+      if (["no_plan", "quota_exceeded", "no_credits"].includes(err.code)) setNeedPlan(true);
       return false;
     } finally {
       setBusy("");
@@ -868,6 +943,7 @@ export default function Dashboard({ view = "" }) {
           countryCode: findParams.countryCode,
           service: findParams.service,
           minRating: findParams.minRating,
+          maxRating: findParams.maxRating,
           centerLat: findParams.centerLat,
           centerLng: findParams.centerLng,
           radiusKm: findParams.radiusKm,
@@ -875,12 +951,15 @@ export default function Dashboard({ view = "" }) {
         }),
       });
       setSelected(data.slug);
+      setHideSyncBanner(false);
+      setFindResult({ total: data.total ?? 0, inserted: data.inserted ?? 0, updated: data.updated ?? 0 });
+      refreshCredits();
       await loadProjects();
       await loadStatus(data.slug);
       router.push("/dashboard?view=projects");
     } catch (err) {
       setError(err.message);
-      if (err.code === "no_plan" || err.code === "quota_exceeded") setNeedPlan(true);
+      if (["no_plan", "quota_exceeded", "no_credits"].includes(err.code)) setNeedPlan(true);
     } finally {
       setBusy("");
     }
@@ -1183,6 +1262,12 @@ export default function Dashboard({ view = "" }) {
   const leads = (status?.leads || [])
     .map((l) => ({ ...l, ...(rowOverlay[leadKey(l)] || {}) }))
     .filter((l) => !l.__removed);
+  // Paginate the captured-leads table at 200/page so huge finds don't render
+  // thousands of rows at once.
+  const tablePageCount = Math.max(1, Math.ceil(leads.length / WORKSPACE_PAGE_SIZE));
+  const safeTablePage = Math.min(tablePage, tablePageCount - 1);
+  const pagedLeads = leads.slice(safeTablePage * WORKSPACE_PAGE_SIZE, safeTablePage * WORKSPACE_PAGE_SIZE + WORKSPACE_PAGE_SIZE);
+  const pageOffset = safeTablePage * WORKSPACE_PAGE_SIZE;
   // Trust either source: the projects list (authoritative, refreshed every tick)
   // or the selected project's status. This keeps the Stop button enabled even
   // when a status fetch is mid-flight or briefly stale after switching projects.
@@ -1209,7 +1294,7 @@ export default function Dashboard({ view = "" }) {
       : 0;
 
   // --- Bulk selection over the captured-leads table (keyed by leadKey) ---
-  const leadKeysOnPage = leads.map(leadKey);
+  const leadKeysOnPage = pagedLeads.map(leadKey);
   const selectedLeadObjs = leads.filter((l) => selectedLeads.has(leadKey(l)));
   const selectedCount = selectedLeadObjs.length;
   const reportableLeads = selectedLeadObjs.filter((l) => l.website);
@@ -1502,6 +1587,7 @@ export default function Dashboard({ view = "" }) {
           {toast}
         </div>
       )}
+      <FindResultAlert result={findResult} onClose={() => setFindResult(null)} />
       <div className="space-y-5 p-4 sm:p-6">
         {/* Mobile project switcher */}
         {projects.length > 0 && (
@@ -1523,21 +1609,34 @@ export default function Dashboard({ view = "" }) {
           </div>
         )}
 
-        {/* Run form */}
+        {/* Stats — at the top of the workspace */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <StatCard value={status?.counts?.raw || 0} label="Scraped leads" />
+          <StatCard value={status?.counts?.websites || 0} label="Websites" />
+          <StatCard value={status?.counts?.enriched || 0} label="Enriched rows" />
+          <StatCard value={status?.counts?.desktopAudits || 0} label="Desktop audits" />
+          <StatCard value={status?.counts?.mobileAudits || 0} label="Mobile audits" />
+        </div>
+
+        {/* Project details (read-only on an existing project) */}
         <Card>
           <CardContent className="space-y-4 p-4">
-            <div className="grid gap-3 sm:grid-cols-[1.2fr_2fr_0.6fr]">
+            <div className="grid gap-3 sm:grid-cols-[1.2fr_2fr_0.6fr_0.9fr]">
               <label className="space-y-1">
                 <span className="text-xs font-medium text-muted-foreground">Project</span>
-                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                <Input value={form.name} readOnly className="cursor-default bg-muted/40" title={form.name} />
               </label>
               <label className="space-y-1">
                 <span className="text-xs font-medium text-muted-foreground">Maps query</span>
-                <Input value={form.query} onChange={(e) => setForm({ ...form, query: e.target.value })} />
+                <Input value={form.query} readOnly className="cursor-default bg-muted/40" title={form.query} />
               </label>
               <label className="space-y-1">
                 <span className="text-xs font-medium text-muted-foreground">Leads</span>
-                <Input value={form.max} onChange={(e) => setForm({ ...form, max: e.target.value })} />
+                <Input value={form.max} readOnly className="cursor-default bg-muted/40" />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-medium text-muted-foreground">Project ID</span>
+                <Input value={status?.state?.publicId || selected || ""} readOnly className="cursor-default bg-muted/40 font-mono uppercase tracking-wide" title="Share this ID with support" />
               </label>
             </div>
             {formRunning && (
@@ -1546,10 +1645,6 @@ export default function Dashboard({ view = "" }) {
               </div>
             )}
             <div className="flex flex-wrap gap-2">
-              <Button disabled={!!busy || formRunning} onClick={() => run(["scrape", "enrich", "whatsapp", "audit", "report"])}>
-                <Play size={16} /> Run all
-              </Button>
-              <Button variant="secondary" disabled={!!busy || formRunning} onClick={() => run(["scrape"])}><Search size={16} /> Find leads</Button>
               <Button variant="secondary" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("enrich")} title="Grab email + socials for captured leads not enriched yet (realtime, no queue; shared with all users)">
                 {bulkBusy === "enrich" ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />} Enrich{realtimeBatch?.kind === "enrich" ? ` (${realtimeBatch.done}/${realtimeBatch.total})` : ""}
               </Button>
@@ -1572,11 +1667,11 @@ export default function Dashboard({ view = "" }) {
               >
                 {bulkBusy === "report" ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />} Report{leadsWithSite ? ` (${leadsWithSite})` : ""}
               </Button>
-              <Button variant="outline" disabled={!!busy || running || !selected} onClick={() => projectAction("resume")}><RotateCcw size={16} /> Resume</Button>
-              <Button variant="outline" disabled={!!busy || !running} onClick={() => projectAction("stop")}><PauseCircle size={16} /> Stop</Button>
-              <Button variant="destructive" disabled={!!busy || runningCount === 0} onClick={stopAllProjects} title="Stop every running project and any audit/Chrome processes still running in the background">
-                <OctagonX size={16} /> Stop all{runningCount > 0 ? ` (${runningCount})` : ""}
-              </Button>
+              {running ? (
+                <Button variant="outline" disabled={!!busy} onClick={() => projectAction("stop")}><PauseCircle size={16} /> Stop</Button>
+              ) : (
+                <Button variant="outline" disabled={!!busy || !selected} onClick={() => projectAction("resume")}><RotateCcw size={16} /> Resume</Button>
+              )}
               {status?.files?.report && (
                 <Button asChild variant="outline">
                   <a href={`${BASE_PATH}/api/projects/${encodeURIComponent(selected)}/report`} target="_blank" rel="noreferrer"><Globe2 size={16} /> Open report</a>
@@ -1612,17 +1707,9 @@ export default function Dashboard({ view = "" }) {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          <StatCard value={status?.counts?.raw || 0} label="Scraped leads" />
-          <StatCard value={status?.counts?.websites || 0} label="Websites" />
-          <StatCard value={status?.counts?.enriched || 0} label="Enriched rows" />
-          <StatCard value={status?.counts?.desktopAudits || 0} label="Desktop audits" />
-          <StatCard value={status?.counts?.mobileAudits || 0} label="Mobile audits" />
-        </div>
-
         {/* Credit clarity: only leads new to your account are charged; duplicates you
             already have (matched by website/phone/name) are merged for free. */}
-        {status?.state?.dbSync && (
+        {status?.state?.dbSync && !hideSyncBanner && (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border bg-card/40 px-3 py-2 text-xs text-muted-foreground">
             <CreditCard size={13} className="shrink-0 text-primary" />
             <span>
@@ -1634,21 +1721,17 @@ export default function Dashboard({ view = "" }) {
               <b className="font-semibold text-foreground">{Number(status.state.dbSync.updated || 0).toLocaleString()}</b>
               {" "}were already in your saved leads (no extra charge)
             </span>
+            <button onClick={() => setHideSyncBanner(true)} aria-label="Dismiss" className="ml-auto text-muted-foreground transition-colors hover:text-foreground"><X size={13} /></button>
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-3 gap-3">
           <Stage title="Find leads" stage={busy?.includes("scrape") && !stages.scrape ? { status: "starting" } : stages.scrape} />
           <Stage title="Enrich" stage={stages.enrich} />
           <Stage title="WhatsApp" stage={stages.whatsapp} />
-          <Stage title="Desktop" stage={stages["audit-desktop"]} />
-          <Stage title="Mobile" stage={stages["audit-mobile"]} />
-          <Stage title="Report" stage={stages.report} />
         </div>
 
         <EnrichProgress progress={status?.enrichProgress} stage={stages.enrich} />
-
-        <ScoreLegend />
 
         {/* Bulk action bar — add to a list, audit, report, or remove the selection */}
         {selectedCount > 0 && (
@@ -1704,7 +1787,8 @@ export default function Dashboard({ view = "" }) {
             <>
               {/* Mobile cards */}
               <div className="space-y-3 p-3 md:hidden">
-                {leads.map((lead, index) => {
+                {pagedLeads.map((lead, idx) => {
+                  const index = pageOffset + idx;
                   const key = leadKey(lead);
                   const ownerReplied = lead.owner_replied;
                   return (
@@ -1730,8 +1814,8 @@ export default function Dashboard({ view = "" }) {
                     {lead.email && <div className="mt-1 text-sm"><a className="max-w-[200px] truncate text-primary hover:underline" href={`mailto:${lead.email}`} title={lead.email} onClick={(e) => e.stopPropagation()}>{lead.email}</a></div>}
                     {/* #11 rating / reviews / owner reply chips */}
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                      {lead.rating != null && <span className="inline-flex items-center gap-0.5 rounded-md bg-amber-500/10 px-1.5 py-0.5 font-medium text-amber-700"><Star size={10} fill="currentColor" /> {lead.rating}</span>}
-                      {lead.reviews != null && <span>{Number(lead.reviews).toLocaleString()} reviews</span>}
+                      {showRating(lead) && <span className="inline-flex items-center gap-0.5 rounded-md bg-amber-500/10 px-1.5 py-0.5 font-medium text-amber-700"><Star size={10} fill="currentColor" /> {lead.rating}</span>}
+                      <span>{reviewCount(lead).toLocaleString()} reviews</span>
                       {ownerReplied === 1 && <span className="text-emerald-600">Owner replied ({lead.owner_reply_count || 0})</span>}
                       {ownerReplied === 0 && <span>Owner: no reply</span>}
                     </div>
@@ -1765,16 +1849,17 @@ export default function Dashboard({ view = "" }) {
                       <TableHead>Contact</TableHead>
                       <TableHead>Rating</TableHead>
                       <TableHead>Reviews</TableHead>
-                      <TableHead>Owner reply</TableHead>
+                      <TableHead><span className="inline-flex items-center gap-1">Owner reply <InfoPopover label="About owner reply">{OWNER_REPLY_INFO}</InfoPopover></span></TableHead>
                       <TableHead>Website</TableHead>
                       <TableHead>Socials</TableHead>
-                      <TableHead>Desktop health</TableHead>
+                      <TableHead><span className="inline-flex items-center gap-1">Desktop health <InfoPopover label="About website health">{HEALTH_INFO}</InfoPopover></span></TableHead>
                       <TableHead>Mobile health</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {leads.map((lead, index) => {
+                    {pagedLeads.map((lead, idx) => {
+                      const index = pageOffset + idx;
                       const key = leadKey(lead);
                       const ownerReplied = lead.owner_replied;
                       return (
@@ -1804,20 +1889,15 @@ export default function Dashboard({ view = "" }) {
                             : <span className="text-xs text-muted-foreground">{lead.enrichStatus || "-"}</span>
                           }
                         </TableCell>
-                        {/* #11 Rating column */}
+                        {/* #11 Rating column — only meaningful with reviews */}
                         <TableCell className="text-sm">
-                          {lead.rating != null
+                          {showRating(lead)
                             ? <span className="inline-flex items-center gap-0.5 font-medium"><Star size={12} className="text-amber-500" fill="currentColor" /> {lead.rating}</span>
                             : <span className="text-xs text-muted-foreground">-</span>
                           }
                         </TableCell>
-                        {/* #11 Reviews column */}
-                        <TableCell className="text-sm">
-                          {lead.reviews != null
-                            ? Number(lead.reviews).toLocaleString()
-                            : <span className="text-xs text-muted-foreground">-</span>
-                          }
-                        </TableCell>
+                        {/* #11 Reviews column — 0 when empty */}
+                        <TableCell className="text-sm tabular-nums">{reviewCount(lead).toLocaleString()}</TableCell>
                         {/* #11 Owner reply column */}
                         <TableCell className="text-sm">
                           {ownerReplied === 1
@@ -1853,6 +1933,17 @@ export default function Dashboard({ view = "" }) {
             </>
           )}
         </Card>
+
+        {/* Pager — 200 leads per page */}
+        {tablePageCount > 1 && (
+          <div className="flex items-center justify-center gap-4">
+            <Button variant="outline" size="sm" disabled={safeTablePage === 0} onClick={() => setTablePage((n) => Math.max(0, n - 1))}>Previous</Button>
+            <span className="text-xs text-muted-foreground">
+              {pageOffset + 1}-{Math.min(pageOffset + WORKSPACE_PAGE_SIZE, leads.length)} of {leads.length.toLocaleString()} · page {safeTablePage + 1} of {tablePageCount}
+            </span>
+            <Button variant="outline" size="sm" disabled={safeTablePage >= tablePageCount - 1} onClick={() => setTablePage((n) => Math.min(tablePageCount - 1, n + 1))}>Next</Button>
+          </div>
+        )}
       </div>
       {reportLead && <ReportModal lead={reportLead} onClose={() => setReportLead(null)} onCharged={(c) => { if (typeof c === "number") setCredits(c); }} />}
       {listsLead && (

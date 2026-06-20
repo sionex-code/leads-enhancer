@@ -542,6 +542,7 @@ async function queryLeads(
     search = "",
     hasEmail = false,
     hasPhone = false,
+    hasWebsite = "",
     minScore = 0,
     project = "",
     country = "",
@@ -571,6 +572,8 @@ async function queryLeads(
   }
   if (hasEmail) where.push("email IS NOT NULL AND email != ''");
   if (hasPhone) where.push("phone IS NOT NULL AND phone != ''");
+  if (hasWebsite === "yes") where.push("website IS NOT NULL AND website != ''");
+  if (hasWebsite === "no") where.push("(website IS NULL OR website = '')");
   if (project) where.push(`lower(project) = lower(${add(project)})`);
   if (country) where.push(`lower(country) = lower(${add(country)})`);
   if (city) where.push(`lower(city) = lower(${add(city)})`);
@@ -947,8 +950,24 @@ async function exportCsv(userId) {
   return lines.join("");
 }
 
+// ---- first-run guided tour flag --------------------------------------------
+async function isOnboarded(userId) {
+  try {
+    const { rows } = await q(`SELECT onboarded FROM users WHERE id = $1`, [userId]);
+    return !!(rows[0] && rows[0].onboarded);
+  } catch {
+    return true; // never block the app if the column/query hiccups
+  }
+}
+async function setOnboarded(userId, val = true) {
+  await q(`UPDATE users SET onboarded = $1 WHERE id = $2`, [val ? 1 : 0, userId]);
+  return !!val;
+}
+
 module.exports = {
   hostOf,
+  isOnboarded,
+  setOnboarded,
   dedupKey,
   parseLocation,
   normalizeProxyUrl,

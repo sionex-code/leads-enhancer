@@ -35,6 +35,9 @@
   }
   html {
     color-scheme: light;
+    /* Firefox: thumb + track in the brand accent. */
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary) / 0.6) transparent;
   }
   body {
     background-color: hsl(var(--background));
@@ -46,10 +49,10 @@
   ::selection {
     background: hsl(var(--primary) / 0.25);
   }
-  /* Slim, themed scrollbars to match the light UI. */
+  /* Slim scrollbars in the brand accent (Chrome/Safari/Edge). */
   ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
   }
   ::-webkit-scrollbar-thumb {
     background: hsl(var(--primary) / 0.6);

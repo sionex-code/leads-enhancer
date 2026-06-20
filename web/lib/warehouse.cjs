@@ -228,6 +228,7 @@ async function queryLeads(filters = {}) {
     cityId,
     service,
     minRating,
+    maxRating,
     centerLat,
     centerLng,
     radiusKm,
@@ -235,7 +236,7 @@ async function queryLeads(filters = {}) {
     offset: rawOffset,
   } = filters;
 
-  const limit = Math.min(Number(rawLimit) || 50, 500);
+  const limit = Math.min(Number(rawLimit) || 50, 10000);
   const offset = Number(rawOffset) || 0;
 
   const pool = getPool();
@@ -275,6 +276,11 @@ async function queryLeads(filters = {}) {
   // Min rating filter
   if (minRating != null) {
     where.push(`NULLIF(leads.rating, '')::real >= ${addParam(Number(minRating))}`);
+  }
+
+  // Max rating filter ("rating less than")
+  if (maxRating != null) {
+    where.push(`NULLIF(leads.rating, '')::real < ${addParam(Number(maxRating))}`);
   }
 
   // Radius: bounding box in SQL, haversine refinement in JS

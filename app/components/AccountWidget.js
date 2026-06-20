@@ -20,7 +20,7 @@ const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 // Scale). The old p49/p99 mapping linked checkout to ?plan=p99, which the server
 // rejects as "Unknown plan", so upgrades silently failed.
 const PLAN_LABEL = { p19: "Starter", p35: "Growth", p49: "Scale" };
-const PLAN_QUOTA = { p19: 5000, p35: 50000, p49: null };
+const PLAN_RANK = { p19: 1, p35: 2, p49: 3 };
 
 export function useMe(pollMs = 10000) {
   const [me, setMe] = useState(null);
@@ -51,23 +51,26 @@ export default function AccountWidget({ collapsed = false }) {
   const email = me?.user?.email || "";
   const initial = (email || "?").slice(0, 1).toUpperCase();
 
-  const quota = planKey ? PLAN_QUOTA[planKey] : undefined;
-  const remaining = ent?.remaining;
-  const unlimited = ent?.active && (remaining === null || planKey === "p49");
-  const used = quota && remaining != null ? Math.max(0, quota - remaining) : 0;
-  const pct = quota && remaining != null ? Math.min(100, (used / quota) * 100) : ent?.active ? 100 : 0;
-  const quotaText = !ent || !ent.active
-    ? "No active plan"
-    : unlimited
-      ? "Unlimited leads"
-      : `${Number(remaining || 0).toLocaleString()} leads left`;
+  // One unified credit pool. Show the credit balance; usage bar vs the monthly grant.
+  const unlimited = !!ent?.unlimited;
+  const credits = Number(ent?.credits || 0);
+  const monthly = ent?.monthly != null ? Number(ent.monthly) : null;
+  const used = monthly != null ? Math.max(0, monthly - credits) : 0;
+  const pct = monthly ? Math.min(100, (used / monthly) * 100) : credits > 0 ? 0 : 0;
+  const quotaText = unlimited
+    ? "Unlimited credits"
+    : credits > 0 || ent?.active
+      ? `${credits.toLocaleString()} credits left`
+      : "No active plan";
 
+  // Only ever offer an UPGRADE (a higher tier than the current one).
   const PLANS = [
-    { id: "p19", label: "Starter ($19)" },
-    { id: "p35", label: "Growth ($35)" },
-    { id: "p49", label: "Scale ($49)" },
+    { id: "p19", label: "Starter ($19)", rank: 1 },
+    { id: "p35", label: "Growth ($35)", rank: 2 },
+    { id: "p49", label: "Scale ($49)", rank: 3 },
   ];
-  const offerable = me ? PLANS.filter((p) => p.id !== planKey) : [];
+  const currentRank = ent?.active ? PLAN_RANK[planKey] || 0 : 0;
+  const offerable = me ? PLANS.filter((p) => p.rank > currentRank) : [];
 
   if (collapsed) {
     return (
@@ -113,7 +116,7 @@ export default function AccountWidget({ collapsed = false }) {
             {offerable.map((p) => (
               <DropdownMenuItem key={p.id} asChild>
                 <a href={`${BASE_PATH}/api/billing/checkout?plan=${p.id}`}>
-                  <Sparkles className="h-4 w-4 text-primary" /> {ent?.active ? "Switch to" : "Get"} {p.label}
+                  <Sparkles className="h-4 w-4 text-primary" /> {ent?.active ? "Upgrade to" : "Get"} {p.label}
                 </a>
               </DropdownMenuItem>
             ))}
@@ -127,7 +130,7 @@ export default function AccountWidget({ collapsed = false }) {
         <div className="mt-3 space-y-1.5">
           <div className="flex items-center justify-between text-[11px]">
             <span className={cn("font-medium", ent?.active ? "text-foreground" : "text-amber-600")}>{quotaText}</span>
-            {!unlimited && quota ? <span className="text-muted-foreground">{used.toLocaleString()}/{quota.toLocaleString()}</span> : null}
+            {!unlimited && monthly ? <span className="text-muted-foreground">{used.toLocaleString()}/{monthly.toLocaleString()}</span> : null}
           </div>
           <Progress value={pct} className="h-1.5" indicatorClassName={ent?.active ? "bg-primary" : "bg-amber-500"} />
           {!ent?.active && (

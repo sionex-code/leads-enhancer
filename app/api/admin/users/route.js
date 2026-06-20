@@ -11,9 +11,18 @@ export const runtime = "nodejs";
 //   POST /api/admin/users { userId, action:"credits", mode:"add"|"set", amount }
 //   POST /api/admin/users { userId, action:"ban", banned:true|false }
 //   Plan keys MUST match billing.cjs: p19 Starter · p35 Growth · p49 Scale.
-export async function GET() {
+export async function GET(request) {
   const { response } = await requireAdmin();
   if (response) return response;
+  // GET /api/admin/users?history=<userId>&page=N -> that user's credit ledger.
+  const { searchParams } = new URL(request.url);
+  const historyUser = searchParams.get("history");
+  if (historyUser) {
+    const page = Math.max(1, parseInt(searchParams.get("page"), 10) || 1);
+    const pageSize = 12;
+    const { rows, total } = await billing.listCreditTransactions(historyUser, { limit: pageSize, offset: (page - 1) * pageSize });
+    return Response.json({ rows, total, page, pageSize, pages: Math.max(1, Math.ceil(total / pageSize)) });
+  }
   const users = await billing.listUsersWithEntitlement();
   return Response.json({ users });
 }

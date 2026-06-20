@@ -91,6 +91,9 @@ const STATEMENTS = [
   // ---- account ban flag (admin) ----
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS banned integer NOT NULL DEFAULT 0`,
 
+  // ---- first-run guided tour seen flag ----
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarded integer NOT NULL DEFAULT 0`,
+
   // sensible defaults for the free monthly grant (only inserted if absent)
   `INSERT INTO app_settings (key, value, updated_at)
      VALUES ('free_monthly_credits_enabled', '1', now()::text)

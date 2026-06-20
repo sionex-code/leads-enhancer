@@ -35,12 +35,12 @@ const STEPS = [
 ];
 
 const PLANS = [
-  { id: "p19", name: "Starter", price: "19", quota: "5,000 leads / month", popular: false,
-    perks: ["5,000 enriched leads / mo", "Email + social enrichment", "Website health checks", "CSV export"] },
-  { id: "p49", name: "Growth", price: "49", quota: "50,000 leads / month", popular: true,
-    perks: ["50,000 enriched leads / mo", "Everything in Starter", "Priority in the job queue", "WhatsApp checks"] },
-  { id: "p99", name: "Scale", price: "99", quota: "Unlimited leads / month", popular: false,
-    perks: ["Unlimited leads / mo", "Everything in Growth", "Highest queue priority", "Best for agencies"] },
+  { id: "p19", name: "Starter", price: "19", quota: "5,000 credits / month", popular: false,
+    perks: ["5,000 credits / mo", "Email + social enrichment", "Website health checks", "CSV export"] },
+  { id: "p35", name: "Growth", price: "35", quota: "50,000 credits / month", popular: true,
+    perks: ["50,000 credits / mo", "Everything in Starter", "Priority in the job queue", "WhatsApp checks"] },
+  { id: "p49", name: "Scale", price: "49", quota: "Unlimited credits / month", popular: false,
+    perks: ["Unlimited credits / mo", "Everything in Growth", "Highest queue priority", "Best for agencies"] },
 ];
 
 const FAQ = [
@@ -207,8 +207,8 @@ export default function Landing({ checkout = {} }) {
       <section id="pricing" className="container py-20">
         <div className="mx-auto mb-12 max-w-2xl text-center">
           <Badge variant="secondary" className="mb-4">Pricing</Badge>
-          <h2 className="text-3xl font-bold tracking-tight">Simple, lead-based pricing</h2>
-          <p className="mt-3 text-muted-foreground">Pick a monthly lead quota. Upgrade or cancel anytime.</p>
+          <h2 className="text-3xl font-bold tracking-tight">Simple, credit-based pricing</h2>
+          <p className="mt-3 text-muted-foreground">Pick a monthly credit pack. Upgrade or cancel anytime.</p>
         </div>
         <div className="mx-auto grid max-w-5xl items-start gap-6 lg:grid-cols-3">
           {PLANS.map((plan) => (

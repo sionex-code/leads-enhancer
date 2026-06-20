@@ -10,8 +10,8 @@ export default async function Page() {
   if (session?.user) redirect("/dashboard");
   const checkout = {
     p19: process.env.WHOP_CHECKOUT_19 || "",
+    p35: process.env.WHOP_CHECKOUT_35 || "",
     p49: process.env.WHOP_CHECKOUT_49 || "",
-    p99: process.env.WHOP_CHECKOUT_99 || "",
   };
   return <Landing checkout={checkout} />;
 }

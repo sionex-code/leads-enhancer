@@ -1,4 +1,5 @@
 import db from "../../../../web/lib/db.cjs";
+import billing from "../../../../web/lib/billing.cjs";
 import { checkStatus } from "../../../../web/lib/http-status.cjs";
 import { detectChatbot } from "../../../../web/lib/chatbot-detect.cjs";
 import { withBrowser } from "../../../../web/lib/browser-pool.cjs";
@@ -42,6 +43,19 @@ export async function POST(request) {
     return Response.json({ ok: true, count: results.length, leads: results });
   }
 
+  // chatbot: costs CHATBOT_COST credits per website. Charge up front, refund any
+  // site that fails to scan (mirrors the bulk-audit billing).
+  const count = leads.length;
+  const cost = billing.CHATBOT_COST * count;
+  const charge = await billing.consumeCredits(userId, cost, { reason: "chatbot", count, project: leads[0]?.project });
+  if (!charge.ok) {
+    return Response.json(
+      { error: `Not enough credits — scanning ${count} site(s) needs ${cost} credits and you have ${charge.credits}.`, code: "insufficient_credits", cost, count, credits: charge.credits },
+      { status: 402 }
+    );
+  }
+
+  let failed = 0;
   // chatbot: reuse the pooled browser to avoid launching dozens of Chrome procs.
   await withBrowser(async (browser) => {
     for (const lead of leads) {
@@ -58,9 +72,12 @@ export async function POST(request) {
         });
         results.push(updated);
       } catch (err) {
+        failed++;
         results.push({ id: lead.id, error: String(err.message || err) });
       }
     }
   });
-  return Response.json({ ok: true, count: results.length, leads: results });
+  let credits = charge.credits;
+  if (failed) credits = await billing.addCredits(userId, failed * billing.CHATBOT_COST, { reason: "refund", project: leads[0]?.project });
+  return Response.json({ ok: true, count: results.length, leads: results, charged: cost - failed * billing.CHATBOT_COST, credits });
 }

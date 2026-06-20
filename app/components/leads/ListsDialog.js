@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 

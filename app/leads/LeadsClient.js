@@ -38,6 +38,7 @@ import { Textarea } from "../components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Sheet, SheetContent } from "../components/ui/sheet";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/table";
+import { InfoPopover } from "../components/ui/info-popover";
 import { cn, waMeLink, waState } from "../lib/utils";
 import { Socials, WaIcon, WaPhone } from "../components/SocialIcons";
 
@@ -47,6 +48,30 @@ const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 const PAGE_SIZE = 120;
 const REPORT_COST = 10; // credits per website report (mirrors billing.REPORT_COST)
 const AUDIT_COST = 3; // credits per quick audit (mirrors billing.AUDIT_COST)
+const CHATBOT_COST = 5; // credits per website chatbot scan (mirrors billing.CHATBOT_COST)
+
+// Explanations surfaced behind (i) icons in the table headers.
+const HEALTH_INFO = (
+  <>
+    Real-Chrome audit score (0-100, higher is better). Perf = page speed, SEO = search readiness.
+    <span className="mt-2 flex flex-wrap gap-1">
+      <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 font-medium text-emerald-600">90-100 Good</span>
+      <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-600">50-89 Needs work</span>
+      <span className="rounded bg-red-500/15 px-1.5 py-0.5 font-medium text-red-600">0-49 Poor</span>
+    </span>
+  </>
+);
+const OWNER_REPLY_INFO = "Being updated soon — this feature will be available shortly. If you upgraded today, you'll get bonus credits when we release it to existing users.";
+
+// Rendering rule: a rating only means something with reviews. Show the review
+// count (0 when empty), and only show the star rating when there is at least 1 review.
+function reviewCount(lead) {
+  const n = Number(lead.reviews);
+  return Number.isFinite(n) ? n : 0;
+}
+function showRating(lead) {
+  return lead.rating != null && lead.rating !== "" && reviewCount(lead) > 0;
+}
 
 const WORKFLOWS = [
   // "All leads" tab intentionally hidden for the SaaS launch.
@@ -365,7 +390,7 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot, on
         </header>
 
         <div className="space-y-4 p-5">
-          <DrawerCard title="Workflow">
+          <DrawerCard title="Email status">
             <div className="grid grid-cols-2 gap-2">
               <button className={cn("flex flex-col items-center gap-1 rounded-lg border p-3 text-sm transition-colors", lead.watchlist ? "border-amber-500/50 bg-amber-500/10 text-amber-600" : "border-border hover:bg-accent")} onClick={() => patch({ watchlist: !lead.watchlist })}>
                 <Star size={16} fill={lead.watchlist ? "currentColor" : "none"} />
@@ -524,7 +549,7 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot, on
   );
 }
 
-export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead manager", activeNav = "leads" }) {
+export default function LeadsPage({ initialWorkflow = "", initialList = "", pageTitle = "Lead manager", activeNav = "leads" }) {
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [stats, setStats] = useState(null);
@@ -537,6 +562,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
   const [cities, setCities] = useState([]);
   const [workflow, setWorkflow] = useState(initialWorkflow);
   const [hasEmail, setHasEmail] = useState(false);
+  const [hasWebsite, setHasWebsite] = useState(""); // "" | "yes" | "no"
   const [minScore, setMinScore] = useState(0);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -561,7 +587,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
   const loadRef = useRef(null);
   // Named lists: the user's lists, the active list filter, and the open dialog.
   const [lists, setLists] = useState([]);
-  const [listFilter, setListFilter] = useState("");
+  const [listFilter, setListFilter] = useState(initialList);
   const [listDialog, setListDialog] = useState(null);
   // Tiny self-dismissing toast for quick confirmations (favorite, mark sent, …).
   const [toast, setToast] = useState("");
@@ -670,6 +696,30 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
       setBatchBusy("");
     }
   }, [rows, mergeLead]);
+
+  // Bulk chatbot scan over the SELECTED leads with a website. Costs CHATBOT_COST
+  // credits per site (charged server-side); confirm the cost first.
+  const bulkChatbot = useCallback(async () => {
+    const ids = rows.filter((r) => r.website && selected.has(r.id)).map((r) => r.id);
+    if (!ids.length) {
+      alert("Select one or more leads that have a website first.");
+      return;
+    }
+    const cost = ids.length * CHATBOT_COST;
+    if (!confirm(`Scan ${ids.length} site(s) for chatbots? This costs ${CHATBOT_COST} credits each = ${cost} credits.`)) return;
+    setBulkBusy("chatbot");
+    try {
+      const data = await jsonFetch(`/api/leads/scan`, { method: "POST", body: JSON.stringify({ ids, action: "chatbot" }) });
+      for (const lead of data.leads || []) {
+        if (lead && lead.id && !lead.error) mergeLead(lead);
+      }
+      if (typeof data.credits === "number") setCredits(data.credits);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setBulkBusy("");
+    }
+  }, [rows, selected, mergeLead]);
 
   // Keep a live credit balance for the bulk-report cost warning.
   useEffect(() => {
@@ -887,6 +937,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
       if (city) params.set("city", city);
       if (workflow) params.set("workflow", workflow);
       if (hasEmail) params.set("hasEmail", "1");
+      if (hasWebsite) params.set("hasWebsite", hasWebsite);
       if (minScore) params.set("minScore", String(minScore));
       if (listFilter) params.set("list", listFilter);
       params.set("limit", String(PAGE_SIZE));
@@ -908,12 +959,12 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
     } finally {
       setLoading(false);
     }
-  }, [active?.id, city, country, hasEmail, listFilter, minScore, page, project, search, workflow]);
+  }, [active?.id, city, country, hasEmail, hasWebsite, listFilter, minScore, page, project, search, workflow]);
   loadRef.current = load; // keep the batch poller's refresh hook pointed at the latest load
 
   useEffect(() => {
     setPage(0);
-  }, [city, country, hasEmail, initialWorkflow, minScore, project, search, workflow]);
+  }, [city, country, hasEmail, hasWebsite, initialWorkflow, minScore, project, search, workflow]);
 
   useEffect(() => {
     setWorkflow(initialWorkflow);
@@ -952,14 +1003,16 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
     return () => clearTimeout(id);
   }, [load]);
 
+  // A clear, non-overlapping overview. Each tile applies a single concrete filter
+  // (the old "Email ready / Queued / Sent" mix was confusing).
+  const clearFilters = () => { setWorkflow(""); setHasEmail(false); setHasWebsite(""); };
   const statTiles = [
-    ["Total", stats?.total || 0, ""],
-    ["Favorites", stats?.watchlist || 0, "watchlist"],
-    ["Custom list", stats?.contactList || 0, "contacts"],
-    ["Email ready", stats?.emailReady || 0, "email-ready"],
-    ["Queued", stats?.queued || 0, "queued"],
-    ["Sent", stats?.sent || 0, "sent"],
-    ["Done", stats?.completed || 0, "complete"],
+    { label: "Total", value: stats?.total || 0, onClick: clearFilters, active: !workflow && !hasEmail && !hasWebsite },
+    { label: "With email", value: stats?.withEmail || 0, onClick: () => { setWorkflow(""); setHasWebsite(""); setHasEmail(true); }, active: hasEmail },
+    { label: "With website", value: stats?.withWebsite || 0, onClick: () => { setWorkflow(""); setHasEmail(false); setHasWebsite("yes"); }, active: hasWebsite === "yes" },
+    { label: "Favorites", value: stats?.watchlist || 0, onClick: () => setWorkflow("watchlist"), active: workflow === "watchlist" },
+    { label: "In a list", value: stats?.contactList || 0, onClick: () => setWorkflow("contacts"), active: workflow === "contacts" },
+    { label: "Contacted", value: stats?.completed || 0, onClick: () => setWorkflow("complete"), active: workflow === "complete" },
   ];
   const pageStart = total && rows.length ? page * PAGE_SIZE + 1 : 0;
   const pageEnd = total && rows.length ? page * PAGE_SIZE + rows.length : 0;
@@ -973,9 +1026,11 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
   const reportableCount = rows.filter((r) => r.website && selected.has(r.id)).length;
   const reportCost = reportableCount * REPORT_COST;
   const auditCost = reportableCount * AUDIT_COST;
+  const chatbotCost = reportableCount * CHATBOT_COST;
   const allSelected = selectableIds.length > 0 && selectedCount === selectableIds.length;
   const notEnoughForReport = credits != null && reportCost > credits;
   const notEnoughForAudit = credits != null && auditCost > credits;
+  const notEnoughForChatbot = credits != null && chatbotCost > credits;
   const batchRunning = !!batch && !batch.finished;
   const toggleSelectAll = () => {
     setSelected((s) => {
@@ -989,19 +1044,19 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
   // Stat tiles rendered into the sidebar (AppShell sidebarExtra slot).
   const sidebarStats = stats ? (
     <div className="pb-4">
-      <div className="mb-2 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Pipeline</div>
+      <div className="mb-2 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Overview</div>
       <div className="grid grid-cols-2 gap-1.5">
-        {statTiles.map(([label, value, wf]) => (
+        {statTiles.map((tile) => (
           <button
-            key={label}
-            onClick={() => setWorkflow(wf)}
+            key={tile.label}
+            onClick={tile.onClick}
             className={cn(
               "rounded-lg border px-2.5 py-2 text-left transition-colors",
-              workflow === wf ? "border-primary/50 bg-primary/10" : "border-border hover:bg-accent"
+              tile.active ? "border-primary/50 bg-primary/10" : "border-border hover:bg-accent"
             )}
           >
-            <div className="text-base font-bold"><AnimatedNumber value={value} /></div>
-            <div className="text-[11px] text-muted-foreground">{label}</div>
+            <div className="text-base font-bold"><AnimatedNumber value={tile.value} /></div>
+            <div className="text-[11px] text-muted-foreground">{tile.label}</div>
           </button>
         ))}
       </div>
@@ -1012,9 +1067,6 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
     <>
       <Button variant="outline" size="sm" disabled={!!batchBusy || loading} onClick={() => batchScan("status")} title="Check website status for all leads on this page">
         {batchBusy === "status" ? <Loader2 size={16} className="animate-spin" /> : <Globe2 size={16} />} <span className="hidden lg:inline">Check status</span>
-      </Button>
-      <Button variant="outline" size="sm" disabled={!!batchBusy || loading} onClick={() => batchScan("chatbot")} title="Scan all leads on this page for a chatbot">
-        {batchBusy === "chatbot" ? <Loader2 size={16} className="animate-spin" /> : <Bot size={16} />} <span className="hidden lg:inline">Scan chatbots</span>
       </Button>
       <Button asChild size="sm">
         <a href={`${BASE_PATH}/api/leads/export`}><Download size={16} /> <span className="hidden sm:inline">Export CSV</span></a>
@@ -1073,6 +1125,11 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
               <label className="flex items-center gap-2 text-sm text-muted-foreground">
                 <input type="checkbox" checked={hasEmail} onChange={(e) => setHasEmail(e.target.checked)} className="accent-[hsl(var(--primary))]" /> Has email
               </label>
+              <Select value={hasWebsite} onChange={(e) => setHasWebsite(e.target.value)} className="w-auto min-w-[120px]" title="Filter by website">
+                <option value="">Any website</option>
+                <option value="yes">Has website</option>
+                <option value="no">No website</option>
+              </Select>
               <Select value={minScore} onChange={(e) => setMinScore(Number(e.target.value))} className="w-auto min-w-[100px]">
                 <option value={0}>Any perf</option>
                 <option value={50}>Perf 50+</option>
@@ -1091,7 +1148,7 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
             <span className="font-medium">{selectedCount} selected</span>
             {reportableCount > 0 && (
               <span className="text-muted-foreground">
-                {reportableCount} with site · audit <strong className="text-foreground">{auditCost}</strong> / report <strong className="text-foreground">{reportCost}</strong> credits
+                {reportableCount} with site · audit <strong className="text-foreground">{auditCost}</strong> / chatbot <strong className="text-foreground">{chatbotCost}</strong> / report <strong className="text-foreground">{reportCost}</strong> credits
                 {credits != null && <> · balance {credits}</>}
               </span>
             )}
@@ -1101,6 +1158,10 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
               <Button variant="outline" size="sm" disabled={!!bulkBusy || batchRunning || reportableCount === 0 || notEnoughForAudit} onClick={bulkAudit} title={notEnoughForAudit ? "Not enough credits" : `Audit ${reportableCount} site(s) — ${auditCost} credits`}>
                 {bulkBusy === "audit" ? <Loader2 size={15} className="animate-spin" /> : <BarChart3 size={15} />}
                 Audit {reportableCount}
+              </Button>
+              <Button variant="outline" size="sm" disabled={!!bulkBusy || batchRunning || reportableCount === 0 || notEnoughForChatbot} onClick={bulkChatbot} title={notEnoughForChatbot ? "Not enough credits" : `Scan ${reportableCount} site(s) for chatbots — ${chatbotCost} credits`}>
+                {bulkBusy === "chatbot" ? <Loader2 size={15} className="animate-spin" /> : <Bot size={15} />}
+                Chatbots {reportableCount}
               </Button>
               <Button size="sm" disabled={!!bulkBusy || batchRunning || reportableCount === 0 || notEnoughForReport} onClick={bulkReport} title={notEnoughForReport ? "Not enough credits" : `Generate ${reportableCount} report(s) — ${reportCost} credits`}>
                 {bulkBusy === "report" ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
@@ -1159,12 +1220,10 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       <StatusPill lead={lead} />
                       <ChatbotBadge lead={lead} />
-                      {lead.rating != null && (
+                      {showRating(lead) && (
                         <Pill tone="muted"><Star size={11} className="text-amber-500" fill="currentColor" /> {lead.rating}</Pill>
                       )}
-                      {lead.reviews != null && (
-                        <Pill tone="muted">{Number(lead.reviews).toLocaleString()} rev</Pill>
-                      )}
+                      <Pill tone="muted">{reviewCount(lead).toLocaleString()} rev</Pill>
                       {ownerReplied === 1 && (
                         <Pill tone="good">Owner replied {lead.owner_reply_count != null ? `(${lead.owner_reply_count})` : ""}</Pill>
                       )}
@@ -1214,11 +1273,11 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                       <TableHead>Contact</TableHead>
                       <TableHead>Rating</TableHead>
                       <TableHead>Reviews</TableHead>
-                      <TableHead>Owner Reply</TableHead>
-                      <TableHead>Workflow</TableHead>
-                      <TableHead>Email</TableHead>
+                      <TableHead><span className="inline-flex items-center gap-1">Owner reply <InfoPopover label="About owner reply">{OWNER_REPLY_INFO}</InfoPopover></span></TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Email status</TableHead>
                       <TableHead>Website</TableHead>
-                      <TableHead>Health</TableHead>
+                      <TableHead><span className="inline-flex items-center gap-1">Health <InfoPopover label="About website health">{HEALTH_INFO}</InfoPopover></span></TableHead>
                       <TableHead>Location</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
@@ -1258,19 +1317,13 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                           </div>
                         </TableCell>
                         <TableCell className="text-xs">
-                          {lead.rating != null ? (
+                          {showRating(lead) ? (
                             <span className="flex items-center gap-1"><Star size={12} className="text-amber-500" fill="currentColor" />{lead.rating}</span>
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-xs">
-                          {lead.reviews != null ? (
-                            <span>{Number(lead.reviews).toLocaleString()}</span>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
+                        <TableCell className="text-xs tabular-nums">{reviewCount(lead).toLocaleString()}</TableCell>
                         <TableCell className="text-xs">
                           {ownerReplied === 1 ? (
                             <span className="text-emerald-600">Yes {lead.owner_reply_count != null ? `(${lead.owner_reply_count})` : ""}</span>
