@@ -1,0 +1,103 @@
+name: Deploy saas-leadsfunda → new.leadsfunda.com
+
+on:
+  push:
+    branches: [saas-leadsfunda]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-saas-vps
+  cancel-in-progress: false
+
+env:
+  VPS_HOST: 144.91.104.65
+  VPS_USER: adminsafe
+  # Separate app directory so it never collides with the legacy /leads install
+  APP_DIR: /home/adminsafe/leadsfunda-saas
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      # Ensure the target directory exists on first deploy
+      - name: Bootstrap app dir
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$VPS_USER@$VPS_HOST" "mkdir -p $APP_DIR"
+
+      - name: Upload release tarball
+        run: |
+          tar czf /tmp/saas-deploy.tgz \
+            --exclude=.git \
+            --exclude=.github \
+            --exclude=node_modules \
+            --exclude=.next \
+            --exclude=output \
+            --exclude=.chrome-profile \
+            .
+          scp -i ~/.ssh/id_ed25519 /tmp/saas-deploy.tgz "$VPS_USER@$VPS_HOST:/tmp/saas-deploy.tgz"
+
+      - name: Deploy
+        env:
+          # DATABASE_URL base64-encoded so special chars survive the SSH hop.
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          AUTH_GOOGLE_ID: ${{ secrets.AUTH_GOOGLE_ID }}
+          AUTH_GOOGLE_SECRET: ${{ secrets.AUTH_GOOGLE_SECRET }}
+          WHOP_API_KEY: ${{ secrets.WHOP_API_KEY }}
+          WHOP_WEBHOOK_SECRET: ${{ secrets.WHOP_WEBHOOK_SECRET }}
+        run: |
+          DB_B64=$(printf '%s' "$DATABASE_URL" | base64 -w0)
+          AS_B64=$(printf '%s' "$AUTH_SECRET" | base64 -w0)
+          GI_B64=$(printf '%s' "$AUTH_GOOGLE_ID" | base64 -w0)
+          GS_B64=$(printf '%s' "$AUTH_GOOGLE_SECRET" | base64 -w0)
+          WA_B64=$(printf '%s' "$WHOP_API_KEY" | base64 -w0)
+          WW_B64=$(printf '%s' "$WHOP_WEBHOOK_SECRET" | base64 -w0)
+
+          ssh -i ~/.ssh/id_ed25519 "$VPS_USER@$VPS_HOST" "
+            set -e
+            cd $APP_DIR
+
+            # Rolling backup (keep last 5)
+            tar czf ~/leadsfunda-saas-backup-\$(date +%Y%m%d-%H%M%S).tgz \
+              --exclude=node_modules --exclude=.next --exclude=output \
+              --exclude=.chrome-profile . 2>/dev/null || true
+            ls -t ~/leadsfunda-saas-backup-*.tgz 2>/dev/null | tail -n +6 | xargs -r rm --
+
+            tar xzf /tmp/saas-deploy.tgz
+            rm /tmp/saas-deploy.tgz
+
+            npm install --no-audit --no-fund
+
+            export DATABASE_URL=\$(printf '%s' '$DB_B64' | base64 -d)
+            export AUTH_SECRET=\$(printf '%s' '$AS_B64' | base64 -d)
+            export AUTH_GOOGLE_ID=\$(printf '%s' '$GI_B64' | base64 -d)
+            export AUTH_GOOGLE_SECRET=\$(printf '%s' '$GS_B64' | base64 -d)
+            export WHOP_API_KEY=\$(printf '%s' '$WA_B64' | base64 -d)
+            export WHOP_WEBHOOK_SECRET=\$(printf '%s' '$WW_B64' | base64 -d)
+
+            # Build with no basePath — new.leadsfunda.com serves at root
+            NEXTAUTH_URL=https://new.leadsfunda.com AUTH_TRUST_HOST=true npm run build
+
+            # Start or restart the pm2 process on port 3001
+            if pm2 describe leadsfunda-saas > /dev/null 2>&1; then
+              PORT=3001 pm2 restart leadsfunda-saas --update-env
+            else
+              PORT=3001 pm2 start 'npm run start:web' --name leadsfunda-saas
+              pm2 save
+            fi
+          "
+
+      - name: Health check
+        run: |
+          sleep 8
+          ssh -i ~/.ssh/id_ed25519 "$VPS_USER@$VPS_HOST" \
+            'code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001); echo "HTTP $code"; [ "$code" = "200" ] || [ "$code" = "307" ] || [ "$code" = "401" ]'
