@@ -20,6 +20,7 @@ import {
   ListPlus,
   Loader2,
   Mail,
+  MailCheck,
   MessageCircle,
   PauseCircle,
   Play,
@@ -128,10 +129,13 @@ function Score({ label, value }) {
 // remove from this list. Matches the Leads-manager row actions for consistency.
 function CapturedActions({ lead, busy = {}, onEnrich, onWhatsapp, onAudit, onReport, onRemove }) {
   const waLink = waMeLink(lead);
+  // Enriched = the website crawl has run (email/socials found, or it reported a
+  // status like "no email"). Show a green check so a finished row reads as done.
+  const enriched = !!(lead.email || lead.enrichStatus || lead.enrich_status);
   return (
     <>
-      <Button variant="ghost" size="icon" className="h-8 w-8" title={lead.email ? "Re-grab email + socials" : "Grab email + socials"} disabled={!lead.website || busy.enrich} onClick={() => onEnrich(lead)}>
-        {busy.enrich ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
+      <Button variant="ghost" size="icon" className={cn("h-8 w-8", enriched && "text-emerald-600")} title={enriched ? "Enriched — re-grab email + socials" : "Grab email + socials"} disabled={!lead.website || busy.enrich} onClick={() => onEnrich(lead)}>
+        {busy.enrich ? <Loader2 size={14} className="animate-spin" /> : enriched ? <MailCheck size={14} /> : <Mail size={14} />}
       </Button>
       <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.whatsappExists === "yes" && "text-emerald-600", lead.whatsappExists === "no" && "text-red-600")} title={lead.phone ? (lead.whatsappExists === "yes" ? "On WhatsApp — re-check" : lead.whatsappExists === "no" ? "Not on WhatsApp — re-check" : "Check WhatsApp") : "No phone to check"} disabled={!lead.phone || busy.whatsapp} onClick={() => onWhatsapp(lead)}>
         {busy.whatsapp ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />}
@@ -663,6 +667,9 @@ export default function Dashboard({ view = "" }) {
   // key and merged back on top of the polled rows.
   const [rowBusy, setRowBusy] = useState({});
   const [rowOverlay, setRowOverlay] = useState({});
+  // How many projects the sidebar shows; "Load more" reveals 10 at a time so a
+  // big account doesn't render hundreds of rows on every poll.
+  const [projectLimit, setProjectLimit] = useState(10);
   const [reportLead, setReportLead] = useState(null);
   // Captured lead currently open in the shared "Add to list" dialog (saved to the
   // DB first so it has an id). Mirrors the Leads manager for a consistent flow.
@@ -675,6 +682,9 @@ export default function Dashboard({ view = "" }) {
   // Progress for a realtime (queue-free) enrich/whatsapp batch: { kind, done, total }.
   const [realtimeBatch, setRealtimeBatch] = useState(null);
   const [credits, setCredits] = useState(null);
+  // Full plan entitlement ({ active, remaining, plan, credits }) used to pre-check
+  // searches before hitting the server. remaining === null means unlimited.
+  const [entitlement, setEntitlement] = useState(null);
   // Captured rows being added to a list in bulk — saved to the DB first so they
   // have ids; { ids, keys } drives the shared dialog + the "listed" overlay.
   const [listsBulk, setListsBulk] = useState(null);
@@ -777,15 +787,36 @@ export default function Dashboard({ view = "" }) {
   // the batch poller if the page unmounts mid-run.
   useEffect(() => {
     let alive = true;
-    jsonFetch("/api/me").then((d) => { if (alive) setCredits(d?.entitlement?.credits ?? null); }).catch(() => {});
+    jsonFetch("/api/me").then((d) => { if (alive) { setCredits(d?.entitlement?.credits ?? null); setEntitlement(d?.entitlement ?? null); } }).catch(() => {});
     return () => { alive = false; clearTimeout(batchPollRef.current); };
   }, []);
   function refreshCredits() {
-    jsonFetch("/api/me").then((d) => setCredits(d?.entitlement?.credits ?? null)).catch(() => {});
+    jsonFetch("/api/me").then((d) => { setCredits(d?.entitlement?.credits ?? null); setEntitlement(d?.entitlement ?? null); }).catch(() => {});
+  }
+
+  // Pre-flight plan/quota gate for searches: matches the server checks in
+  // /api/projects/find + /run so the user gets instant feedback instead of a
+  // doomed request. Skips when entitlement hasn't loaded (the server still gates).
+  function ensureCanSearch() {
+    const ent = entitlement;
+    if (!ent) return true;
+    if (ent.active === false) {
+      setNeedPlan(true);
+      setError("You need an active plan to find leads. Choose a plan to continue.");
+      return false;
+    }
+    if (ent.remaining != null && ent.remaining <= 0) {
+      setNeedPlan(true);
+      setError("Monthly lead quota reached. Upgrade your plan to find more leads.");
+      return false;
+    }
+    return true;
   }
 
   async function run(stages, formOverride = form) {
     const runForm = formOverride || form;
+    // A scrape pulls new leads → costs plan quota; gate it before we start.
+    if (stages.includes("scrape") && !ensureCanSearch()) return false;
     setBusy(`Starting ${stages.join(", ")}`);
     setError("");
     setNeedPlan(false);
@@ -823,6 +854,7 @@ export default function Dashboard({ view = "" }) {
   // POST to /api/projects/find (warehouse-backed instant delivery).
   // Same plan/quota error handling as run(); same navigation on success.
   async function startFindLeads(findParams) {
+    if (!ensureCanSearch()) return;
     setBusy("Finding leads");
     setError("");
     setNeedPlan(false);
@@ -1316,6 +1348,7 @@ export default function Dashboard({ view = "" }) {
     };
     try {
       await Promise.all(Array.from({ length: Math.min(5, targets.length) }, worker));
+      showToast(kind === "enrich" ? `Enriched ${done}/${targets.length} lead${targets.length === 1 ? "" : "s"}` : `WhatsApp checked ${done}/${targets.length} number${targets.length === 1 ? "" : "s"}`);
     } finally {
       setBulkBusy("");
       setRealtimeBatch(null);
@@ -1358,7 +1391,7 @@ export default function Dashboard({ view = "" }) {
         <div className="rounded-md bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary">{runningCount} projects running</div>
       )}
       <div className="space-y-1">
-        {projects.map((project) => (
+        {projects.slice(0, projectLimit).map((project) => (
           <div
             key={project.slug}
             role="button"
@@ -1390,6 +1423,15 @@ export default function Dashboard({ view = "" }) {
           </div>
         ))}
         {!projects.length && <div className="px-2.5 text-sm text-muted-foreground">No projects yet</div>}
+        {projects.length > projectLimit && (
+          <button
+            type="button"
+            onClick={() => setProjectLimit((n) => n + 10)}
+            className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+          >
+            <ChevronDown size={14} /> Load more ({projects.length - projectLimit})
+          </button>
+        )}
       </div>
     </div>
   );

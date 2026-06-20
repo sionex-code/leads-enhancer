@@ -334,6 +334,18 @@ async function saveCachedWhatsapp(phone, status, whatsappId) {
   );
 }
 
+// Bulk lookup for a batch of normalized phone keys → Map(digits → {status, whatsapp_id}).
+// Used by the find route to restore a previously-checked WhatsApp status onto
+// freshly loaded warehouse leads (so a number checked once shows on every find).
+async function getCachedWhatsappMap(phones = []) {
+  const clean = [...new Set((phones || []).map((p) => String(p || "").replace(/[^\d]/g, "")).filter((p) => p.length >= 7))];
+  const map = new Map();
+  if (!clean.length) return map;
+  const { rows } = await q(`SELECT phone, status, whatsapp_id FROM whatsapp_cache WHERE phone = ANY($1::text[])`, [clean]);
+  for (const r of rows) map.set(r.phone, r);
+  return map;
+}
+
 // Upsert a batch for a user. Field-by-field merge via ON CONFLICT: a new non-empty
 // value overwrites, a new empty/null value never wipes an existing one.
 async function upsertLeads(userId, leadObjs) {
@@ -916,6 +928,7 @@ module.exports = {
   getCachedEnrichment,
   getCachedWhatsapp,
   saveCachedWhatsapp,
+  getCachedWhatsappMap,
   getCachedEnrichmentMap,
   saveCachedEnrichment,
   hasUsefulCache,
