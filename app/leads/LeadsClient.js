@@ -38,7 +38,8 @@ import { Textarea } from "../components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Sheet, SheetContent } from "../components/ui/sheet";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/table";
-import { cn, waMeLink } from "../lib/utils";
+import { cn, waMeLink, waState } from "../lib/utils";
+import { Socials, WaIcon, WaPhone } from "../components/SocialIcons";
 
 const LeadsMap = dynamic(() => import("../components/LeadsMap"), { ssr: false });
 
@@ -92,16 +93,6 @@ function Pill({ tone = "muted", className, children, ...props }) {
       {children}
     </span>
   );
-}
-
-// whatsapp_status holds the descriptive outcome from the checker ("on whatsapp",
-// "not on whatsapp", "no phone", "error: ...") — normalize it to a badge state.
-function waState(lead) {
-  const s = String(lead.whatsapp_status || "").toLowerCase();
-  if (!s) return null;
-  if (s === "yes" || s.startsWith("on whatsapp")) return "yes";
-  if (s === "no" || s.startsWith("not on whatsapp")) return "no";
-  return "other"; // no phone / pending / error
 }
 
 async function jsonFetch(url, options = {}) {
@@ -172,38 +163,8 @@ function EmailBadge({ status }) {
   return <Pill tone={tone}>{EMAIL_STATUS[value] || value}</Pill>;
 }
 
-const SOCIAL_FIELDS = [
-  ["facebook", "Facebook"],
-  ["instagram", "Instagram"],
-  ["linkedin", "LinkedIn"],
-  ["twitter", "X / Twitter"],
-  ["youtube", "YouTube"],
-  ["tiktok", "TikTok"],
-  ["pinterest", "Pinterest"],
-  ["whatsapp", "WhatsApp"],
-  ["telegram", "Telegram"],
-];
-
-function Socials({ lead, full = false }) {
-  const present = SOCIAL_FIELDS.filter(([key]) => lead[key]);
-  if (!present.length) return <span className="text-xs text-muted-foreground">-</span>;
-  return (
-    <div className="flex flex-wrap gap-1">
-      {present.map(([key, label]) => (
-        <a
-          key={key}
-          href={lead[key]}
-          target="_blank"
-          rel="noreferrer"
-          title={lead[key]}
-          className="inline-flex items-center rounded-md border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
-        >
-          {full ? label : label.slice(0, 2).toUpperCase()}
-        </a>
-      ))}
-    </div>
-  );
-}
+// Colorful social chips + WhatsApp badge/phone are shared with the dashboard via
+// ./../components/SocialIcons (Socials, WaIcon, WaPhone).
 
 function QuickLeadActions({ lead, onPatch, onLists, compact = false }) {
   const busy = false;
@@ -249,7 +210,7 @@ function RowActions({ lead, busy = {}, onEnrich, onWhatsapp, onAudit, onReport, 
       <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.chatbot === "yes" && "text-emerald-600")} title={lead.website ? `Scan for chatbot${lead.chatbot ? ` (last: ${lead.chatbot})` : ""}` : "No website to scan"} disabled={!lead.website || busy.chatbot} onClick={() => onChatbot(lead)}>
         {busy.chatbot ? <Loader2 size={14} className="animate-spin" /> : <Bot size={14} />}
       </Button>
-      <Button variant="ghost" size="icon" className={cn("h-8 w-8", wa === "yes" && "text-emerald-600")} title={lead.phone ? (wa ? `WhatsApp: ${lead.whatsapp_status}` : "Check WhatsApp") : "No phone to check"} disabled={!lead.phone || busy.whatsapp} onClick={() => onWhatsapp(lead)}>
+      <Button variant="ghost" size="icon" className={cn("h-8 w-8", wa === "yes" && "text-emerald-600", wa === "no" && "text-red-600")} title={lead.phone ? (wa ? `WhatsApp: ${lead.whatsapp_status}` : "Check WhatsApp") : "No phone to check"} disabled={!lead.phone || busy.whatsapp} onClick={() => onWhatsapp(lead)}>
         {busy.whatsapp ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />}
       </Button>
       {waLink && (
@@ -447,9 +408,8 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot }) 
               {lead.phone && (
                 <div className="flex items-center gap-2">
                   <Phone size={13} className="text-muted-foreground" />
-                  {lead.phone}
-                  {waState(lead) === "yes" && <MessageCircle size={14} className="text-emerald-600" title="On WhatsApp" />}
-                  {waState(lead) === "no" && <MessageCircle size={14} className="text-muted-foreground" title="Not on WhatsApp" />}
+                  <WaPhone lead={lead} />
+                  <WaIcon lead={lead} />
                 </div>
               )}
               {lead.email && <div className="flex items-center gap-2"><Mail size={13} className="text-muted-foreground" /> <a className="text-primary hover:underline" href={`mailto:${lead.email}`}>{lead.email}</a></div>}
@@ -1161,7 +1121,6 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
               {/* Mobile cards */}
               <div className="space-y-3 p-3 md:hidden">
                 {rows.map((lead, idx) => {
-                  const wa = waState(lead);
                   const ownerReplied = lead.owner_replied;
                   return (
                   <div className={cn("cursor-pointer rounded-lg border bg-card/60 p-3", selected.has(lead.id) ? "border-primary/50 bg-primary/5" : "border-border")} key={`m-${lead.id}`} onClick={() => toggleSelect(lead.id)}>
@@ -1189,9 +1148,8 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                       {lead.has_report ? <Pill tone="contact"><FileText size={12} /> Report</Pill> : null}
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
-                      {lead.phone && <span>{lead.phone}</span>}
-                      {wa === "yes" && <MessageCircle size={14} className="text-emerald-600" title="On WhatsApp" />}
-                      {wa === "no" && <MessageCircle size={14} className="text-muted-foreground" title="Not on WhatsApp" />}
+                      {lead.phone && <WaPhone lead={lead} />}
+                      <WaIcon lead={lead} />
                       {lead.domain && <span className="max-w-[120px] truncate text-xs text-muted-foreground" title={lead.domain}>{lead.domain}</span>}
                     </div>
                     {lead.email && <div className="mt-1 truncate text-sm text-primary" title={lead.email}>{lead.email}</div>}
@@ -1265,7 +1223,6 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                   </TableHeader>
                   <TableBody>
                     {rows.map((lead, idx) => {
-                      const wa = waState(lead);
                       const ownerReplied = lead.owner_replied;
                       return (
                       <TableRow key={lead.id} className={cn("cursor-pointer", selected.has(lead.id) && "bg-primary/5")} onClick={() => toggleSelect(lead.id)}>
@@ -1294,9 +1251,8 @@ export default function LeadsPage({ initialWorkflow = "", pageTitle = "Lead mana
                             <span className="text-xs text-muted-foreground">{lead.enrich_status || "no email"}</span>
                           )}
                           <div className="mt-0.5 flex items-center gap-1.5 text-xs">
-                            <span>{lead.phone || "-"}</span>
-                            {wa === "yes" && <MessageCircle size={14} className="shrink-0 text-emerald-600" title="On WhatsApp" />}
-                            {wa === "no" && <MessageCircle size={14} className="shrink-0 text-muted-foreground" title="Not on WhatsApp" />}
+                            {lead.phone ? <WaPhone lead={lead} /> : <span>-</span>}
+                            <WaIcon lead={lead} />
                           </div>
                         </TableCell>
                         <TableCell className="text-xs">

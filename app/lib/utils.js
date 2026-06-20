@@ -22,3 +22,21 @@ export function waMeLink(lead) {
   if (digits.length >= 7) return `https://wa.me/${digits}`;
   return "";
 }
+
+// Normalize a lead's WhatsApp registration result to a badge state, handling
+// both data shapes used across the app:
+//   - DB-backed leads carry the descriptive `whatsapp_status` ("on whatsapp",
+//     "not on whatsapp", "no phone", "error: ...").
+//   - Captured/realtime dashboard rows carry `whatsappExists` ("yes" | "no").
+// Returns "yes" | "no" | "other" | null (null = never checked).
+export function waState(lead) {
+  if (!lead) return null;
+  const exists = String(lead.whatsappExists || "").toLowerCase();
+  if (exists === "yes") return "yes";
+  if (exists === "no") return "no";
+  const s = String(lead.whatsapp_status || "").toLowerCase();
+  if (!s) return null;
+  if (s === "yes" || s.startsWith("on whatsapp")) return "yes";
+  if (s === "no" || s.startsWith("not on whatsapp")) return "no";
+  return "other"; // no phone / pending / error
+}

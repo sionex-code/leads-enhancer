@@ -45,6 +45,7 @@ import { Select } from "./components/ui/select";
 import { Progress } from "./components/ui/progress";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "./components/ui/table";
 import { cn, waMeLink } from "./lib/utils";
+import { Socials, WaIcon, WaPhone } from "./components/SocialIcons";
 
 const LeadsMap = dynamic(() => import("./components/LeadsMap"), { ssr: false });
 
@@ -119,38 +120,8 @@ function Score({ label, value }) {
   );
 }
 
-const SOCIAL_FIELDS = [
-  ["facebook", "FB"],
-  ["instagram", "IG"],
-  ["linkedin", "LI"],
-  ["twitter", "X"],
-  ["youtube", "YT"],
-  ["tiktok", "TT"],
-  ["pinterest", "Pin"],
-  ["whatsapp", "WA"],
-  ["telegram", "TG"],
-];
-
-function Socials({ lead }) {
-  const present = SOCIAL_FIELDS.filter(([key]) => lead[key]);
-  if (!present.length) return <span className="text-xs text-muted-foreground">-</span>;
-  return (
-    <div className="flex flex-wrap gap-1">
-      {present.map(([key, label]) => (
-        <a
-          key={key}
-          href={lead[key]}
-          target="_blank"
-          rel="noreferrer"
-          title={lead[key]}
-          className="inline-flex items-center rounded-md border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
-        >
-          {label}
-        </a>
-      ))}
-    </div>
-  );
-}
+// Colorful social chips + WhatsApp badge/phone live in ./components/SocialIcons
+// (Socials, WaIcon, WaPhone) and are shared with the Leads manager.
 
 // Per-row actions on the captured-leads table: grab email/socials, check
 // WhatsApp, run a quick audit (Health scores), open the website report, and
@@ -162,7 +133,7 @@ function CapturedActions({ lead, busy = {}, onEnrich, onWhatsapp, onAudit, onRep
       <Button variant="ghost" size="icon" className="h-8 w-8" title={lead.email ? "Re-grab email + socials" : "Grab email + socials"} disabled={!lead.website || busy.enrich} onClick={() => onEnrich(lead)}>
         {busy.enrich ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
       </Button>
-      <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.whatsappExists === "yes" && "text-emerald-600")} title={lead.phone ? "Check WhatsApp" : "No phone to check"} disabled={!lead.phone || busy.whatsapp} onClick={() => onWhatsapp(lead)}>
+      <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.whatsappExists === "yes" && "text-emerald-600", lead.whatsappExists === "no" && "text-red-600")} title={lead.phone ? (lead.whatsappExists === "yes" ? "On WhatsApp — re-check" : lead.whatsappExists === "no" ? "Not on WhatsApp — re-check" : "Check WhatsApp") : "No phone to check"} disabled={!lead.phone || busy.whatsapp} onClick={() => onWhatsapp(lead)}>
         {busy.whatsapp ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />}
       </Button>
       {waLink && (
@@ -1670,8 +1641,6 @@ export default function Dashboard({ view = "" }) {
               <div className="space-y-3 p-3 md:hidden">
                 {leads.map((lead, index) => {
                   const key = leadKey(lead);
-                  const waYes = lead.whatsappExists === "yes";
-                  const waNo = lead.whatsappExists === "no";
                   const ownerReplied = lead.owner_replied;
                   return (
                   <div className={cn("cursor-pointer rounded-lg border bg-card/60 p-3", selectedLeads.has(key) ? "border-primary/50 bg-primary/5" : "border-border")} key={`m-${lead.name}-${index}`} onClick={() => toggleLead(key)}>
@@ -1688,15 +1657,9 @@ export default function Dashboard({ view = "" }) {
                       <span className="text-xs text-muted-foreground">{lead.category || ""}</span>
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
-                      {lead.phone && <span>{lead.phone}</span>}
-                      {/* #9 WhatsApp icon only */}
-                      {(waYes || waNo) && (
-                        <MessageCircle
-                          size={14}
-                          className={waYes ? "text-emerald-600" : "text-muted-foreground"}
-                          title={waYes ? (lead.whatsappId || "On WhatsApp") : "Not on WhatsApp"}
-                        />
-                      )}
+                      {lead.phone && <WaPhone lead={lead} />}
+                      {/* #9 WhatsApp badge: green check on WhatsApp, red X if not */}
+                      <WaIcon lead={lead} />
                       {lead.website && <a className="max-w-[160px] truncate text-primary hover:underline" href={lead.website} target="_blank" rel="noreferrer" title={lead.website} onClick={(e) => e.stopPropagation()}>{lead.domain || "site"}</a>}
                     </div>
                     {lead.email && <div className="mt-1 text-sm"><a className="max-w-[200px] truncate text-primary hover:underline" href={`mailto:${lead.email}`} title={lead.email} onClick={(e) => e.stopPropagation()}>{lead.email}</a></div>}
@@ -1748,8 +1711,6 @@ export default function Dashboard({ view = "" }) {
                   <TableBody>
                     {leads.map((lead, index) => {
                       const key = leadKey(lead);
-                      const waYes = lead.whatsappExists === "yes";
-                      const waNo = lead.whatsappExists === "no";
                       const ownerReplied = lead.owner_replied;
                       return (
                       <TableRow key={`${lead.name}-${index}`} className={cn("cursor-pointer", selectedLeads.has(key) && "bg-primary/5")} onClick={() => toggleLead(key)}>
@@ -1768,15 +1729,9 @@ export default function Dashboard({ view = "" }) {
                         {/* #11 Contact = email + phone only (no rating, no WA text) */}
                         <TableCell>
                           <div className="flex items-center gap-1.5 text-sm">
-                            {lead.phone || <span className="text-xs text-muted-foreground">-</span>}
-                            {/* #9 WhatsApp icon only */}
-                            {(waYes || waNo) && (
-                              <MessageCircle
-                                size={14}
-                                className={waYes ? "text-emerald-600" : "text-muted-foreground"}
-                                title={waYes ? (lead.whatsappId || "On WhatsApp") : "Not on WhatsApp"}
-                              />
-                            )}
+                            {lead.phone ? <WaPhone lead={lead} /> : <span className="text-xs text-muted-foreground">-</span>}
+                            {/* #9 WhatsApp badge: green check on WhatsApp, red X if not */}
+                            <WaIcon lead={lead} />
                           </div>
                           {/* #12 email truncated with tooltip */}
                           {lead.email
