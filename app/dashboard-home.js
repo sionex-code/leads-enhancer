@@ -45,7 +45,7 @@ import { Input } from "./components/ui/input";
 import { Select } from "./components/ui/select";
 import { Progress } from "./components/ui/progress";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "./components/ui/table";
-import { cn, waMeLink } from "./lib/utils";
+import { cn, waMeLink, waState } from "./lib/utils";
 import { Socials, WaIcon, WaPhone } from "./components/SocialIcons";
 
 const LeadsMap = dynamic(() => import("./components/LeadsMap"), { ssr: false });
@@ -1338,9 +1338,20 @@ export default function Dashboard({ view = "" }) {
   // persist to the shared cache, so a business enriched once is reused for every
   // user and every future find.
   async function runRealtimeBatch(kind) {
-    const targets = (leads || []).filter((l) => (kind === "enrich" ? l.website : l.phone));
+    // Skip leads that are already done: enriched ones (have email/socials or a
+    // recorded enrich status) for Enrich, and already WhatsApp-checked numbers
+    // (a yes/no result) for WhatsApp — so a re-run only works the leftovers.
+    const isEnriched = (l) => !!(l.email || l.enrichStatus || l.enrich_status);
+    const isWaChecked = (l) => { const s = waState(l); return s === "yes" || s === "no"; };
+    const hasCandidate = (l) => (kind === "enrich" ? !!l.website : !!l.phone);
+    const targets = (leads || []).filter((l) => hasCandidate(l) && (kind === "enrich" ? !isEnriched(l) : !isWaChecked(l)));
     if (!targets.length) {
-      alert(kind === "enrich" ? "No captured leads have a website to enrich." : "No captured leads have a phone to check on WhatsApp.");
+      const anyCandidates = (leads || []).some(hasCandidate);
+      if (anyCandidates) {
+        showToast(kind === "enrich" ? "All leads with a website are already enriched" : "All numbers are already WhatsApp-checked");
+      } else {
+        alert(kind === "enrich" ? "No captured leads have a website to enrich." : "No captured leads have a phone to check on WhatsApp.");
+      }
       return;
     }
     const handler = kind === "enrich" ? enrichCaptured : whatsappCaptured;
@@ -1537,10 +1548,10 @@ export default function Dashboard({ view = "" }) {
                 <Play size={16} /> Run all
               </Button>
               <Button variant="secondary" disabled={!!busy || formRunning} onClick={() => run(["scrape"])}><Search size={16} /> Find leads</Button>
-              <Button variant="secondary" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("enrich")} title="Grab email + socials for every captured lead (realtime, no queue; shared with all users)">
+              <Button variant="secondary" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("enrich")} title="Grab email + socials for captured leads not enriched yet (realtime, no queue; shared with all users)">
                 {bulkBusy === "enrich" ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />} Enrich{realtimeBatch?.kind === "enrich" ? ` (${realtimeBatch.done}/${realtimeBatch.total})` : ""}
               </Button>
-              <Button variant="secondary" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("whatsapp")} title="Check WhatsApp for every captured lead with a phone (realtime, no queue; cached for all users)">
+              <Button variant="secondary" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("whatsapp")} title="Check WhatsApp for captured numbers not checked yet (realtime, no queue; cached for all users)">
                 {bulkBusy === "whatsapp" ? <Loader2 size={16} className="animate-spin" /> : <MessageCircle size={16} />} WhatsApp{realtimeBatch?.kind === "whatsapp" ? ` (${realtimeBatch.done}/${realtimeBatch.total})` : ""}
               </Button>
               <Button
