@@ -373,6 +373,26 @@ async function listUsersWithEntitlement(limit = 500) {
   return rows;
 }
 
+// Admin: who's currently logged in. Auth.js stores DB sessions in `sessions`;
+// a user is "online" if they hold at least one non-expired session.
+async function listActiveSessions(limit = 200) {
+  const { rows } = await pool().query(
+    `SELECT u.id, u.email, u.name, u.image, u.banned,
+            COUNT(*)::int AS sessions,
+            MAX(s.expires) AS expires,
+            m.plan, m.status
+       FROM sessions s
+       JOIN users u ON u.id = s.user_id
+       LEFT JOIN memberships m ON m.user_id = u.id
+      WHERE s.expires > now()
+      GROUP BY u.id, u.email, u.name, u.image, u.banned, m.plan, m.status
+      ORDER BY expires DESC
+      LIMIT $1`,
+    [limit]
+  );
+  return rows;
+}
+
 // ---- Admin: account ban + package pricing ------------------------------------
 // Ban (suspend) or unban a user account. requireUser() blocks banned users.
 async function setUserBanned(userId, banned) {
@@ -457,6 +477,7 @@ module.exports = {
   setPlanForUser,
   revokeForUser,
   listUsersWithEntitlement,
+  listActiveSessions,
   setUserBanned,
   isBanned,
   getPackages,

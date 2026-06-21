@@ -12,6 +12,7 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Avatar } from "../components/ui/avatar";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { cn } from "../lib/utils";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
@@ -463,6 +464,67 @@ function LeadSourceSettings() {
   );
 }
 
+// Who's logged in right now — every user holding a non-expired Auth.js session.
+function ActiveSessions() {
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    try {
+      const d = await jsonFetch("/api/admin/sessions");
+      setSessions(d.sessions || []);
+    } catch {} finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 15000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  return (
+    <Card>
+      <CardContent className="space-y-3 p-4">
+        <div className="flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary"><Users className="h-5 w-5" /></div>
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold">Who&apos;s logged in</h3>
+            <p className="text-xs text-muted-foreground">{sessions.length} {sessions.length === 1 ? "user" : "users"} with a live session</p>
+          </div>
+          <Button variant="ghost" size="sm" onClick={load}>{loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}</Button>
+        </div>
+        {loading && !sessions.length ? (
+          <div className="py-6 text-center text-sm text-muted-foreground"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>
+        ) : sessions.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">No one is logged in right now.</p>
+        ) : (
+          <div className="divide-y divide-border/60">
+            {sessions.map((s) => (
+              <div key={s.id} className="flex items-center gap-3 py-2">
+                <Avatar src={s.image} alt={s.email} fallback={(s.email || "?").slice(0, 1).toUpperCase()} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate text-sm font-medium">{s.email || "(no email)"}</span>
+                    {s.banned ? <Badge variant="destructive" className="gap-1 px-1.5 py-0 text-[10px]"><Ban className="h-2.5 w-2.5" /> Suspended</Badge> : null}
+                  </div>
+                  {s.name ? <div className="truncate text-xs text-muted-foreground">{s.name}</div> : null}
+                </div>
+                {s.plan && s.status === "active"
+                  ? <Badge variant="success" className="shrink-0 gap-1"><Crown className="h-3 w-3" /> {PLAN_LABEL[s.plan] || s.plan}</Badge>
+                  : <Badge variant="secondary" className="shrink-0">Free</Badge>}
+                {s.sessions > 1 ? <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">{s.sessions} sessions</span> : null}
+                <span className="hidden w-32 shrink-0 text-right text-xs tabular-nums text-muted-foreground sm:block" title={`Session expires ${new Date(s.expires).toLocaleString()}`}>expires {new Date(s.expires).toLocaleDateString()}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function StatCard({ icon: Icon, value, label }) {
   return (
     <Card>
@@ -485,6 +547,7 @@ export default function AdminClient() {
   const [busyId, setBusyId] = useState("");
   const [error, setError] = useState("");
   const [historyUser, setHistoryUser] = useState(null);
+  const [tab, setTab] = useState("users");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -586,6 +649,18 @@ export default function AdminClient() {
       </header>
 
       <main className="mx-auto max-w-6xl space-y-4 p-4 sm:p-6">
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList className="flex-wrap">
+            <TabsTrigger value="users">Users</TabsTrigger>
+            <TabsTrigger value="sessions">Who&apos;s logged in</TabsTrigger>
+            <TabsTrigger value="billing">Billing</TabsTrigger>
+            <TabsTrigger value="operations">Operations</TabsTrigger>
+            <TabsTrigger value="settings">Settings</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {tab === "users" && (
+        <div className="space-y-4">
         <div>
           <h1 className="text-xl font-semibold">Manage user plans</h1>
           <p className="text-sm text-muted-foreground">Grant, change or revoke a plan for any account. Changes apply immediately.</p>
@@ -595,13 +670,6 @@ export default function AdminClient() {
           <StatCard icon={Users} value={users.length} label="Total users" />
           <StatCard icon={Crown} value={activeCount} label="Active plans" />
         </div>
-
-        {/* Live operations across all users + editable package pricing + lead source. */}
-        <div className="grid gap-4 lg:grid-cols-2">
-          <OperationsMonitor />
-          <PackagePricing />
-        </div>
-        <LeadSourceSettings />
 
         <Card>
           <CardContent className="p-4">
@@ -702,11 +770,28 @@ export default function AdminClient() {
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <ShieldCheck className="h-3.5 w-3.5" /> Admin-granted plans never expire and reset the user's usage to zero.
         </p>
-
-        <div className="pt-2">
-          <h2 className="mb-3 text-lg font-semibold">Scraper proxies</h2>
-          <ProxyManager />
         </div>
+        )}
+
+        {tab === "sessions" && <ActiveSessions />}
+
+        {tab === "billing" && (
+          <div className="space-y-4">
+            <PackagePricing />
+          </div>
+        )}
+
+        {tab === "operations" && <OperationsMonitor />}
+
+        {tab === "settings" && (
+          <div className="space-y-4">
+            <LeadSourceSettings />
+            <div className="pt-2">
+              <h2 className="mb-3 text-lg font-semibold">Scraper proxies</h2>
+              <ProxyManager />
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

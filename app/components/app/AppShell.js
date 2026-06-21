@@ -14,22 +14,18 @@ import {
   Plus,
   HelpCircle,
 } from "lucide-react";
-import AccountWidget, { useMe } from "../AccountWidget";
+import AccountWidget from "../AccountWidget";
 import useSidebarCollapse from "../useSidebarCollapse";
 import Tour from "../Tour";
 import { Sheet, SheetContent } from "../ui/sheet";
 import { cn } from "../../lib/utils";
 
-const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
-
-// First-run guided tour steps. Each targets an element by its data-tour key; a
-// missing target just centers the copy so the tour still works on any page.
-const TOUR_STEPS = [
-  { key: "nav-new", title: "Find leads", body: "Start a new Google Maps search here. Pick a service, city and rating, then hit Find leads." },
-  { key: "nav-leads", title: "Your leads", body: "Every captured lead lands here. Filter, enrich, scan and export them." },
-  { key: "nav-lists", title: "Lists & favorites", body: "Save leads into named lists, or star them as favorites for quick access." },
+// Fallback tour for pages that don't ship a section-specific one. Each page passes
+// its own `tourKey` + `tourSteps` (see app/dashboard-home.js, leads, lists) so the
+// walkthrough explains that section; a missing target just centers the copy.
+const DEFAULT_TOUR = [
   { key: "credits", title: "Credits", body: "One balance for everything: 1 credit per new lead, 3 per audit, 5 per chatbot scan, 10 per full report." },
-  { key: "tour-button", title: "Replay anytime", body: "Click Tour up here whenever you want to see this walkthrough again." },
+  { key: "tour-button", title: "Replay anytime", body: "Click Tour up here whenever you want to see a section's walkthrough again." },
 ];
 
 // "New search" (the find-leads start page) sits above a grouped "Projects" section
@@ -100,34 +96,31 @@ function NavLinks({ active, collapsed, onNavigate }) {
   );
 }
 
-export default function AppShell({ active, title, subtitle, actions, sidebarExtra, children }) {
+export default function AppShell({ active, title, subtitle, actions, sidebarExtra, children, tourKey = "", tourSteps }) {
   const [collapsed, toggleCollapsed] = useSidebarCollapse();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const me = useMe();
   const [tourOpen, setTourOpen] = useState(false);
-  const [tourHandled, setTourHandled] = useState(false);
+  const steps = tourSteps && tourSteps.length ? tourSteps : DEFAULT_TOUR;
 
-  // Auto-start the tour once for users who haven't seen it.
+  // Auto-start each section's tour once per browser (remembered in localStorage);
+  // the topbar "Tour" button replays the current section's tour anytime.
   useEffect(() => {
-    if (me && me.onboarded === false && !tourHandled) {
-      setTourOpen(true);
-      setTourHandled(true);
-    }
-  }, [me, tourHandled]);
+    if (!tourKey) return;
+    let seen = true;
+    try { seen = !!localStorage.getItem("lf_tour_" + tourKey); } catch {}
+    if (seen) return;
+    const t = setTimeout(() => setTourOpen(true), 500);
+    return () => clearTimeout(t);
+  }, [tourKey]);
 
   const closeTour = () => {
     setTourOpen(false);
-    setTourHandled(true);
-    fetch(`${BASE_PATH}/api/onboarding`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ onboarded: true }),
-    }).catch(() => {});
+    try { if (tourKey) localStorage.setItem("lf_tour_" + tourKey, "1"); } catch {}
   };
 
   return (
     <div className="lf flex min-h-screen bg-background text-foreground">
-      <Tour steps={TOUR_STEPS} open={tourOpen} onClose={closeTour} />
+      <Tour steps={steps} open={tourOpen} onClose={closeTour} />
       {/* Desktop sidebar */}
       <aside
         className={cn(
@@ -154,7 +147,7 @@ export default function AppShell({ active, title, subtitle, actions, sidebarExtr
         </div>
 
         {!collapsed && sidebarExtra ? (
-          <div className="min-h-0 flex-1 overflow-y-auto px-3">{sidebarExtra}</div>
+          <div className="thin-scroll min-h-0 flex-1 overflow-y-auto px-3">{sidebarExtra}</div>
         ) : (
           <div className="min-h-0 flex-1" />
         )}
@@ -170,7 +163,7 @@ export default function AppShell({ active, title, subtitle, actions, sidebarExtr
           <div className="flex h-16 items-center border-b border-border/60 px-4">
             <Brand collapsed={false} />
           </div>
-          <div className="flex-1 overflow-y-auto px-3 py-4">
+          <div className="thin-scroll flex-1 overflow-y-auto px-3 py-4">
             <NavLinks active={active} collapsed={false} onNavigate={() => setMobileOpen(false)} />
             {sidebarExtra ? <div className="mt-4">{sidebarExtra}</div> : null}
           </div>
@@ -208,7 +201,9 @@ export default function AppShell({ active, title, subtitle, actions, sidebarExtr
           </div>
         </header>
 
-        <main className="min-w-0 flex-1">{children}</main>
+        {/* overflow-x-clip is a page-level guard against horizontal scroll on
+            mobile; wide tables still scroll inside their own overflow wrappers. */}
+        <main className="min-w-0 flex-1 overflow-x-clip">{children}</main>
       </div>
     </div>
   );

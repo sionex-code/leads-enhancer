@@ -19,9 +19,14 @@ export default function Tour({ steps = [], open, onClose }) {
   const measure = useCallback(() => {
     if (!step) return;
     const el = typeof document !== "undefined" ? document.querySelector(`[data-tour="${step.key}"]`) : null;
-    if (!el) { setRect(null); return; }
+    // Treat a missing OR hidden target (e.g. desktop-only sidebar items that are
+    // display:none on mobile) as "no target" → center the card instead of
+    // spotlighting an off-screen/zero-size rect.
+    const hidden = el && el.offsetParent === null && getComputedStyle(el).position !== "fixed";
+    if (!el || hidden) { setRect(null); return; }
     el.scrollIntoView({ block: "center", behavior: "smooth" });
     const r = el.getBoundingClientRect();
+    if (!r.width && !r.height) { setRect(null); return; }
     setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
   }, [step]);
 
@@ -60,19 +65,22 @@ export default function Tour({ steps = [], open, onClose }) {
   const isLast = idx === steps.length - 1;
 
   // Position the tooltip below the highlight if there's room, else above; when no
-  // target, center it.
+  // target, center it. Width is clamped to the viewport so it never spills off a
+  // narrow phone screen.
+  const vw = typeof window !== "undefined" ? window.innerWidth : 360;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 640;
+  const tipWidth = Math.min(320, vw - 24);
   let tipStyle;
   if (rect) {
-    const below = rect.top + rect.height + 12;
-    const placeBelow = below + 180 < window.innerHeight;
+    const placeBelow = rect.top + rect.height + 12 + 180 < vh;
     tipStyle = {
       position: "fixed",
-      top: placeBelow ? rect.top + rect.height + 12 : Math.max(12, rect.top - 12 - 170),
-      left: Math.min(Math.max(12, rect.left), window.innerWidth - 332),
-      width: 320,
+      top: placeBelow ? rect.top + rect.height + 12 : Math.max(12, rect.top - 12 - 180),
+      left: Math.min(Math.max(12, rect.left), vw - tipWidth - 12),
+      width: tipWidth,
     };
   } else {
-    tipStyle = { position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: 320 };
+    tipStyle = { position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: tipWidth };
   }
 
   return (

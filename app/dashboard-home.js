@@ -51,6 +51,20 @@ import { Socials, WaIcon, WaPhone } from "./components/SocialIcons";
 
 const LeadsMap = dynamic(() => import("./components/LeadsMap"), { ssr: false });
 
+// Guided tour for the "Find leads" page — walks through the search controls in
+// order. Targets are data-tour attributes on the form (works on mobile since they
+// are all on-screen). Passed to AppShell as tourKey="find".
+const FIND_TOUR = [
+  { key: "find-service", title: "Pick a service", body: "Choose the type of business you want to reach — plumbers, dentists, real estate agencies, and so on." },
+  { key: "find-country", title: "Choose a country", body: "Pick the country to search in. The city list below updates to match." },
+  { key: "find-city", title: "Pick a city", body: "Select a city, or choose \"All cities\" to search the whole country at once." },
+  { key: "find-rating", title: "Filter by rating", body: "Target top-rated businesses, or pick \"Below 4.0\" to find low-rated ones that need help — a great angle for selling websites or reputation services." },
+  { key: "find-max", title: "How many leads", body: "Set how many leads to pull (up to 10,000). You're only charged 1 credit per brand-new lead." },
+  { key: "find-radius", title: "Search radius", body: "Widen or tighten the search area around the center. \"All cities\" makes it country-wide." },
+  { key: "find-map", title: "Refine the center", body: "Drag the pin to move the exact search center. The circle shows your radius." },
+  { key: "find-submit", title: "Find leads", body: "Hit Find leads and we'll pull matching businesses straight into your project." },
+];
+
 const blankForm = {
   name: "Austin Real Estate Leads",
   query: "real estate agency Austin TX",
@@ -404,8 +418,9 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   const [citySearch, setCitySearch] = useState("");
   const [showChips, setShowChips] = useState(false);
   const [max, setMax] = useState("30");
-  const [minRating, setMinRating] = useState("");
-  const [maxRating, setMaxRating] = useState("");
+  // One combined rating filter. "" = any, "gte:N" = N and up, "lt:N" = below N.
+  // Mapped to the API's minRating/maxRating on submit so the backend is unchanged.
+  const [rating, setRating] = useState("");
   const [allCities, setAllCities] = useState(false);
   const [radiusKm, setRadiusKm] = useState(10);
   // center for the area picker map — kept in sync with selected city
@@ -497,8 +512,8 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
       cityId: allCities ? null : cityObj?.id || null,
       countryCode: country.code || "",
       service,
-      minRating: minRating ? Number(minRating) : undefined,
-      maxRating: maxRating ? Number(maxRating) : undefined,
+      minRating: rating.startsWith("gte:") ? Number(rating.slice(4)) : undefined,
+      maxRating: rating.startsWith("lt:") ? Number(rating.slice(3)) : undefined,
       centerLat: allCities ? undefined : center.lat,
       centerLng: allCities ? undefined : center.lng,
       radiusKm: allCities ? undefined : Number(radiusKm) || 10,
@@ -556,13 +571,13 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
             autoFocus
           />
         </div>
-        <Button type="submit" size="lg" className="h-12" disabled={!!busy || !query.trim()}>
+        <Button type="submit" size="lg" className="h-12" disabled={!!busy || !query.trim()} data-tour="find-submit">
           {busy ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />} Find leads
         </Button>
       </form>
 
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-        <label className="space-y-1">
+        <label className="space-y-1" data-tour="find-service">
           <span className="text-xs text-muted-foreground">Service</span>
           <Select value={service} onChange={(e) => selectService(e.target.value)} className="capitalize">
             {catalogServices.map((item) => (
@@ -570,7 +585,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
             ))}
           </Select>
         </label>
-        <label className="space-y-1">
+        <label className="space-y-1" data-tour="find-country">
           <span className="text-xs text-muted-foreground">Country</span>
           <Select value={countryCode} onChange={(e) => changeCountry(e.target.value)}>
             {catalogCountries.map((item) => (
@@ -578,7 +593,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
             ))}
           </Select>
         </label>
-        <label className="space-y-1">
+        <label className="space-y-1" data-tour="find-city">
           <span className="text-xs text-muted-foreground">City</span>
           <Select
             value={citySelectVal}
@@ -595,31 +610,24 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
             ))}
           </Select>
         </label>
-        <label className="space-y-1">
+        <label className="space-y-1" data-tour="find-max">
           <span className="text-xs text-muted-foreground">Leads (max 10,000)</span>
           <Input type="number" min={1} max={10000} value={max} onChange={(e) => setMax(e.target.value)} />
         </label>
-        <label className="space-y-1">
-          <span className="text-xs text-muted-foreground">Rating ≥</span>
-          <Select value={minRating} onChange={(e) => setMinRating(e.target.value)}>
-            <option value="">Any</option>
-            <option value="3">3.0+</option>
-            <option value="3.5">3.5+</option>
-            <option value="4">4.0+</option>
-            <option value="4.5">4.5+</option>
+        <label className="space-y-1" data-tour="find-rating">
+          <span className="text-xs text-muted-foreground">Rating</span>
+          <Select value={rating} onChange={(e) => setRating(e.target.value)} title="Target high-rated businesses or low-rated ones that need help">
+            <option value="">Any rating</option>
+            <option value="gte:4.5">4.5 and up</option>
+            <option value="gte:4">4.0 and up</option>
+            <option value="gte:3.5">3.5 and up</option>
+            <option value="gte:3">3.0 and up</option>
+            <option value="lt:4">Below 4.0</option>
+            <option value="lt:3.5">Below 3.5</option>
+            <option value="lt:3">Below 3.0</option>
           </Select>
         </label>
-        <label className="space-y-1">
-          <span className="text-xs text-muted-foreground">Rating below</span>
-          <Select value={maxRating} onChange={(e) => setMaxRating(e.target.value)}>
-            <option value="">Any</option>
-            <option value="4.5">Under 4.5</option>
-            <option value="4">Under 4.0</option>
-            <option value="3.5">Under 3.5</option>
-            <option value="3">Under 3.0</option>
-          </Select>
-        </label>
-        <label className="space-y-1 sm:col-span-2">
+        <label className="space-y-1 sm:col-span-2" data-tour="find-radius">
           <span className="flex items-center justify-between text-xs text-muted-foreground">
             <span>Radius</span>
             <span className="font-medium text-foreground">{allCities ? "country-wide" : `${radiusKm} km`}</span>
@@ -637,7 +645,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
       </div>
 
       {/* Area picker map */}
-      <div className="mt-4">
+      <div className="mt-4" data-tour="find-map">
         <div className="mb-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
           <MapPin className="h-3.5 w-3.5" />
           <span>Drag the pin to refine the search center</span>
@@ -1546,7 +1554,7 @@ export default function Dashboard({ view = "" }) {
 
   if (simpleMode) {
     return (
-      <AppShell active="new" title="Find leads" subtitle="Start a Google Maps lead project">
+      <AppShell active="new" title="Find leads" subtitle="Start a Google Maps lead project" tourKey="find" tourSteps={FIND_TOUR}>
         <QuickScrapeHome busy={busy} onFind={startFindLeads} onOpenDashboard={() => router.push("/dashboard?view=projects")} error={error} needPlan={needPlan} />
       </AppShell>
     );

@@ -9,7 +9,10 @@ export default async function Page({ searchParams }) {
   // hidden for the SaaS launch. A `?workflow=` / `?list=` (e.g. from the Lists
   // page or the old /watchlist link) preselects that view.
   const sp = (await searchParams) || {};
-  const workflow = typeof sp.workflow === "string" ? sp.workflow : "needs-action";
   const list = typeof sp.list === "string" ? sp.list : "";
+  // When a list is opened, don't also apply the default "needs-action" workflow —
+  // the two AND together and a list whose leads aren't "needs action" would look
+  // empty. An explicit ?workflow= still wins.
+  const workflow = typeof sp.workflow === "string" ? sp.workflow : (list ? "" : "needs-action");
   return <LeadsClient initialWorkflow={workflow} initialList={list} />;
 }

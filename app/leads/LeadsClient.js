@@ -73,6 +73,17 @@ function showRating(lead) {
   return lead.rating != null && lead.rating !== "" && reviewCount(lead) > 0;
 }
 
+// Guided tour for the Leads page. Targets are data-tour attributes on-screen, so
+// it works on mobile. Passed to AppShell as tourKey="leads".
+const LEADS_TOUR = [
+  { key: "leads-tabs", title: "Switch views", body: "Jump between Needs action, Favorites, your custom lists, Email ready, Sent and Complete." },
+  { key: "leads-search", title: "Search your leads", body: "Search across name, domain, phone, email, category and notes at once." },
+  { key: "leads-filters", title: "Narrow it down", body: "Filter by project, country, city, whether they have an email or website, and site performance." },
+  { key: "leads-listfilter", title: "Saved lists", body: "Filter to one of your saved lists, then work just those leads." },
+  { key: "leads-table", title: "Work a lead", body: "Click a lead to open full details, or tick rows to bulk audit, scan for chatbots, generate reports, or add to a list." },
+  { key: "leads-export", title: "Export to CSV", body: "Download everything matching your current filters as a CSV." },
+];
+
 const WORKFLOWS = [
   // "All leads" tab intentionally hidden for the SaaS launch.
   { key: "needs-action", label: "Needs action" },
@@ -964,11 +975,18 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
 
   useEffect(() => {
     setPage(0);
-  }, [city, country, hasEmail, hasWebsite, initialWorkflow, minScore, project, search, workflow]);
+  }, [city, country, hasEmail, hasWebsite, initialWorkflow, initialList, listFilter, minScore, project, search, workflow]);
 
   useEffect(() => {
     setWorkflow(initialWorkflow);
   }, [initialWorkflow]);
+
+  // Keep the list filter in sync when navigating list -> list while mounted
+  // (the component stays mounted across /leads?list= changes, so the useState
+  // initial value alone would go stale).
+  useEffect(() => {
+    setListFilter(initialList);
+  }, [initialList]);
 
   async function addManualLead(target) {
     const website = manualSite.trim();
@@ -1069,7 +1087,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
         {batchBusy === "status" ? <Loader2 size={16} className="animate-spin" /> : <Globe2 size={16} />} <span className="hidden lg:inline">Check status</span>
       </Button>
       <Button asChild size="sm">
-        <a href={`${BASE_PATH}/api/leads/export`}><Download size={16} /> <span className="hidden sm:inline">Export CSV</span></a>
+        <a href={`${BASE_PATH}/api/leads/export`} data-tour="leads-export"><Download size={16} /> <span className="hidden sm:inline">Export CSV</span></a>
       </Button>
     </>
   );
@@ -1077,7 +1095,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
   const subtitle = `${total.toLocaleString()} lead${total === 1 ? "" : "s"} match · manage watch lists, email intent, outreach status & notes`;
 
   return (
-    <AppShell active={activeNav} title={pageTitle} subtitle={subtitle} actions={actions} sidebarExtra={sidebarStats}>
+    <AppShell active={activeNav} title={pageTitle} subtitle={subtitle} actions={actions} sidebarExtra={sidebarStats} tourKey="leads" tourSteps={LEADS_TOUR}>
       <div className="space-y-4 overflow-x-clip p-4 sm:p-6">
         {/* Toolbar */}
         <Card>
@@ -1093,44 +1111,46 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
               <Button disabled={!manualSite.trim() || !!adding} onClick={() => addManualLead("contact_list")}><ListPlus size={15} /> List</Button>
             </div>
 
-            <Tabs value={workflow} onValueChange={setWorkflow}>
-              <TabsList className="flex-wrap">
-                {WORKFLOWS.map((item) => (
-                  <TabsTrigger key={item.key || "all"} value={item.key}>{item.label}</TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
+            <div data-tour="leads-tabs">
+              <Tabs value={workflow} onValueChange={setWorkflow}>
+                <TabsList className="flex-wrap">
+                  {WORKFLOWS.map((item) => (
+                    <TabsTrigger key={item.key || "all"} value={item.key}>{item.label}</TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative min-w-[220px] flex-1">
+            <div className="flex flex-wrap items-center gap-2" data-tour="leads-filters">
+              <div className="relative w-full min-w-0 flex-1 sm:w-auto sm:min-w-[220px]" data-tour="leads-search">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input placeholder="Search name, domain, phone, email, category, notes..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
               </div>
-              <Select value={project} onChange={(e) => setProject(e.target.value)} className="w-auto min-w-[140px]">
+              <Select value={project} onChange={(e) => setProject(e.target.value)} className="w-full sm:w-auto sm:min-w-[140px]">
                 <option value="">All projects</option>
                 {projects.map((name) => <option key={name} value={name}>{name}</option>)}
               </Select>
-              <Select value={country} onChange={(e) => { setCountry(e.target.value); setCity(""); }} className="w-auto min-w-[140px]">
+              <Select value={country} onChange={(e) => { setCountry(e.target.value); setCity(""); }} className="w-full sm:w-auto sm:min-w-[140px]">
                 <option value="">All countries</option>
                 {countries.map((c) => <option key={c.name} value={c.name}>{c.name} ({c.count})</option>)}
               </Select>
-              <Select value={city} onChange={(e) => setCity(e.target.value)} className="w-auto min-w-[120px]">
+              <Select value={city} onChange={(e) => setCity(e.target.value)} className="w-full sm:w-auto sm:min-w-[120px]">
                 <option value="">All cities</option>
                 {cities.map((c) => <option key={c.name} value={c.name}>{c.name} ({c.count})</option>)}
               </Select>
-              <Select value={listFilter} onChange={(e) => setListFilter(e.target.value)} className="w-auto min-w-[120px]" title="Filter by list">
+              <Select value={listFilter} onChange={(e) => setListFilter(e.target.value)} className="w-full sm:w-auto sm:min-w-[120px]" title="Filter by list" data-tour="leads-listfilter">
                 <option value="">All lists</option>
                 {lists.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.count})</option>)}
               </Select>
               <label className="flex items-center gap-2 text-sm text-muted-foreground">
                 <input type="checkbox" checked={hasEmail} onChange={(e) => setHasEmail(e.target.checked)} className="accent-[hsl(var(--primary))]" /> Has email
               </label>
-              <Select value={hasWebsite} onChange={(e) => setHasWebsite(e.target.value)} className="w-auto min-w-[120px]" title="Filter by website">
+              <Select value={hasWebsite} onChange={(e) => setHasWebsite(e.target.value)} className="w-full sm:w-auto sm:min-w-[120px]" title="Filter by website">
                 <option value="">Any website</option>
                 <option value="yes">Has website</option>
                 <option value="no">No website</option>
               </Select>
-              <Select value={minScore} onChange={(e) => setMinScore(Number(e.target.value))} className="w-auto min-w-[100px]">
+              <Select value={minScore} onChange={(e) => setMinScore(Number(e.target.value))} className="w-full sm:w-auto sm:min-w-[100px]">
                 <option value={0}>Any perf</option>
                 <option value={50}>Perf 50+</option>
                 <option value={90}>Perf 90+</option>
@@ -1176,7 +1196,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
         )}
 
         {/* Table / cards */}
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden" data-tour="leads-table">
           {!rows.length ? (
             <div className="p-10 text-center text-sm text-muted-foreground">{loading ? "Loading..." : "No leads match this view."}</div>
           ) : (

@@ -17,6 +17,13 @@ async function jsonFetch(url, options = {}) {
   return data;
 }
 
+// Guided tour for the Lists page. Passed to AppShell as tourKey="lists".
+const LISTS_TOUR = [
+  { key: "lists-new", title: "Create a list", body: "Name a new list here, then add leads to it from the Leads page." },
+  { key: "lists-favorites", title: "Favorites", body: "Favorites is a built-in list of every lead you star — always one click away." },
+  { key: "lists-open", title: "Open a list", body: "Click any list to open the Leads table filtered to just those leads." },
+];
+
 // Saved lists overview. "Favorites" is a built-in list (the watchlist flag); the
 // rest are the user's named lists. Each opens the Leads table filtered to it.
 export default function ListsClient() {
@@ -43,9 +50,9 @@ export default function ListsClient() {
   }
 
   return (
-    <AppShell active="lists" title="Lists" subtitle="Saved lists of leads">
+    <AppShell active="lists" title="Lists" subtitle="Saved lists of leads" tourKey="lists" tourSteps={LISTS_TOUR}>
       <div className="mx-auto max-w-3xl space-y-5 p-4 sm:p-6">
-        <Card>
+        <Card data-tour="lists-new">
           <CardContent className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
             <div className="relative flex-1">
               <ListPlus className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -58,7 +65,7 @@ export default function ListsClient() {
         </Card>
 
         {/* Built-in Favorites list */}
-        <Link href="/leads?workflow=watchlist" className="block">
+        <Link href="/leads?workflow=watchlist" className="block" data-tour="lists-favorites">
           <Card className="transition-colors hover:border-primary/50">
             <CardContent className="flex items-center gap-3 p-4">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/15 text-amber-600"><Star className="h-5 w-5" fill="currentColor" /></div>
@@ -76,7 +83,7 @@ export default function ListsClient() {
         ) : lists.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">No saved lists yet. Create one above, then add leads to it from the Leads page.</p>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2" data-tour="lists-open">
             {lists.map((l) => (
               <Link key={l.id} href={`/leads?list=${l.id}`} className="block">
                 <Card className="transition-colors hover:border-primary/50">
