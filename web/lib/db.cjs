@@ -536,11 +536,15 @@ async function upsertLeads(userId, leadObjs) {
 
 // Query for the viewer page. Supports text search, workflow filters, has-email,
 // and a min score filter across either device's performance. Always user-scoped.
-async function queryLeads(
+// Build the shared WHERE clause + bound params for the `leads` table from a filter
+// object. The returned `add(val)` keeps appending positional params so callers can
+// tack on extras (queryLeads appends LIMIT/OFFSET). Both queryLeads and exportCsv
+// use this so the list view and the CSV export apply identical filtering.
+function buildLeadWhere(
   userId,
   {
     search = "",
-    hasEmail = false,
+    hasEmail = "",
     hasPhone = false,
     hasWebsite = "",
     minScore = 0,
@@ -553,8 +557,8 @@ async function queryLeads(
     watchlist = false,
     contactList = false,
     list = "",
-    limit = 2000,
-    offset = 0,
+    httpStatus = "",
+    ids = null,
   } = {}
 ) {
   const where = ["user_id = $1"];
@@ -570,10 +574,17 @@ async function queryLeads(
       `(name ILIKE ${p} OR domain ILIKE ${p} OR phone ILIKE ${p} OR address ILIKE ${p} OR email ILIKE ${p} OR category ILIKE ${p} OR notes ILIKE ${p})`
     );
   }
-  if (hasEmail) where.push("email IS NOT NULL AND email != ''");
+  // Email is tri-state ("yes"/"no"); accept legacy truthy/`"1"` as "has email".
+  if (hasEmail === "no") where.push("(email IS NULL OR email = '')");
+  else if (hasEmail === true || hasEmail === "1" || hasEmail === "yes") where.push("email IS NOT NULL AND email != ''");
   if (hasPhone) where.push("phone IS NOT NULL AND phone != ''");
   if (hasWebsite === "yes") where.push("website IS NOT NULL AND website != ''");
   if (hasWebsite === "no") where.push("(website IS NULL OR website = '')");
+  // Website HTTP status (populated by the "Check status" scan).
+  if (httpStatus === "200") where.push("http_status = 200");
+  else if (httpStatus === "redirect") where.push("http_status BETWEEN 300 AND 399");
+  else if (httpStatus === "broken") where.push("http_status >= 400");
+  else if (httpStatus === "unreachable") where.push("http_checked_at IS NOT NULL AND http_status IS NULL");
   if (project) where.push(`lower(project) = lower(${add(project)})`);
   if (country) where.push(`lower(country) = lower(${add(country)})`);
   if (city) where.push(`lower(city) = lower(${add(city)})`);
@@ -599,8 +610,17 @@ async function queryLeads(
     where.push("(contact_list = 1 OR watchlist = 1 OR email_status = 'send')");
     where.push("outreach_status NOT IN ('sent', 'complete', 'skipped')");
   }
+  // Explicit id allow-list (e.g. "export selected rows only").
+  if (Array.isArray(ids) && ids.length) {
+    where.push(`id = ANY(${add(ids.map(Number).filter(Number.isFinite))}::int[])`);
+  }
 
-  const clause = "WHERE " + where.join(" AND ");
+  return { where, params, add, clause: "WHERE " + where.join(" AND ") };
+}
+
+async function queryLeads(userId, opts = {}) {
+  const { limit = 2000, offset = 0 } = opts;
+  const { clause, params, add } = buildLeadWhere(userId, opts);
   const totalRes = await q(`SELECT COUNT(*)::int AS c FROM leads ${clause}`, params);
   const total = totalRes.rows[0].c;
   const limP = add(Number(limit));
@@ -942,8 +962,12 @@ async function statsLeads(userId) {
 const WORKFLOW_COLUMNS = ["watchlist", "contact_list", "email_status", "outreach_status", "notes", "last_contacted_at", "message_sent_at", "completed_at"];
 const EXPORT_COLUMNS = ["dedup_key", ...LEAD_COLUMNS, ...WORKFLOW_COLUMNS, "first_seen", "last_updated"];
 
-async function exportCsv(userId) {
-  const { rows } = await q(`SELECT * FROM leads WHERE user_id = $1 ORDER BY last_updated DESC`, [userId]);
+// Export the user's leads as CSV, applying the same filters as the list view
+// (`buildLeadWhere`) so "Export" matches what's on screen. Pass `filters.ids` to
+// export only a specific selection. Capped to avoid an unbounded dump.
+async function exportCsv(userId, filters = {}) {
+  const { clause, params } = buildLeadWhere(userId, filters);
+  const { rows } = await q(`SELECT * FROM leads ${clause} ORDER BY last_updated DESC LIMIT 100000`, params);
   const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const lines = [String.fromCharCode(0xfeff) + EXPORT_COLUMNS.join(",") + "\r\n"];
   for (const r of rows) lines.push(EXPORT_COLUMNS.map((c) => esc(r[c])).join(",") + "\r\n");

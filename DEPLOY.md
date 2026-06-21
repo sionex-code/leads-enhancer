@@ -12,7 +12,7 @@ Copy `.env.example` → `.env` and fill in:
 - `AUTH_SECRET` — `openssl rand -base64 32`
 - `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`
 - `NEXTAUTH_URL=https://leadsfunda.com`, `AUTH_TRUST_HOST=true`
-- `WHOP_API_KEY`, `WHOP_WEBHOOK_SECRET`, `WHOP_PLAN_19/49/99`, `WHOP_CHECKOUT_19/49/99`
+- `WHOP_API_KEY`, `WHOP_WEBHOOK_SECRET`, `WHOP_PLAN_19/35/49`, `WHOP_CHECKOUT_19/35/49`
 - `MAX_CONCURRENT_JOBS=6`, `FEATURE_AGENT=0`
 - `WAREHOUSE_URL` — base URL of the warehouse server (default `http://127.0.0.1:3200`); omit if co-located on the same VPS.
 - `WAREHOUSE_TOKEN` — copy from `gmaps-scraper-standalone/.warehouse-token.txt` on the worker VPS.
@@ -23,7 +23,7 @@ Copy `.env.example` → `.env` and fill in:
 - (For local dev also add `http://localhost:3000` + `.../api/auth/callback/google`.)
 
 ## 3. Whop (dashboard)
-- Create the product + 3 plans ($19/$49/$99); copy their plan IDs → `WHOP_PLAN_*`.
+- Create the product + 3 plans ($19/$35/$49); copy their plan IDs → `WHOP_PLAN_*`.
 - Copy each plan's hosted checkout URL → `WHOP_CHECKOUT_*`.
 - Add a webhook → `https://leadsfunda.com/api/webhooks/whop`; copy its signing
   secret → `WHOP_WEBHOOK_SECRET`. Subscribe to membership valid/invalid + payment events.

@@ -28,8 +28,9 @@ export async function GET(request) {
   const [result, stats, projects, countries, cities, lists] = await Promise.all([
     db.queryLeads(userId, {
       search: searchParams.get("search") || "",
-      hasEmail: searchParams.get("hasEmail") === "1",
+      hasEmail: searchParams.get("hasEmail") || "",
       hasWebsite: searchParams.get("hasWebsite") || "",
+      httpStatus: searchParams.get("httpStatus") || "",
       minScore: Number(searchParams.get("minScore") || 0),
       project: searchParams.get("project") || "",
       country,

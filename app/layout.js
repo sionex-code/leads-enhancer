@@ -1,5 +1,15 @@
 import "./tailwind.css";
+import { Instrument_Sans } from "next/font/google";
 import Providers from "./providers";
+
+// Display face for marketing headings (echoes the landing template). Body text
+// keeps the existing Inter stack from tailwind.css; this only adds a heading font.
+const display = Instrument_Sans({
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  variable: "--font-display",
+  display: "swap",
+});
 
 export const metadata = {
   title: "LeadsFunda: Google Maps lead generation",
@@ -16,7 +26,7 @@ export const viewport = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" className={display.variable}>
       <body>
         <Providers>{children}</Providers>
       </body>

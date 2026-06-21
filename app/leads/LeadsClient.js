@@ -572,8 +572,9 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
   const [countries, setCountries] = useState([]);
   const [cities, setCities] = useState([]);
   const [workflow, setWorkflow] = useState(initialWorkflow);
-  const [hasEmail, setHasEmail] = useState(false);
+  const [hasEmail, setHasEmail] = useState(""); // "" | "yes" | "no"
   const [hasWebsite, setHasWebsite] = useState(""); // "" | "yes" | "no"
+  const [httpStatus, setHttpStatus] = useState(""); // "" | "200" | "redirect" | "broken" | "unreachable"
   const [minScore, setMinScore] = useState(0);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -937,20 +938,28 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
       ? "Remove from custom list"
       : "Delete lead permanently";
 
+  // Current filter state as URL params. Shared by the list fetch and the CSV export
+  // link so "Export" always matches the on-screen filters.
+  const buildLeadParams = useCallback(() => {
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    if (project) params.set("project", project);
+    if (country) params.set("country", country);
+    if (city) params.set("city", city);
+    if (workflow) params.set("workflow", workflow);
+    if (hasEmail) params.set("hasEmail", hasEmail);
+    if (hasWebsite) params.set("hasWebsite", hasWebsite);
+    if (httpStatus) params.set("httpStatus", httpStatus);
+    if (minScore) params.set("minScore", String(minScore));
+    if (listFilter) params.set("list", listFilter);
+    return params;
+  }, [search, project, country, city, workflow, hasEmail, hasWebsite, httpStatus, minScore, listFilter]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setSelected(new Set()); // selection is scoped to the current page/filter view
     try {
-      const params = new URLSearchParams();
-      if (search) params.set("search", search);
-      if (project) params.set("project", project);
-      if (country) params.set("country", country);
-      if (city) params.set("city", city);
-      if (workflow) params.set("workflow", workflow);
-      if (hasEmail) params.set("hasEmail", "1");
-      if (hasWebsite) params.set("hasWebsite", hasWebsite);
-      if (minScore) params.set("minScore", String(minScore));
-      if (listFilter) params.set("list", listFilter);
+      const params = buildLeadParams();
       params.set("limit", String(PAGE_SIZE));
       params.set("offset", String(page * PAGE_SIZE));
       const data = await jsonFetch(`/api/leads?${params.toString()}`);
@@ -970,12 +979,12 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
     } finally {
       setLoading(false);
     }
-  }, [active?.id, city, country, hasEmail, hasWebsite, listFilter, minScore, page, project, search, workflow]);
+  }, [active?.id, buildLeadParams, page]);
   loadRef.current = load; // keep the batch poller's refresh hook pointed at the latest load
 
   useEffect(() => {
     setPage(0);
-  }, [city, country, hasEmail, hasWebsite, initialWorkflow, initialList, listFilter, minScore, project, search, workflow]);
+  }, [city, country, hasEmail, hasWebsite, httpStatus, initialWorkflow, initialList, listFilter, minScore, project, search, workflow]);
 
   useEffect(() => {
     setWorkflow(initialWorkflow);
@@ -1023,11 +1032,11 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
 
   // A clear, non-overlapping overview. Each tile applies a single concrete filter
   // (the old "Email ready / Queued / Sent" mix was confusing).
-  const clearFilters = () => { setWorkflow(""); setHasEmail(false); setHasWebsite(""); };
+  const clearFilters = () => { setWorkflow(""); setHasEmail(""); setHasWebsite(""); setHttpStatus(""); };
   const statTiles = [
-    { label: "Total", value: stats?.total || 0, onClick: clearFilters, active: !workflow && !hasEmail && !hasWebsite },
-    { label: "With email", value: stats?.withEmail || 0, onClick: () => { setWorkflow(""); setHasWebsite(""); setHasEmail(true); }, active: hasEmail },
-    { label: "With website", value: stats?.withWebsite || 0, onClick: () => { setWorkflow(""); setHasEmail(false); setHasWebsite("yes"); }, active: hasWebsite === "yes" },
+    { label: "Total", value: stats?.total || 0, onClick: clearFilters, active: !workflow && !hasEmail && !hasWebsite && !httpStatus },
+    { label: "With email", value: stats?.withEmail || 0, onClick: () => { setWorkflow(""); setHasWebsite(""); setHasEmail("yes"); }, active: hasEmail === "yes" },
+    { label: "With website", value: stats?.withWebsite || 0, onClick: () => { setWorkflow(""); setHasEmail(""); setHasWebsite("yes"); }, active: hasWebsite === "yes" },
     { label: "Favorites", value: stats?.watchlist || 0, onClick: () => setWorkflow("watchlist"), active: workflow === "watchlist" },
     { label: "In a list", value: stats?.contactList || 0, onClick: () => setWorkflow("contacts"), active: workflow === "contacts" },
     { label: "Contacted", value: stats?.completed || 0, onClick: () => setWorkflow("complete"), active: workflow === "complete" },
@@ -1081,13 +1090,19 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
     </div>
   ) : null;
 
+  // Export honors the active filters; if rows are selected, export just those.
+  const exportParams = buildLeadParams();
+  if (selected.size > 0) exportParams.set("ids", [...selected].join(","));
+  const exportHref = `${BASE_PATH}/api/leads/export?${exportParams.toString()}`;
+  const exportLabel = selected.size > 0 ? `Export ${selected.size}` : "Export CSV";
+
   const actions = (
     <>
       <Button variant="outline" size="sm" disabled={!!batchBusy || loading} onClick={() => batchScan("status")} title="Check website status for all leads on this page">
         {batchBusy === "status" ? <Loader2 size={16} className="animate-spin" /> : <Globe2 size={16} />} <span className="hidden lg:inline">Check status</span>
       </Button>
       <Button asChild size="sm">
-        <a href={`${BASE_PATH}/api/leads/export`} data-tour="leads-export"><Download size={16} /> <span className="hidden sm:inline">Export CSV</span></a>
+        <a href={exportHref} data-tour="leads-export" title={selected.size > 0 ? "Export selected leads" : "Export all leads matching the current filters"}><Download size={16} /> <span className="hidden sm:inline">{exportLabel}</span></a>
       </Button>
     </>
   );
@@ -1142,13 +1157,22 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                 <option value="">All lists</option>
                 {lists.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.count})</option>)}
               </Select>
-              <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                <input type="checkbox" checked={hasEmail} onChange={(e) => setHasEmail(e.target.checked)} className="accent-[hsl(var(--primary))]" /> Has email
-              </label>
+              <Select value={hasEmail} onChange={(e) => setHasEmail(e.target.value)} className="w-full sm:w-auto sm:min-w-[120px]" title="Filter by email">
+                <option value="">Any email</option>
+                <option value="yes">Has email</option>
+                <option value="no">No email</option>
+              </Select>
               <Select value={hasWebsite} onChange={(e) => setHasWebsite(e.target.value)} className="w-full sm:w-auto sm:min-w-[120px]" title="Filter by website">
                 <option value="">Any website</option>
                 <option value="yes">Has website</option>
                 <option value="no">No website</option>
+              </Select>
+              <Select value={httpStatus} onChange={(e) => setHttpStatus(e.target.value)} className="w-full sm:w-auto sm:min-w-[130px]" title="Filter by website status">
+                <option value="">Any status</option>
+                <option value="200">200 OK</option>
+                <option value="redirect">Redirect 3xx</option>
+                <option value="broken">Broken 4xx–5xx</option>
+                <option value="unreachable">Unreachable</option>
               </Select>
               <Select value={minScore} onChange={(e) => setMinScore(Number(e.target.value))} className="w-full sm:w-auto sm:min-w-[100px]">
                 <option value={0}>Any perf</option>

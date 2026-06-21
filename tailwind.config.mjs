@@ -12,6 +12,9 @@ export default {
       screens: { "2xl": "1200px" },
     },
     extend: {
+      fontFamily: {
+        heading: ["var(--font-display)", "Instrument Sans", "ui-sans-serif", "sans-serif"],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
