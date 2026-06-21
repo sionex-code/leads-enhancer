@@ -217,14 +217,18 @@ function FindResultAlert({ result, onClose }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [result, onClose]);
   if (!result) return null;
-  const { total = 0, inserted = 0, updated = 0 } = result;
+  const { inserted = 0, updated = 0 } = result;
+  // What the user actually pulled into this project (deduped), NOT the warehouse's
+  // full match count — that can be far larger than the requested max (e.g. 8,763
+  // available but you only grabbed your 900).
+  const grabbed = inserted + updated;
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center bg-slate-950/30 p-4 pt-24" onClick={onClose}>
       <div className="w-full max-w-md rounded-xl border border-emerald-500/40 bg-card p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600"><CheckCircle2 className="h-6 w-6" /></div>
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold">Grabbed {Number(total).toLocaleString()} {total === 1 ? "lead" : "leads"}</div>
+            <div className="text-sm font-semibold">Grabbed {grabbed.toLocaleString()} {grabbed === 1 ? "lead" : "leads"}</div>
             <p className="mt-1 text-sm text-muted-foreground">
               <b className="text-foreground">{Number(inserted).toLocaleString()}</b> new · <b className="text-foreground">{Number(updated).toLocaleString()}</b> already saved (no extra charge).
             </p>
@@ -1563,9 +1567,6 @@ export default function Dashboard({ view = "" }) {
   const actions = (
     <>
       <CreditsPill />
-      <Button variant="outline" size="sm" onClick={() => router.push("/dashboard")}>
-        <Search size={15} /> <span className="hidden sm:inline">New search</span>
-      </Button>
       <Button
         variant="outline"
         size="sm"
