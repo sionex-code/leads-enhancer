@@ -61,8 +61,14 @@ export default {
         marquee: { from: { transform: "translateX(0)" }, to: { transform: "translateX(-50%)" } },
         "marquee-reverse": { from: { transform: "translateX(-50%)" }, to: { transform: "translateX(0)" } },
         float: { "0%,100%": { transform: "translateY(0)" }, "50%": { transform: "translateY(-10px)" } },
+        "float-x": { "0%,100%": { transform: "translateY(0) translateX(0)" }, "50%": { transform: "translateY(-12px) translateX(4px)" } },
         "gradient-pan": { "0%,100%": { backgroundPosition: "0% 50%" }, "50%": { backgroundPosition: "100% 50%" } },
         "fade-up": { from: { opacity: "0", transform: "translateY(24px)" }, to: { opacity: "1", transform: "translateY(0)" } },
+        // Sheen sweep used by the hero badge + CTA buttons.
+        shine: { "0%": { transform: "translateX(-130%) skewX(-12deg)" }, "60%,100%": { transform: "translateX(230%) skewX(-12deg)" } },
+        // Seamless vertical auto-scroll for the live mini-UI showcase panels.
+        // Lists are duplicated, so -50% loops without a visible jump.
+        "scroll-y": { from: { transform: "translateY(0)" }, to: { transform: "translateY(-50%)" } },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -70,8 +76,11 @@ export default {
         marquee: "marquee 40s linear infinite",
         "marquee-reverse": "marquee-reverse 50s linear infinite",
         float: "float 6s ease-in-out infinite",
+        "float-x": "float-x 7s ease-in-out infinite",
         "gradient-pan": "gradient-pan 6s ease infinite",
         "fade-up": "fade-up 0.7s cubic-bezier(0.16,1,0.3,1) both",
+        shine: "shine 3.8s ease-in-out infinite",
+        "scroll-y": "scroll-y 16s linear infinite",
       },
     },
   },

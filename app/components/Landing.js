@@ -13,12 +13,16 @@ import {
   Globe2,
   MessageCircle,
   ArrowRight,
-  Sparkles,
   Cloud,
   Lock,
   Plus,
   Minus,
   Play,
+  Zap,
+  Building2,
+  Phone,
+  Gauge,
+  AlertTriangle,
 } from "lucide-react";
 import { GoogleSignInButton } from "./GoogleSignInButton";
 import { Button } from "./ui/button";
@@ -125,6 +129,17 @@ const STATS = [
   { v: "6", l: "Jobs run in parallel" },
 ];
 
+// Real avatar photos so the trust stack + testimonials show actual faces
+// instead of flat colored dots.
+const FACES = [
+  "/avatars/women-44.jpg",
+  "/avatars/men-32.jpg",
+  "/avatars/women-68.jpg",
+  "/avatars/men-76.jpg",
+  "/avatars/women-90.jpg",
+  "/avatars/men-12.jpg",
+];
+
 const TESTIMONIALS = [
   { name: "Marcus D.", role: "Agency owner", body: "Pulled 1,200 plumbers in an afternoon and half had no website — instant pitch list." },
   { name: "Priya N.", role: "Freelance SDR", body: "The email + WhatsApp enrichment sold me. My list is ready to outreach the second it lands." },
@@ -135,11 +150,11 @@ const TESTIMONIALS = [
 ];
 
 const PLANS = [
-  { id: "p19", name: "Starter", price: "19", quota: "5,000 credits / month", popular: false,
+  { id: "p19", name: "Starter", price: "19", quota: "5,000 credits / month", sub: "For solo prospectors finding their first leads", popular: false, accent: "text-blue-600",
     perks: ["5,000 credits / mo", "Email + social enrichment", "Website health checks", "CSV export"] },
-  { id: "p35", name: "Growth", price: "35", quota: "50,000 credits / month", popular: true,
+  { id: "p35", name: "Growth", price: "35", quota: "50,000 credits / month", sub: "For freelancers running steady outreach", popular: true, accent: "text-primary",
     perks: ["50,000 credits / mo", "Everything in Starter", "Priority in the job queue", "WhatsApp checks"] },
-  { id: "p49", name: "Scale", price: "49", quota: "Unlimited credits / month", popular: false,
+  { id: "p49", name: "Scale", price: "49", quota: "Unlimited credits / month", sub: "For agencies scraping at volume", popular: false, accent: "text-violet-600",
     perks: ["Unlimited credits / mo", "Everything in Growth", "Highest queue priority", "Best for agencies"] },
 ];
 
@@ -152,10 +167,6 @@ const FAQ = [
   { q: "How fast is a scrape?", a: "Jobs run on our servers with up to six in parallel, so a few thousand leads typically finish while you grab a coffee." },
 ];
 
-const AVATARS = [
-  "bg-blue-500", "bg-violet-500", "bg-emerald-500", "bg-orange-500", "bg-rose-500",
-];
-
 function Stars() {
   return (
     <div className="flex items-center gap-0.5 text-amber-400">
@@ -164,52 +175,104 @@ function Stars() {
   );
 }
 
-// Mini leads-table mock for the first split feature card.
-function MiniLeads() {
-  const rows = [
-    { n: "Lone Star Plumbing", s: 38, c: "text-rose-600" },
-    { n: "Hill Country HVAC", s: 72, c: "text-amber-600" },
-    { n: "Capital Roofing Co.", s: 21, c: "text-rose-600" },
-    { n: "Barton Electric", s: 64, c: "text-amber-600" },
-  ];
+// Stack of real avatar photos used in the hero trust row.
+function AvatarStack() {
   return (
-    <div className="rounded-2xl border border-border bg-card p-3 shadow-sm">
-      <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-        <Search className="h-3 w-3" /> plumber in Austin TX
-        <span className="ml-auto rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-600">1,284 found</span>
-      </div>
-      <div className="space-y-1.5">
-        {rows.map((r) => (
-          <div key={r.n} className="flex items-center gap-2 rounded-lg bg-muted/40 px-2.5 py-1.5 text-xs">
-            <span className="truncate font-medium text-foreground">{r.n}</span>
-            <span className={`ml-auto font-semibold ${r.c}`}>{r.s}</span>
-          </div>
+    <div className="flex -space-x-2.5">
+      {FACES.slice(0, 5).map((src, i) => (
+        <Image
+          key={src}
+          src={src}
+          alt=""
+          width={34}
+          height={34}
+          className="h-[34px] w-[34px] rounded-full border-2 border-background object-cover shadow-sm"
+        />
+      ))}
+    </div>
+  );
+}
+
+// A small frosted chip that floats around the hero product window. Hidden on
+// narrow screens so it never overlaps the video.
+function FloatChip({ className = "", icon: Icon, tone, children, delay = 0 }) {
+  return (
+    <div
+      style={{ animationDelay: `${delay}ms` }}
+      className={`animate-float absolute z-20 hidden items-center gap-2.5 rounded-2xl border border-border bg-card/90 px-3.5 py-2.5 shadow-xl shadow-black/5 backdrop-blur-md lg:flex ${className}`}
+    >
+      <span className={`flex h-8 w-8 items-center justify-center rounded-xl ${tone}`}>
+        <Icon className="h-4 w-4" />
+      </span>
+      <div className="text-left leading-tight">{children}</div>
+    </div>
+  );
+}
+
+// Seamless vertical auto-scroll for the live mini-UI showcase panels. The rows
+// are duplicated, so the -50% loop has no visible seam.
+function ScrollColumn({ items, duration = 16 }) {
+  return (
+    <div className="relative mt-4 h-44 overflow-hidden [mask-image:linear-gradient(to_bottom,transparent,black_12%,black_88%,transparent)]">
+      <div className="animate-scroll-y space-y-2" style={{ animationDuration: `${duration}s` }}>
+        {[...items, ...items].map((node, i) => (
+          <div key={i}>{node}</div>
         ))}
       </div>
     </div>
   );
 }
 
-// Mini enrichment / contact mock for the second split feature card.
-function MiniEnrich() {
-  const rows = [
-    { n: "office@hillcountry.com", wa: true },
-    { n: "team@bartonelectric.com", wa: true },
-    { n: "hello@lonestarplumb.com", wa: false },
-  ];
+// ── Live showcase data ──────────────────────────────────────────────────────
+const SCRAPE_FEED = [
+  { n: "Lone Star Plumbing", m: "+1 (512) 555-0182" },
+  { n: "Hill Country HVAC", m: "+1 (512) 555-0143" },
+  { n: "Capital Roofing Co.", m: "+1 (512) 555-0117" },
+  { n: "Barton Electric", m: "+1 (512) 555-0164" },
+  { n: "Travis County Garage", m: "+1 (512) 555-0199" },
+  { n: "Zilker Landscaping", m: "+1 (512) 555-0128" },
+];
+
+const ENRICH_FEED = [
+  { e: "office@hillcountryhvac.com", wa: true },
+  { e: "team@bartonelectric.com", wa: true },
+  { e: "hello@lonestarplumb.com", wa: false },
+  { e: "info@capitalroofing.co", wa: true },
+  { e: "contact@zilkerland.com", wa: false },
+  { e: "service@traviscgarage.com", wa: true },
+];
+
+const AUDIT_FEED = [
+  { l: "No SSL certificate", tone: "text-rose-600 bg-rose-500/10" },
+  { l: "Slow load · 4.2s LCP", tone: "text-amber-600 bg-amber-500/10" },
+  { l: "No mobile layout", tone: "text-rose-600 bg-rose-500/10" },
+  { l: "Missing meta title", tone: "text-amber-600 bg-amber-500/10" },
+  { l: "No chatbot detected", tone: "text-violet-600 bg-violet-500/10" },
+  { l: "Outdated copyright", tone: "text-amber-600 bg-amber-500/10" },
+];
+
+// One live card in the showcase: icon + title + one-line copy on top, an
+// auto-scrolling mini-UI panel below.
+function LiveCard({ icon: Icon, tile, title, body, header, headerTone, items, duration }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-3 shadow-sm">
-      <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-        <Mail className="h-3 w-3 text-violet-600" /> Enriched contacts
-        <span className="ml-auto rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600">912 emails</span>
+    <div className="group flex h-full flex-col overflow-hidden rounded-3xl border border-border bg-card p-6 transition-all duration-300 hover:-translate-y-1.5 hover:border-primary/40 hover:shadow-xl hover:shadow-primary/10">
+      <div className={`mb-4 flex h-11 w-11 items-center justify-center rounded-2xl ${tile} transition-transform duration-300 group-hover:scale-110`}>
+        <Icon className="h-5 w-5" />
       </div>
-      <div className="space-y-1.5">
-        {rows.map((r) => (
-          <div key={r.n} className="flex items-center gap-2 rounded-lg bg-muted/40 px-2.5 py-1.5 text-xs">
-            <span className="truncate font-medium text-foreground">{r.n}</span>
-            {r.wa && <MessageCircle className="ml-auto h-3.5 w-3.5 shrink-0 text-emerald-600" />}
-          </div>
-        ))}
+      <h3 className="font-heading text-lg font-bold">{title}</h3>
+      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</p>
+      {/* Mini app panel */}
+      <div className="mt-5 rounded-2xl border border-border bg-muted/30 p-3">
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          <span className={`flex items-center gap-1.5 rounded-full px-2 py-0.5 ${headerTone}`}>
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-60" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-current" />
+            </span>
+            {header}
+          </span>
+        </div>
+        <ScrollColumn items={items} duration={duration} />
       </div>
     </div>
   );
@@ -217,25 +280,29 @@ function MiniEnrich() {
 
 function FaqItem({ q, a, open, onClick }) {
   return (
-    <div className="rounded-2xl border border-border bg-card">
+    <div className={`overflow-hidden rounded-2xl border bg-card transition-colors ${open ? "border-primary/40 shadow-sm shadow-primary/5" : "border-border"}`}>
       <button onClick={onClick} className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left">
         <span className="font-heading text-base font-semibold text-foreground">{q}</span>
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors ${open ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary"}`}>
           {open ? <Minus className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
         </span>
       </button>
-      {open && <p className="px-5 pb-5 text-sm leading-relaxed text-muted-foreground">{a}</p>}
+      <div className={`grid transition-all duration-300 ease-out ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+        <div className="overflow-hidden">
+          <p className="px-5 pb-5 text-sm leading-relaxed text-muted-foreground">{a}</p>
+        </div>
+      </div>
     </div>
   );
 }
 
 function TestimonialCard({ t, i }) {
   return (
-    <div className="w-[340px] shrink-0 rounded-3xl border border-border bg-card p-6">
+    <div className="w-[340px] shrink-0 rounded-3xl border border-border bg-card p-6 shadow-sm">
       <Stars />
       <p className="mt-3 text-sm leading-relaxed text-foreground">“{t.body}”</p>
       <div className="mt-4 flex items-center gap-3">
-        <span className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white ${AVATARS[i % AVATARS.length]}`}>{t.name[0]}</span>
+        <Image src={FACES[i % FACES.length]} alt="" width={36} height={36} className="h-9 w-9 rounded-full object-cover" />
         <div>
           <div className="text-sm font-semibold text-foreground">{t.name}</div>
           <div className="text-xs text-muted-foreground">{t.role}</div>
@@ -258,7 +325,7 @@ export default function Landing({ checkout = {} }) {
       </div>
 
       {/* Nav — pill, blurred, centered links like the template */}
-      <header className="sticky top-3 z-30 px-4">
+      <header className="sticky top-3 z-40 px-4">
         <div className="container">
           <div className="flex h-14 items-center justify-between rounded-full border border-border/70 bg-background/80 px-3 pl-5 shadow-sm backdrop-blur-xl">
             <Image src="/brand/leadsfunda-white.svg" alt="LeadsFunda" width={140} height={27} priority />
@@ -267,7 +334,7 @@ export default function Landing({ checkout = {} }) {
                 <a key={n.href} href={n.href} className="transition-colors hover:text-foreground">{n.label}</a>
               ))}
             </nav>
-            <GoogleSignInButton size="sm" className="rounded-full">Get started</GoogleSignInButton>
+            <GoogleSignInButton size="sm" className="lf-cta rounded-full">Get started</GoogleSignInButton>
           </div>
         </div>
       </header>
@@ -275,8 +342,13 @@ export default function Landing({ checkout = {} }) {
       {/* Hero — centered, then the product window with the video */}
       <section className="relative px-4">
         <div className="container flex flex-col items-center pb-10 pt-16 text-center sm:pt-24">
-          <span className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 text-sm text-muted-foreground shadow-sm">
-            <Sparkles className="h-3.5 w-3.5 text-primary" /> Google Maps lead generation, on autopilot
+          <span className="lf-shine mb-7 inline-flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/[0.06] px-3.5 py-1.5 text-sm font-medium text-foreground/80">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#a2e435] opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-[#7cc20a]" />
+            </span>
+            <Zap className="h-3.5 w-3.5 fill-primary text-primary" />
+            Google Maps lead generation, on autopilot
           </span>
           <h1 className="font-heading max-w-4xl text-4xl font-bold leading-[1.05] tracking-tight sm:text-6xl xl:text-7xl">
             Turn Google Maps into a{" "}
@@ -290,26 +362,36 @@ export default function Landing({ checkout = {} }) {
             websites need help — all from one dashboard.
           </p>
           <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-            <GoogleSignInButton size="lg" className="rounded-full px-7">Start free with Google</GoogleSignInButton>
-            <Button asChild variant="outline" size="lg" className="rounded-full px-7">
+            <GoogleSignInButton size="lg" className="lf-cta rounded-full px-7">Start free with Google</GoogleSignInButton>
+            <Button asChild variant="outline" size="lg" className="rounded-full bg-card px-7 shadow-sm hover:bg-muted">
               <a href="#how">See how it works <ArrowRight className="h-4 w-4" /></a>
             </Button>
           </div>
-          {/* Trust row: stacked avatars + rating */}
+          {/* Trust row: stacked real avatars + rating */}
           <div className="mt-8 flex flex-wrap items-center justify-center gap-x-5 gap-y-3">
-            <div className="flex -space-x-2.5">
-              {AVATARS.map((c, i) => (
-                <span key={i} className={`h-8 w-8 rounded-full border-2 border-background ${c}`} />
-              ))}
-            </div>
+            <AvatarStack />
             <span className="text-sm text-muted-foreground">Trusted by <span className="font-semibold text-foreground">2,400+</span> marketers</span>
             <span className="flex items-center gap-1.5"><Stars /> <span className="text-sm font-semibold text-foreground">5.0</span></span>
           </div>
         </div>
 
-        {/* Product window — the hero video lives here */}
+        {/* Product window — the hero video lives here, with floating accent chips */}
         <div className="container relative max-w-5xl pb-8">
           <div className="pointer-events-none absolute -inset-x-10 -top-6 bottom-10 -z-10 rounded-[3rem] bg-gradient-to-tr from-primary/25 via-violet-400/20 to-[#a2e435]/25 blur-3xl" />
+
+          <FloatChip className="-left-6 top-12" icon={Search} tone="bg-blue-500/10 text-blue-600" delay={0}>
+            <div className="text-sm font-semibold text-foreground">1,284 leads</div>
+            <div className="text-[11px] text-muted-foreground">found in 4m 12s</div>
+          </FloatChip>
+          <FloatChip className="-right-6 top-28" icon={Mail} tone="bg-violet-500/10 text-violet-600" delay={700}>
+            <div className="text-sm font-semibold text-foreground">912 emails</div>
+            <div className="text-[11px] text-muted-foreground">enriched & verified</div>
+          </FloatChip>
+          <FloatChip className="-left-4 bottom-16" icon={MessageCircle} tone="bg-emerald-500/10 text-emerald-600" delay={1400}>
+            <div className="text-sm font-semibold text-foreground">347 on WhatsApp</div>
+            <div className="text-[11px] text-muted-foreground">ready to message</div>
+          </FloatChip>
+
           <div className="overflow-hidden rounded-[1.6rem] border border-border bg-card shadow-2xl shadow-primary/10">
             <div className="flex items-center gap-2 border-b border-border/60 bg-muted/40 px-4 py-3">
               <span className="h-3 w-3 rounded-full bg-rose-400" />
@@ -334,33 +416,68 @@ export default function Landing({ checkout = {} }) {
         </div>
       </section>
 
-      {/* Split features with mini-UI mockups */}
-      <section className="container space-y-6 py-20">
-        <div className="mx-auto mb-4 max-w-2xl text-center">
-          <span className="text-sm font-semibold uppercase tracking-wider text-primary">Features</span>
+      {/* Live showcase — three cards with auto-scrolling mini-UIs */}
+      <section className="container py-20">
+        <div className="mx-auto mb-12 max-w-2xl text-center">
+          <span className="text-sm font-semibold uppercase tracking-wider text-primary">See it work</span>
           <h2 className="font-heading mt-2 text-3xl font-bold tracking-tight sm:text-4xl">From raw Maps listing to ready-to-pitch lead</h2>
-          <p className="mt-3 text-muted-foreground">Scrape, enrich, audit and organize — without stitching together five different tools.</p>
+          <p className="mt-3 text-muted-foreground">Scrape, enrich and audit run live — no stitching together five different tools.</p>
         </div>
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid gap-6 lg:grid-cols-3">
           <Reveal>
-            <div className="grid h-full items-center gap-6 rounded-3xl border border-border bg-card p-7 transition-shadow duration-300 hover:shadow-xl hover:shadow-primary/10 sm:grid-cols-2">
-              <div>
-                <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600"><Search className="h-5 w-5" /></div>
-                <h3 className="font-heading text-xl font-bold">Find who needs you</h3>
-                <p className="mt-2 text-sm text-muted-foreground">Every business in a niche, scored by website health so the prospects worth calling rise to the top.</p>
-              </div>
-              <MiniLeads />
-            </div>
+            <LiveCard
+              icon={Search}
+              tile="bg-blue-500/10 text-blue-600"
+              title="Scrape every business"
+              body="Name, phone, website, rating and hours for any niche + city — deduped and resumable."
+              header="scraping · Austin TX"
+              headerTone="bg-blue-500/10 text-blue-600"
+              duration={15}
+              items={SCRAPE_FEED.map((r) => (
+                <div className="flex items-center gap-2.5 rounded-xl bg-card px-3 py-2 text-xs shadow-sm">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600"><Building2 className="h-3.5 w-3.5" /></span>
+                  <span className="truncate font-medium text-foreground">{r.n}</span>
+                  <span className="ml-auto flex shrink-0 items-center gap-1 text-muted-foreground"><Phone className="h-3 w-3" /> {r.m.slice(-7)}</span>
+                </div>
+              ))}
+            />
           </Reveal>
           <Reveal delay={120}>
-            <div className="grid h-full items-center gap-6 rounded-3xl border border-border bg-card p-7 transition-shadow duration-300 hover:shadow-xl hover:shadow-primary/10 sm:grid-cols-2">
-              <div>
-                <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600"><Mail className="h-5 w-5" /></div>
-                <h3 className="font-heading text-xl font-bold">Ready to outreach</h3>
-                <p className="mt-2 text-sm text-muted-foreground">Emails, socials and WhatsApp pulled from each site, so your list is sendable the moment it lands.</p>
-              </div>
-              <MiniEnrich />
-            </div>
+            <LiveCard
+              icon={Mail}
+              tile="bg-violet-500/10 text-violet-600"
+              title="Enrich every contact"
+              body="Emails, socials and WhatsApp pulled from each site, so your list is sendable on arrival."
+              header="enriching contacts"
+              headerTone="bg-violet-500/10 text-violet-600"
+              duration={17}
+              items={ENRICH_FEED.map((r) => (
+                <div className="flex items-center gap-2.5 rounded-xl bg-card px-3 py-2 text-xs shadow-sm">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600"><Mail className="h-3.5 w-3.5" /></span>
+                  <span className="truncate font-medium text-foreground">{r.e}</span>
+                  {r.wa
+                    ? <MessageCircle className="ml-auto h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                    : <Check className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+                </div>
+              ))}
+            />
+          </Reveal>
+          <Reveal delay={240}>
+            <LiveCard
+              icon={Gauge}
+              tile="bg-emerald-500/10 text-emerald-600"
+              title="Audit their website"
+              body="Real-Chrome checks flag broken, slow or missing sites — your warmest pitch list, scored."
+              header="auditing sites"
+              headerTone="bg-emerald-500/10 text-emerald-600"
+              duration={16}
+              items={AUDIT_FEED.map((r) => (
+                <div className="flex items-center gap-2.5 rounded-xl bg-card px-3 py-2 text-xs shadow-sm">
+                  <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${r.tone}`}><AlertTriangle className="h-3.5 w-3.5" /></span>
+                  <span className="truncate font-medium text-foreground">{r.l}</span>
+                </div>
+              ))}
+            />
           </Reveal>
         </div>
       </section>
@@ -446,36 +563,42 @@ export default function Landing({ checkout = {} }) {
         </div>
         <div className="mx-auto grid max-w-5xl items-stretch gap-6 lg:grid-cols-3">
           {PLANS.map((plan, i) => (
-            <Reveal key={plan.id} delay={i * 90} className={plan.popular ? "lg:-mt-3 lg:mb-3" : ""}>
-            <div className={`relative flex h-full flex-col rounded-3xl border bg-card p-7 transition-all duration-300 hover:-translate-y-1.5 ${plan.popular ? "border-primary/60 shadow-2xl shadow-primary/15" : "border-border hover:shadow-xl hover:shadow-primary/10"}`}>
-              {plan.popular && (
-                <>
-                  <span className="pointer-events-none absolute -inset-[2px] -z-10 rounded-[inherit] bg-[linear-gradient(120deg,#3147ff,#8b5cf6,#a2e435,#3147ff)] bg-[length:300%_300%] animate-gradient-pan" />
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-lg shadow-primary/30">Most popular</span>
-                </>
-              )}
-              <div className="text-sm font-medium text-muted-foreground">{plan.name}</div>
-              <div className="mt-2 flex items-end gap-1">
-                <span className="font-heading text-5xl font-bold">${plan.price}</span>
-                <span className="mb-1.5 text-sm text-muted-foreground">/ month</span>
+            <Reveal key={plan.id} delay={i * 90} className={plan.popular ? "lg:-mt-4 lg:mb-4" : ""}>
+              <div className={`relative flex h-full flex-col rounded-3xl border bg-card p-7 transition-all duration-300 hover:-translate-y-1.5 ${plan.popular ? "border-transparent shadow-2xl shadow-primary/20" : "border-border hover:shadow-xl hover:shadow-primary/10"}`}>
+                {plan.popular && (
+                  <>
+                    <span className="pointer-events-none absolute -inset-[1.5px] -z-10 rounded-[inherit] bg-[linear-gradient(120deg,#3147ff,#8b5cf6,#a2e435,#3147ff)] bg-[length:300%_300%] animate-gradient-pan" />
+                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-lg shadow-primary/30">Most popular</span>
+                  </>
+                )}
+                <div className={`flex items-center gap-2 text-sm font-semibold ${plan.accent}`}>
+                  <span className="inline-block h-2 w-2 rounded-full bg-current" />
+                  {plan.name}
+                </div>
+                <p className="mt-2 text-sm text-muted-foreground">{plan.sub}</p>
+                <div className="mt-5 flex items-end gap-1">
+                  <span className="font-heading text-5xl font-bold tracking-tight">${plan.price}</span>
+                  <span className="mb-1.5 text-sm text-muted-foreground">/ month</span>
+                </div>
+                <div className="mt-1 text-sm font-medium text-muted-foreground">{plan.quota}</div>
+                {checkout[plan.id] ? (
+                  <Button asChild className={`mt-6 w-full rounded-full ${plan.popular ? "lf-cta" : ""}`} variant={plan.popular ? "default" : "outline"}>
+                    <a href={checkout[plan.id]} target="_blank" rel="noreferrer">Get started</a>
+                  </Button>
+                ) : (
+                  <GoogleSignInButton className={`mt-6 w-full rounded-full ${plan.popular ? "lf-cta" : ""}`} variant={plan.popular ? "default" : "outline"}>Get started</GoogleSignInButton>
+                )}
+                <div className="my-6 h-px bg-border" />
+                <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">What&apos;s included</div>
+                <ul className="space-y-3 text-sm">
+                  {plan.perks.map((p) => (
+                    <li key={p} className="flex items-start gap-2.5">
+                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#a2e435]/30 text-[#3a6b00]"><Check className="h-3 w-3" /></span>
+                      <span className="text-muted-foreground">{p}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <div className="mt-1 text-sm text-muted-foreground">{plan.quota}</div>
-              {checkout[plan.id] ? (
-                <Button asChild className="mt-6 w-full rounded-full" variant={plan.popular ? "default" : "outline"}>
-                  <a href={checkout[plan.id]} target="_blank" rel="noreferrer">Get started</a>
-                </Button>
-              ) : (
-                <GoogleSignInButton className="mt-6 w-full rounded-full" variant={plan.popular ? "default" : "outline"}>Get started</GoogleSignInButton>
-              )}
-              <ul className="mt-6 space-y-3 text-sm">
-                {plan.perks.map((p) => (
-                  <li key={p} className="flex items-start gap-2.5">
-                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#a2e435]/30 text-[#3a6b00]"><Check className="h-3 w-3" /></span>
-                    <span className="text-muted-foreground">{p}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
             </Reveal>
           ))}
         </div>
@@ -504,7 +627,7 @@ export default function Landing({ checkout = {} }) {
           <h2 className="font-heading mx-auto max-w-xl text-3xl font-bold sm:text-4xl">Ready to build your lead list?</h2>
           <p className="mx-auto mt-3 max-w-lg text-white/80">Sign in with Google and run your first scrape in minutes.</p>
           <div className="mt-7 flex justify-center">
-            <GoogleSignInButton size="lg" variant="secondary" className="rounded-full px-7">Start free with Google</GoogleSignInButton>
+            <GoogleSignInButton size="lg" variant="secondary" className="lf-cta rounded-full px-7">Start free with Google</GoogleSignInButton>
           </div>
         </div>
       </section>
