@@ -178,13 +178,13 @@ const PLANS = [
     perks: ["Free starter credits", "Find + preview leads", "Basic enrichment", "CSV export"],
     cta: "Start free", callbackUrl: "/dashboard", style: "light" },
   { id: "p19", name: "Starter", price: 19, sub: "For solo prospectors", quota: "5,000 credits / month",
-    perks: ["5,000 credits / mo", "Email + social enrichment", "Website health checks", "WhatsApp checks"],
+    perks: ["5,000 credits / mo", "20 searches + 400 leads / day", "Email + social enrichment", "Website health checks"],
     cta: "Get Starter", callbackUrl: "/billing?plan=p19", style: "light" },
   { id: "p35", name: "Growth", price: 35, sub: "For steady outreach", quota: "50,000 credits / month", popular: true,
-    perks: ["50,000 credits / mo", "Everything in Starter", "Priority in the job queue", "Owner-reply detection"],
+    perks: ["50,000 credits / mo", "100 searches + 1,500 leads / day", "Everything in Starter", "Priority in the job queue"],
     cta: "Get Growth", callbackUrl: "/billing?plan=p35", style: "blue" },
   { id: "p49", name: "Scale", price: 49, sub: "For agencies at volume", quota: "Unlimited credits / month",
-    perks: ["Unlimited credits / mo", "Everything in Growth", "Highest queue priority", "Best for agencies"],
+    perks: ["Unlimited credits / mo", "1,000 searches + 5,000 leads / day", "Everything in Growth", "Highest queue priority"],
     cta: "Get Scale", callbackUrl: "/billing?plan=p49", style: "dark" },
 ];
 
@@ -331,12 +331,11 @@ function Eyebrow({ children }) {
 
 // One pricing card. Three visual styles mirror the template's white / highlighted
 // / dark cards; brand blue replaces the template's green for the popular tier.
-function PriceCard({ plan, yearly }) {
+function PriceCard({ plan }) {
   const Icon = PLAN_ICONS[plan.id];
   const blue = plan.style === "blue";
   const dark = plan.style === "dark";
-  const monthly = plan.price;
-  const shown = yearly ? Math.round(monthly * 0.8) : monthly;
+  const shown = plan.price;
 
   const shell = blue
     ? "border-transparent bg-gradient-to-b from-primary to-blue-600 text-white shadow-2xl shadow-primary/30"
@@ -369,7 +368,7 @@ function PriceCard({ plan, yearly }) {
         <span className="font-heading text-4xl font-bold tracking-tight">${shown}</span>
         <span className={`mb-1 text-sm ${per}`}>/ month</span>
       </div>
-      <div className={`mt-1 text-xs ${per}`}>{plan.price === 0 ? plan.quota : yearly ? "billed yearly · save 20%" : plan.quota}</div>
+      <div className={`mt-1 text-xs ${per}`}>{plan.quota}</div>
 
       <GoogleSignInButton callbackUrl={plan.callbackUrl} className={`mt-6 w-full rounded-full ${btnClass}`} variant={btnVariant}>
         {plan.cta}
@@ -391,7 +390,6 @@ function PriceCard({ plan, yearly }) {
 
 export default function Landing() {
   const [openFaq, setOpenFaq] = useState(0);
-  const [yearly, setYearly] = useState(false);
 
   return (
     <div className="lf relative min-h-screen overflow-x-clip bg-background text-foreground">
@@ -667,19 +665,11 @@ export default function Landing() {
           <p className="mt-3 text-muted-foreground">Choose a plan that fits your needs, budget and growth.</p>
         </div>
 
-        {/* Monthly / Yearly toggle */}
-        <div className="mb-12 flex items-center justify-center">
-          <div className="inline-flex items-center gap-1 rounded-full border border-border bg-card p-1 shadow-sm">
-            <button onClick={() => setYearly(false)} className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${!yearly ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"}`}>Monthly</button>
-            <button onClick={() => setYearly(true)} className={`flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${yearly ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"}`}>
-              Yearly <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${yearly ? "bg-white/20 text-white" : "bg-[#a2e435]/30 text-[#3a6b00]"}`}>Save 20%</span>
-            </button>
-          </div>
-        </div>
+        <div className="mb-12" />
 
         <div className="mx-auto grid max-w-6xl items-stretch gap-5 lg:grid-cols-4">
           {PLANS.map((plan, i) => (
-            <Reveal key={plan.id} delay={i * 80}><PriceCard plan={plan} yearly={yearly} /></Reveal>
+            <Reveal key={plan.id} delay={i * 80}><PriceCard plan={plan} /></Reveal>
           ))}
         </div>
         <p className="mt-8 text-center text-xs text-muted-foreground">Sign in with Google, then subscribe. Payments processed securely by Whop. Cancel anytime.</p>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Check, Crown, Sparkles, ArrowUpRight, Star, Coins } from "lucide-react";
+import { Check, Crown, Sparkles, ArrowUpRight, Star, Coins, Search, Users, Clock } from "lucide-react";
 import AppShell from "../components/app/AppShell";
 import { useMe } from "../components/AccountWidget";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
@@ -18,10 +18,13 @@ const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 // IS its credit allowance (find a lead = 1 credit, audit 3, chatbot 5, report 10).
 const PLANS = [
   { id: "p19", name: "Starter", price: 19, credits: 5000, rank: 1, creditLabel: "5,000 credits / month",
+    dailySearches: 20, dailyLeads: 400,
     perks: ["5,000 credits / mo", "Find + enrich leads", "Website health checks", "CSV export"] },
   { id: "p35", name: "Growth", price: 35, credits: 50000, rank: 2, popular: true, creditLabel: "50,000 credits / month",
+    dailySearches: 100, dailyLeads: 1500,
     perks: ["50,000 credits / mo", "Everything in Starter", "Priority in the job queue", "WhatsApp checks"] },
   { id: "p49", name: "Scale", price: 49, credits: null, rank: 3, creditLabel: "Unlimited credits / month",
+    dailySearches: 1000, dailyLeads: 5000,
     perks: ["Unlimited credits / mo", "Everything in Growth", "Highest queue priority", "Best for agencies"] },
 ];
 
@@ -29,9 +32,80 @@ function checkoutHref(planId) {
   return `${BASE_PATH}/api/billing/checkout?plan=${planId}`;
 }
 
+// "Xh Ym" until an ISO reset instant.
+function untilReset(resetAt) {
+  if (!resetAt) return "tonight";
+  const ms = new Date(resetAt).getTime() - Date.now();
+  if (!Number.isFinite(ms) || ms <= 0) return "soon";
+  const mins = Math.floor(ms / 60000);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h > 0 ? `${h}h ${m}m` : `${Math.max(1, m)}m`;
+}
+
+const fmtLimit = (n) => (!n || n <= 0 ? "Unlimited" : Number(n).toLocaleString());
+
+// One daily-allowance meter (searches or leads) with a usage bar.
+function DailyMeter({ icon: Icon, label, metric, loading }) {
+  const unlimited = !!metric?.unlimited;
+  const limit = metric?.limit || 0;
+  const used = metric?.used || 0;
+  const remaining = unlimited ? null : Math.max(0, (metric?.remaining ?? limit) || 0);
+  const pct = unlimited || !limit ? 0 : Math.min(100, (used / limit) * 100);
+  const exhausted = !unlimited && remaining <= 0;
+  return (
+    <div className="rounded-xl border border-border bg-card/60 p-4">
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+          <Icon className="h-4 w-4" /> {label}
+        </span>
+        {loading ? (
+          <Skeleton className="h-5 w-14" />
+        ) : (
+          <span className={cn("text-sm font-semibold tabular-nums", exhausted && "text-red-600")}>
+            {unlimited ? "Unlimited" : `${remaining.toLocaleString()} left`}
+          </span>
+        )}
+      </div>
+      {!unlimited && limit ? (
+        <>
+          <Progress
+            className="mt-3"
+            value={100 - pct}
+            indicatorClassName={pct >= 90 ? "bg-amber-500" : "bg-primary"}
+          />
+          <p className="mt-1.5 text-xs text-muted-foreground tabular-nums">
+            {used.toLocaleString()} of {limit.toLocaleString()} used today
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 text-xs text-muted-foreground">No daily cap on your plan.</p>
+      )}
+    </div>
+  );
+}
+
 export default function BillingClient() {
   const me = useMe();
   const loading = !me;
+
+  // Live plan limits (with any admin overrides) for the daily search/lead caps.
+  const [planLimits, setPlanLimits] = useState(null); // { [id]: { dailySearches, dailyLeads } }
+  useEffect(() => {
+    fetch(`${BASE_PATH}/api/billing/plans`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d?.packages) return;
+        setPlanLimits(Object.fromEntries(d.packages.map((p) => [p.id, p])));
+      })
+      .catch(() => {});
+  }, []);
+  // Limits for a plan id: live (admin-overridable) values when loaded, else the
+  // static defaults baked into PLANS.
+  const limitsFor = (plan) => ({
+    dailySearches: planLimits?.[plan.id]?.dailySearches ?? plan.dailySearches,
+    dailyLeads: planLimits?.[plan.id]?.dailyLeads ?? plan.dailyLeads,
+  });
 
   // When arriving from the landing pricing buttons (login → /billing?plan=pXX),
   // highlight the chosen plan and scroll it into view so the user lands exactly
@@ -61,6 +135,9 @@ export default function BillingClient() {
 
   // On the top plan we never show a downgrade: only the current + higher tiers.
   const visiblePlans = active ? PLANS.filter((p) => p.rank >= currentRank) : PLANS;
+
+  // Today's per-day usage (searches + leads) and when it resets.
+  const daily = me?.daily;
 
   return (
     <AppShell
@@ -137,6 +214,39 @@ export default function BillingClient() {
           </div>
         </Card>
 
+        {/* Daily limits — searches + leads, with reset time */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-base font-semibold">Today&apos;s limits</h3>
+                <p className="text-sm text-muted-foreground">
+                  Your plan includes a daily search and lead allowance on top of monthly credits.
+                </p>
+              </div>
+              {daily ? (
+                <Badge variant="outline" className="gap-1.5">
+                  <Clock className="h-3.5 w-3.5" /> Resets in {untilReset(daily.resetAt)} · midnight {daily.tz}
+                </Badge>
+              ) : null}
+            </div>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <DailyMeter
+                icon={Search}
+                label="Searches today"
+                metric={daily?.searches}
+                loading={loading || !daily}
+              />
+              <DailyMeter
+                icon={Users}
+                label="Leads today"
+                metric={daily?.leads}
+                loading={loading || !daily}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Plans */}
         <div id="plans">
           <div className="mb-5 flex items-end justify-between">
@@ -180,6 +290,20 @@ export default function BillingClient() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-lg border border-border bg-muted/40 p-2.5 text-center">
+                        <div className="flex items-center justify-center gap-1 text-base font-bold tabular-nums">
+                          <Search className="h-3.5 w-3.5 text-primary" /> {fmtLimit(limitsFor(plan).dailySearches)}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">searches / day</div>
+                      </div>
+                      <div className="rounded-lg border border-border bg-muted/40 p-2.5 text-center">
+                        <div className="flex items-center justify-center gap-1 text-base font-bold tabular-nums">
+                          <Users className="h-3.5 w-3.5 text-primary" /> {fmtLimit(limitsFor(plan).dailyLeads)}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">leads / day</div>
+                      </div>
+                    </div>
                     <ul className="space-y-2 text-sm">
                       {plan.perks.map((p) => (
                         <li key={p} className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" /><span>{p}</span></li>

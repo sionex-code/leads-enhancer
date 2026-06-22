@@ -22,6 +22,18 @@ const REPORT_COST = 10; // credits per full website report (audit + AI + chatbot
 const AUDIT_COST = 3; // credits per quick audit (desktop + mobile Lighthouse scores only)
 const CHATBOT_COST = 5; // credits per website chatbot/live-chat scan
 
+// ---- per-day caps (separate from the monthly credit pool) -------------------
+// Each plan limits how many searches (find requests) and how many leads can be
+// pulled per calendar day. Defaults below; admins can override per plan via
+// app_settings (plan_daily_searches_<id> / plan_daily_leads_<id>). A value of 0
+// means "no daily limit" for that metric. Counters reset at local midnight in the
+// admin-configured timezone (daily_reset_tz, default UTC).
+const PLAN_DAILY_SEARCHES = { p19: 20, p35: 100, p49: 1000 };
+const PLAN_DAILY_LEADS = { p19: 400, p35: 1500, p49: 5000 };
+// Accounts with no active paid plan (free tier) — also admin-tunable.
+const FREE_DAILY_SEARCHES = 5;
+const FREE_DAILY_LEADS = 100;
+
 const now = () => new Date().toISOString();
 const monthKey = (iso) => (iso ? String(iso).slice(0, 7) : ""); // YYYY-MM
 
@@ -219,6 +231,159 @@ async function setUserMonthlyCredits(userId, monthly) {
   return value;
 }
 
+// ---- per-day search + lead limits -------------------------------------------
+// The IANA timezone the daily counters reset at (local midnight). Admin-tunable.
+async function getResetTz() {
+  const tz = await getSetting("daily_reset_tz", "UTC");
+  return tz || "UTC";
+}
+
+// The day-key (YYYY-MM-DD) for an instant in a timezone. Falls back to UTC if the
+// tz string is invalid so a bad setting can never throw on the hot path.
+function tzDayKey(date, tz) {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+  } catch {
+    return date.toISOString().slice(0, 10);
+  }
+}
+
+// Seconds until the next local midnight in tz, that midnight as an ISO instant, and
+// today's day-key. Used both to know which day the counters belong to and to tell
+// the user when their limit resets.
+function dailyResetInfo(tz) {
+  const nowD = new Date();
+  let secsLeft;
+  try {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: tz, hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit",
+    }).formatToParts(nowD);
+    const get = (t) => parseInt((parts.find((p) => p.type === t) || {}).value, 10) || 0;
+    let h = get("hour");
+    if (h >= 24) h = 0; // some engines render midnight as "24"
+    secsLeft = 24 * 3600 - (h * 3600 + get("minute") * 60 + get("second"));
+  } catch {
+    secsLeft = 24 * 3600 - (nowD.getUTCHours() * 3600 + nowD.getUTCMinutes() * 60 + nowD.getUTCSeconds());
+  }
+  if (!(secsLeft > 0)) secsLeft = 1;
+  return { resetAt: new Date(nowD.getTime() + secsLeft * 1000).toISOString(), secsLeft, dayKey: tzDayKey(nowD, tz) };
+}
+
+// Short human "Xh Ym" / "Ym" until reset, for server-side messages.
+function formatResetIn(secsLeft) {
+  const h = Math.floor(secsLeft / 3600);
+  const m = Math.floor((secsLeft % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${Math.max(1, m)}m`;
+}
+
+// Resolve a plan's daily caps: a per-plan admin override (app_settings) wins, then
+// the code default. plan == null/invalid uses the free tier. Returns integers where
+// 0 == "no daily limit".
+async function getDailyLimits(plan) {
+  const key = plan && plan in PLAN_DAILY_SEARCHES ? plan : "free";
+  const defSearch = key === "free" ? FREE_DAILY_SEARCHES : PLAN_DAILY_SEARCHES[key];
+  const defLeads = key === "free" ? FREE_DAILY_LEADS : PLAN_DAILY_LEADS[key];
+  const [sSet, lSet] = await Promise.all([
+    getSetting(`plan_daily_searches_${key}`),
+    getSetting(`plan_daily_leads_${key}`),
+  ]);
+  const num = (v, d) => (v != null && v !== "" ? Math.max(0, parseInt(v, 10) || 0) : d);
+  return { searches: num(sSet, defSearch), leads: num(lSet, defLeads) };
+}
+
+// Shape one metric's usage: { limit, used, remaining, unlimited }. unlimited=true
+// (remaining=null) when the cap is 0/disabled.
+function dailyMetric(limit, used) {
+  const unlimited = !limit || limit <= 0;
+  return { limit, used, remaining: unlimited ? null : Math.max(0, limit - used), unlimited };
+}
+
+// Read-only daily usage snapshot for a user (applies the day-reset on read WITHOUT
+// mutating the row). Returns { plan, tz, resetAt, resetInSeconds, searches, leads }.
+async function getDailyUsage(userId) {
+  const m = await ensureCredits(userId);
+  const tz = await getResetTz();
+  const info = dailyResetInfo(tz);
+  const plan = isPaidActive(m) ? m.plan : null;
+  const limits = await getDailyLimits(plan);
+  const sameDay = m && m.daily_date === info.dayKey;
+  const usedSearches = sameDay ? m.searches_today || 0 : 0;
+  const usedLeads = sameDay ? m.leads_today || 0 : 0;
+  return {
+    plan: plan || null,
+    tz,
+    resetAt: info.resetAt,
+    resetInSeconds: info.secsLeft,
+    searches: dailyMetric(limits.searches, usedSearches),
+    leads: dailyMetric(limits.leads, usedLeads),
+  };
+}
+
+// Atomically count one search against the daily cap. Resets the per-day counters
+// when the day rolled over (in the configured tz). Returns { ok, used, limit,
+// remaining, unlimited, resetAt, resetInSeconds }. ok=false (without counting) when
+// the cap is already hit — the conditional UPDATE makes this race-safe across
+// concurrent requests so it can't be bypassed by firing many at once.
+async function consumeDailySearch(userId) {
+  const m = await ensureCredits(userId);
+  const tz = await getResetTz();
+  const info = dailyResetInfo(tz);
+  const plan = isPaidActive(m) ? m.plan : null;
+  const { searches: limit } = await getDailyLimits(plan);
+  const ts = now();
+  const base = { limit, unlimited: !limit || limit <= 0, resetAt: info.resetAt, resetInSeconds: info.secsLeft };
+
+  // The CASE rolls the counter to 0 when daily_date no longer matches today.
+  const setClause = `
+        searches_today = (CASE WHEN daily_date = $2 THEN searches_today ELSE 0 END) + 1,
+        leads_today = CASE WHEN daily_date = $2 THEN leads_today ELSE 0 END,
+        daily_date = $2, updated_at = $3`;
+
+  if (base.unlimited) {
+    await pool().query(`UPDATE memberships SET ${setClause} WHERE user_id = $1`, [userId, info.dayKey, ts]);
+    return { ok: true, used: null, remaining: null, ...base };
+  }
+  const { rows } = await pool().query(
+    `UPDATE memberships SET ${setClause}
+       WHERE user_id = $1 AND (CASE WHEN daily_date = $2 THEN searches_today ELSE 0 END) < $4
+       RETURNING searches_today`,
+    [userId, info.dayKey, ts, limit]
+  );
+  if (!rows[0]) return { ok: false, used: limit, remaining: 0, ...base };
+  const used = rows[0].searches_today;
+  return { ok: true, used, remaining: Math.max(0, limit - used), ...base };
+}
+
+// Give back a search we counted but couldn't fulfil (e.g. the warehouse was down),
+// so a failed request doesn't burn the user's daily allowance. Same-day only.
+async function releaseDailySearch(userId) {
+  const tz = await getResetTz();
+  const info = dailyResetInfo(tz);
+  await pool().query(
+    `UPDATE memberships SET searches_today = GREATEST(0, searches_today - 1), updated_at = $3
+       WHERE user_id = $1 AND daily_date = $2 AND searches_today > 0`,
+    [userId, info.dayKey, now()]
+  );
+}
+
+// Count delivered leads against the daily cap (best-effort, called after a find
+// returns). Resets on day change. Does NOT enforce — the caller caps the request
+// by the remaining daily allowance first.
+async function addDailyLeads(userId, n) {
+  n = Math.max(0, Math.floor(n || 0));
+  if (!n) return;
+  const tz = await getResetTz();
+  const info = dailyResetInfo(tz);
+  await pool().query(
+    `UPDATE memberships
+        SET leads_today = (CASE WHEN daily_date = $2 THEN leads_today ELSE 0 END) + $4,
+            searches_today = CASE WHEN daily_date = $2 THEN searches_today ELSE 0 END,
+            daily_date = $2, updated_at = $3
+      WHERE user_id = $1`,
+    [userId, info.dayKey, now(), n]
+  );
+}
+
 // ---- entitlement ------------------------------------------------------------
 // Current entitlement for a user: { active, plan, quota, used, remaining, credits,
 // creditsMonthly }. remaining === null means unlimited. active=false when no/expired
@@ -414,15 +579,22 @@ async function isBanned(userId) {
 const PLAN_IDS = ["p19", "p35", "p49"];
 
 // The packages as the public billing page / admin should display them: plan
-// constants with any admin price/credits override from app_settings applied.
+// constants with any admin price/credits/daily-limit override from app_settings
+// applied. dailySearches/dailyLeads default to the code constants (0 = unlimited).
 async function getPackages() {
-  const pkgs = PLAN_IDS.map((id) => ({
-    id,
-    label: PLAN_LABELS[id],
-    price: PLAN_PRICES[id],
-    quota: PLAN_QUOTAS[id],
-    credits: PLAN_CREDITS[id],
-  }));
+  const pkgs = [];
+  for (const id of PLAN_IDS) {
+    const daily = await getDailyLimits(id);
+    pkgs.push({
+      id,
+      label: PLAN_LABELS[id],
+      price: PLAN_PRICES[id],
+      quota: PLAN_QUOTAS[id],
+      credits: PLAN_CREDITS[id],
+      dailySearches: daily.searches,
+      dailyLeads: daily.leads,
+    });
+  }
   for (const p of pkgs) {
     const pr = await getSetting(`plan_price_${p.id}`);
     if (pr != null && pr !== "") p.price = Math.max(0, parseInt(pr, 10) || 0);
@@ -432,15 +604,18 @@ async function getPackages() {
   return pkgs;
 }
 
-// Admin: override a package's monthly price and/or credit grant.
-async function setPackage(id, { price, credits } = {}) {
+// Admin: override a package's monthly price, credit grant, and/or daily limits.
+async function setPackage(id, { price, credits, dailySearches, dailyLeads } = {}) {
   if (!PLAN_IDS.includes(id)) throw new Error("Invalid package");
-  if (price !== undefined && price !== null && price !== "") {
-    await setSetting(`plan_price_${id}`, Math.max(0, parseInt(price, 10) || 0));
-  }
-  if (credits !== undefined && credits !== null && credits !== "") {
-    await setSetting(`plan_credits_${id}`, Math.max(0, parseInt(credits, 10) || 0));
-  }
+  const setNum = async (val, key) => {
+    if (val !== undefined && val !== null && val !== "") {
+      await setSetting(key, Math.max(0, parseInt(val, 10) || 0));
+    }
+  };
+  await setNum(price, `plan_price_${id}`);
+  await setNum(credits, `plan_credits_${id}`);
+  await setNum(dailySearches, `plan_daily_searches_${id}`);
+  await setNum(dailyLeads, `plan_daily_leads_${id}`);
   return (await getPackages()).find((p) => p.id === id);
 }
 
@@ -470,6 +645,17 @@ module.exports = {
   setUserMonthlyCredits,
   getEntitlement,
   consumeLeads,
+  // daily search + lead limits
+  PLAN_DAILY_SEARCHES,
+  PLAN_DAILY_LEADS,
+  getResetTz,
+  dailyResetInfo,
+  formatResetIn,
+  getDailyLimits,
+  getDailyUsage,
+  consumeDailySearch,
+  releaseDailySearch,
+  addDailyLeads,
   grantMembership,
   revokeMembershipByWhopId,
   queuePendingGrant,

@@ -11,14 +11,16 @@ export async function GET() {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  const [entitlement, unread, onboarded] = await Promise.all([
+  const [entitlement, daily, unread, onboarded] = await Promise.all([
     billing.getEntitlement(userId),
+    billing.getDailyUsage(userId),
     notifications.unreadCount(userId),
     db.isOnboarded(userId),
   ]);
   return Response.json({
     user: { id: userId, email: session.user.email, name: session.user.name, image: session.user.image },
     entitlement,
+    daily,
     unread,
     onboarded,
     admin: isAdminEmail(session.user.email),

@@ -20,7 +20,12 @@ export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   if (!body.id) return Response.json({ error: "Package id is required" }, { status: 400 });
   try {
-    const pkg = await billing.setPackage(body.id, { price: body.price, credits: body.credits });
+    const pkg = await billing.setPackage(body.id, {
+      price: body.price,
+      credits: body.credits,
+      dailySearches: body.dailySearches,
+      dailyLeads: body.dailyLeads,
+    });
     return Response.json({ ok: true, package: pkg });
   } catch (err) {
     return Response.json({ error: String(err.message || err) }, { status: 400 });

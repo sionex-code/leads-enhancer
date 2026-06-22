@@ -19,6 +19,31 @@ export async function POST(request) {
   const body = await request.json();
   if (!body.name) return Response.json({ error: "Project name is required" }, { status: 400 });
 
+  const stages = Array.isArray(body.stages) && body.stages.length ? body.stages : ["scrape", "enrich", "whatsapp", "audit", "report"];
+
+  // A scrape pulls new leads → it counts as a "search" and is subject to the daily
+  // search/lead caps, same as /api/projects/find. Enforced server-side so it can't
+  // be bypassed by posting to /run directly. Non-scrape stages (enrich/whatsapp/
+  // audit/report) don't count as searches.
+  const isScrape = stages.includes("scrape");
+  if (isScrape) {
+    const daily = await billing.getDailyUsage(userId);
+    const resetIn = billing.formatResetIn(daily.resetInSeconds);
+    if (!daily.leads.unlimited && daily.leads.remaining <= 0) {
+      return Response.json(
+        { error: `You've reached today's ${daily.leads.limit.toLocaleString()} lead limit. It resets in ${resetIn} (at midnight ${daily.tz}).`, code: "daily_lead_limit", resetAt: daily.resetAt, tz: daily.tz },
+        { status: 429 }
+      );
+    }
+    const searchCharge = await billing.consumeDailySearch(userId);
+    if (!searchCharge.ok) {
+      return Response.json(
+        { error: `You've used all ${searchCharge.limit} of today's searches. Your limit resets in ${billing.formatResetIn(searchCharge.resetInSeconds)} (at midnight ${daily.tz}).`, code: "daily_search_limit", resetAt: searchCharge.resetAt, tz: daily.tz },
+        { status: 429 }
+      );
+    }
+  }
+
   // A new run whose name already exists becomes its own project (random 5-char
   // id appended) instead of merging into / colliding with the existing one.
   const { name: projectName } = store.uniqueProjectName(body.name, userId);
@@ -27,10 +52,10 @@ export async function POST(request) {
   const dir = store.safeProjectDir(store.slugify(projectName), userId);
   const state = store.readState(dir);
   if (state.activePid && store.processAlive(state.activePid)) {
+    // Give back the search we just counted — nothing was actually started.
+    if (isScrape) await billing.releaseDailySearch(userId).catch(() => {});
     return Response.json({ error: "Project is already running" }, { status: 409 });
   }
-
-  const stages = Array.isArray(body.stages) && body.stages.length ? body.stages : ["scrape", "enrich", "whatsapp", "audit", "report"];
   const result = await queue.enqueue(userId, {
     name: projectName,
     query: body.query || "",

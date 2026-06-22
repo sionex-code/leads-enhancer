@@ -96,6 +96,10 @@ const memberships = pgTable("memberships", {
   credits: integer("credits").notNull().default(0),
   creditsMonthly: integer("credits_monthly"), // null = use plan/global default
   creditsRenewedAt: text("credits_renewed_at"),
+  // Per-day search + lead caps (reset at local midnight in the configured tz).
+  dailyDate: text("daily_date"), // YYYY-MM-DD the counters below belong to
+  searchesToday: integer("searches_today").notNull().default(0),
+  leadsToday: integer("leads_today").notNull().default(0),
   currentPeriodStart: text("current_period_start"),
   currentPeriodEnd: text("current_period_end"),
   updatedAt: text("updated_at"),

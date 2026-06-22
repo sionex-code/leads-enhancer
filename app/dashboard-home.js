@@ -132,6 +132,8 @@ async function jsonFetch(url, options = {}) {
     const err = new Error(data.error || `Request failed: ${res.status}`);
     err.code = data.code;
     err.status = res.status;
+    err.resetAt = data.resetAt;
+    err.tz = data.tz;
     throw err;
   }
   return data;
@@ -364,6 +366,42 @@ function CreditsPill() {
   );
 }
 
+// Short "Xh Ym" until an ISO reset instant — for the searches-left tooltip.
+function untilReset(resetAt) {
+  if (!resetAt) return "";
+  const ms = new Date(resetAt).getTime() - Date.now();
+  if (!Number.isFinite(ms) || ms <= 0) return "soon";
+  const mins = Math.floor(ms / 60000);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h > 0 ? `${h}h ${m}m` : `${Math.max(1, m)}m`;
+}
+
+// Live "searches left today" pill (reuses the /api/me poll behind useMe). Shows the
+// per-day search allowance so the remaining count is always visible. Hidden for
+// plans/tiers with no daily search cap (unlimited).
+function SearchesPill() {
+  const me = useMe();
+  const d = me?.daily?.searches;
+  if (!me || !d || d.unlimited) return null;
+  const remaining = d.remaining ?? 0;
+  const exhausted = remaining <= 0;
+  const resetIn = untilReset(me.daily.resetAt);
+  return (
+    <span
+      title={exhausted
+        ? `You've used all ${d.limit} searches today. Resets in ${resetIn} (at midnight ${me.daily.tz}).`
+        : `${remaining} of ${d.limit} daily searches left. Resets in ${resetIn} (at midnight ${me.daily.tz}).`}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium",
+        exhausted ? "border-red-500/40 bg-red-500/10 text-red-600" : "border-border bg-card/60 text-foreground"
+      )}
+    >
+      <Search className="h-3.5 w-3.5" /> {remaining.toLocaleString()}/{d.limit.toLocaleString()} searches today
+    </span>
+  );
+}
+
 // Build a fallback catalog entry from the QUICK_ constants so the form still
 // works when the catalog API is unreachable or returns nothing.
 function buildFallbackCatalog() {
@@ -533,7 +571,10 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:py-16">
       <div className="mb-8 flex items-center justify-between gap-3">
-        <CreditsPill />
+        <div className="flex flex-wrap items-center gap-2">
+          <CreditsPill />
+          <SearchesPill />
+        </div>
         <button
           type="button"
           onClick={onOpenDashboard}
@@ -774,6 +815,8 @@ export default function Dashboard({ view = "" }) {
   // Full plan entitlement ({ active, remaining, plan, credits }) used to pre-check
   // searches before hitting the server. remaining === null means unlimited.
   const [entitlement, setEntitlement] = useState(null);
+  // Per-day usage ({ searches, leads, resetAt, tz }) to pre-check the daily caps.
+  const [daily, setDaily] = useState(null);
   // Captured rows being added to a list in bulk — saved to the DB first so they
   // have ids; { ids, keys } drives the shared dialog + the "listed" overlay.
   const [listsBulk, setListsBulk] = useState(null);
@@ -879,11 +922,22 @@ export default function Dashboard({ view = "" }) {
   // the batch poller if the page unmounts mid-run.
   useEffect(() => {
     let alive = true;
-    jsonFetch("/api/me").then((d) => { if (alive) { setCredits(d?.entitlement?.credits ?? null); setEntitlement(d?.entitlement ?? null); } }).catch(() => {});
+    jsonFetch("/api/me").then((d) => { if (alive) { setCredits(d?.entitlement?.credits ?? null); setEntitlement(d?.entitlement ?? null); setDaily(d?.daily ?? null); } }).catch(() => {});
     return () => { alive = false; clearTimeout(batchPollRef.current); };
   }, []);
   function refreshCredits() {
-    jsonFetch("/api/me").then((d) => { setCredits(d?.entitlement?.credits ?? null); setEntitlement(d?.entitlement ?? null); }).catch(() => {});
+    jsonFetch("/api/me").then((d) => { setCredits(d?.entitlement?.credits ?? null); setEntitlement(d?.entitlement ?? null); setDaily(d?.daily ?? null); }).catch(() => {});
+  }
+
+  // "Xh Ym" until the daily counters reset, for the exhaustion banner.
+  function resetCountdown(resetAt) {
+    if (!resetAt) return "tonight";
+    const ms = new Date(resetAt).getTime() - Date.now();
+    if (!Number.isFinite(ms) || ms <= 0) return "soon";
+    const mins = Math.floor(ms / 60000);
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return h > 0 ? `${h}h ${m}m` : `${Math.max(1, m)}m`;
   }
 
   // Pre-flight plan/quota gate for searches: matches the server checks in
@@ -896,6 +950,21 @@ export default function Dashboard({ view = "" }) {
       setNeedPlan(true);
       setError("You're out of credits. Choose a plan or top up to find more leads.");
       return false;
+    }
+    // Per-day caps (server is authoritative; this is just instant feedback).
+    if (daily) {
+      const s = daily.searches, l = daily.leads;
+      const when = `${resetCountdown(daily.resetAt)} (at midnight ${daily.tz})`;
+      if (s && !s.unlimited && s.remaining <= 0) {
+        setNeedPlan(true);
+        setError(`You've used all ${s.limit} of today's searches. Your limit resets in ${when}.`);
+        return false;
+      }
+      if (l && !l.unlimited && l.remaining <= 0) {
+        setNeedPlan(true);
+        setError(`You've reached today's ${l.limit.toLocaleString()} lead limit. It resets in ${when}.`);
+        return false;
+      }
     }
     return true;
   }
@@ -923,7 +992,8 @@ export default function Dashboard({ view = "" }) {
       return true;
     } catch (err) {
       setError(err.message);
-      if (["no_plan", "quota_exceeded", "no_credits"].includes(err.code)) setNeedPlan(true);
+      if (["no_plan", "quota_exceeded", "no_credits", "daily_search_limit", "daily_lead_limit"].includes(err.code)) setNeedPlan(true);
+      if (["daily_search_limit", "daily_lead_limit"].includes(err.code)) refreshCredits();
       return false;
     } finally {
       setBusy("");
@@ -971,7 +1041,8 @@ export default function Dashboard({ view = "" }) {
       router.push("/dashboard?view=projects");
     } catch (err) {
       setError(err.message);
-      if (["no_plan", "quota_exceeded", "no_credits"].includes(err.code)) setNeedPlan(true);
+      if (["no_plan", "quota_exceeded", "no_credits", "daily_search_limit", "daily_lead_limit"].includes(err.code)) setNeedPlan(true);
+      if (["daily_search_limit", "daily_lead_limit"].includes(err.code)) refreshCredits();
     } finally {
       setBusy("");
     }
@@ -1567,6 +1638,7 @@ export default function Dashboard({ view = "" }) {
   const actions = (
     <>
       <CreditsPill />
+      <SearchesPill />
       <Button
         variant="outline"
         size="sm"

@@ -314,7 +314,7 @@ function PackagePricing() {
     try {
       const d = await jsonFetch("/api/admin/packages");
       setPkgs(d.packages || []);
-      setDraft(Object.fromEntries((d.packages || []).map((p) => [p.id, { price: p.price, credits: p.credits }])));
+      setDraft(Object.fromEntries((d.packages || []).map((p) => [p.id, { price: p.price, credits: p.credits, dailySearches: p.dailySearches, dailyLeads: p.dailyLeads }])));
     } catch {}
   }, []);
 
@@ -324,8 +324,9 @@ function PackagePricing() {
     setBusy(id);
     setSaved("");
     try {
-      const d = await jsonFetch("/api/admin/packages", { method: "POST", body: JSON.stringify({ id, price: draft[id]?.price, credits: draft[id]?.credits }) });
+      const d = await jsonFetch("/api/admin/packages", { method: "POST", body: JSON.stringify({ id, price: draft[id]?.price, credits: draft[id]?.credits, dailySearches: draft[id]?.dailySearches, dailyLeads: draft[id]?.dailyLeads }) });
       setPkgs((list) => list.map((p) => (p.id === id ? d.package : p)));
+      setDraft((dr) => ({ ...dr, [id]: { price: d.package.price, credits: d.package.credits, dailySearches: d.package.dailySearches, dailyLeads: d.package.dailyLeads } }));
       setSaved(id);
       setTimeout(() => setSaved(""), 2000);
     } catch (e) {
@@ -341,8 +342,8 @@ function PackagePricing() {
         <div className="flex items-center gap-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary"><Tag className="h-5 w-5" /></div>
           <div>
-            <h3 className="text-sm font-semibold">Package pricing</h3>
-            <p className="text-xs text-muted-foreground">Monthly price &amp; credit grant per plan. Charges are processed by Whop.</p>
+            <h3 className="text-sm font-semibold">Package pricing &amp; limits</h3>
+            <p className="text-xs text-muted-foreground">Monthly price, credit grant &amp; per-day search/lead caps per plan. Charges are processed by Whop. Set a daily cap to 0 for unlimited.</p>
           </div>
         </div>
         <div className="space-y-2">
@@ -356,6 +357,14 @@ function PackagePricing() {
               <label className="flex items-center gap-1 text-xs text-muted-foreground">
                 <Input type="number" className="h-8 w-24" value={draft[p.id]?.credits ?? ""} onChange={(e) => setDraft((d) => ({ ...d, [p.id]: { ...d[p.id], credits: e.target.value } }))} />
                 credits
+              </label>
+              <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Input type="number" className="h-8 w-20" value={draft[p.id]?.dailySearches ?? ""} onChange={(e) => setDraft((d) => ({ ...d, [p.id]: { ...d[p.id], dailySearches: e.target.value } }))} />
+                searches/day
+              </label>
+              <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Input type="number" className="h-8 w-20" value={draft[p.id]?.dailyLeads ?? ""} onChange={(e) => setDraft((d) => ({ ...d, [p.id]: { ...d[p.id], dailyLeads: e.target.value } }))} />
+                leads/day
               </label>
               <Button size="sm" variant="outline" disabled={busy === p.id} onClick={() => save(p.id)} className="ml-auto">
                 {busy === p.id ? <Loader2 size={15} className="animate-spin" /> : saved === p.id ? <Check size={15} className="text-emerald-600" /> : null} Save
@@ -458,6 +467,59 @@ function LeadSourceSettings() {
           </div>
         )}
 
+        {err && <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-red-600">{err}</div>}
+      </CardContent>
+    </Card>
+  );
+}
+
+// The timezone the per-day search/lead counters reset at (local midnight).
+function DailyResetSettings() {
+  const [tz, setTz] = useState("");
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [err, setErr] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      const d = await jsonFetch("/api/admin/settings");
+      setTz(d.daily_reset_tz || "UTC");
+      setDraft(d.daily_reset_tz || "UTC");
+    } catch (e) { setErr(e.message); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function save() {
+    setBusy(true); setSaved(false); setErr("");
+    try {
+      const d = await jsonFetch("/api/admin/settings", { method: "POST", body: JSON.stringify({ daily_reset_tz: draft.trim() }) });
+      setTz(d.daily_reset_tz);
+      setDraft(d.daily_reset_tz);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  }
+
+  return (
+    <Card>
+      <CardContent className="space-y-3 p-4">
+        <div className="flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary"><Activity className="h-5 w-5" /></div>
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold">Daily reset timezone</h3>
+            <p className="text-xs text-muted-foreground">Per-day search &amp; lead limits reset at local midnight in this timezone. Current: <span className="font-medium text-foreground">{tz || "…"}</span></p>
+          </div>
+          {saved && <span className="flex items-center gap-1 text-xs font-medium text-emerald-600"><Check size={14} /> Saved</span>}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input className="h-9 w-56" placeholder="UTC or Asia/Karachi" value={draft} onChange={(e) => setDraft(e.target.value)} />
+          <Button size="sm" variant="outline" disabled={busy || !draft.trim() || draft.trim() === tz} onClick={save}>
+            {busy ? <Loader2 size={15} className="animate-spin" /> : null} Save
+          </Button>
+          <span className="text-xs text-muted-foreground">IANA timezone name (e.g. UTC, America/New_York, Asia/Karachi).</span>
+        </div>
         {err && <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-red-600">{err}</div>}
       </CardContent>
     </Card>
@@ -786,6 +848,7 @@ export default function AdminClient() {
         {tab === "settings" && (
           <div className="space-y-4">
             <LeadSourceSettings />
+            <DailyResetSettings />
             <div className="pt-2">
               <h2 className="mb-3 text-lg font-semibold">Scraper proxies</h2>
               <ProxyManager />

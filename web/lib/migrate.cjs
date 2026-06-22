@@ -16,6 +16,13 @@ const STATEMENTS = [
   `ALTER TABLE memberships ADD COLUMN IF NOT EXISTS credits_monthly integer`,
   `ALTER TABLE memberships ADD COLUMN IF NOT EXISTS credits_renewed_at text`,
 
+  // ---- per-day search + lead counters (reset at local midnight in the configured
+  // tz; see billing.cjs daily-limit helpers). daily_date is the YYYY-MM-DD key the
+  // counters belong to; a mismatch on read/write means the day rolled over. ----
+  `ALTER TABLE memberships ADD COLUMN IF NOT EXISTS daily_date text`,
+  `ALTER TABLE memberships ADD COLUMN IF NOT EXISTS searches_today integer NOT NULL DEFAULT 0`,
+  `ALTER TABLE memberships ADD COLUMN IF NOT EXISTS leads_today integer NOT NULL DEFAULT 0`,
+
   // ---- global key/value settings ----
   `CREATE TABLE IF NOT EXISTS app_settings (
      key text PRIMARY KEY,

@@ -148,14 +148,55 @@ export async function POST(request) {
     );
   }
 
+  // Per-day limit gate (server-side, race-safe — can't be bypassed by replaying
+  // requests over the network). Read the snapshot first so we can reject a fully
+  // exhausted day before spending a search, then atomically count this search.
+  const daily = await billing.getDailyUsage(userId);
+  const resetIn = billing.formatResetIn(daily.resetInSeconds);
+  if (!daily.searches.unlimited && daily.searches.remaining <= 0) {
+    return Response.json(
+      {
+        error: `You've used all ${daily.searches.limit} of today's searches. Your limit resets in ${resetIn} (at midnight ${daily.tz}).`,
+        code: "daily_search_limit",
+        limit: daily.searches.limit, remaining: 0, resetAt: daily.resetAt, tz: daily.tz,
+      },
+      { status: 429 }
+    );
+  }
+  if (!daily.leads.unlimited && daily.leads.remaining <= 0) {
+    return Response.json(
+      {
+        error: `You've reached today's ${daily.leads.limit.toLocaleString()} lead limit. It resets in ${resetIn} (at midnight ${daily.tz}).`,
+        code: "daily_lead_limit",
+        limit: daily.leads.limit, remaining: 0, resetAt: daily.resetAt, tz: daily.tz,
+      },
+      { status: 429 }
+    );
+  }
+
   const body = await request.json().catch(() => ({}));
   const { name, query, cityId, countryCode, service, minRating, maxRating, centerLat, centerLng, radiusKm } = body || {};
 
   if (!name) return Response.json({ error: "Project name is required" }, { status: 400 });
 
-  // Cap the request by the hard per-find limit (10k) AND the available credits, so
-  // the post-insert charge always succeeds (1 credit per new lead).
-  const max = Math.min(Math.max(1, Math.trunc(Number(body.max) || 30)), 10000, avail);
+  // Atomically count this search against the daily cap. Race-safe: if many requests
+  // fire at once, only those under the cap succeed.
+  const searchCharge = await billing.consumeDailySearch(userId);
+  if (!searchCharge.ok) {
+    return Response.json(
+      {
+        error: `You've used all ${searchCharge.limit} of today's searches. Your limit resets in ${billing.formatResetIn(searchCharge.resetInSeconds)} (at midnight ${daily.tz}).`,
+        code: "daily_search_limit",
+        limit: searchCharge.limit, remaining: 0, resetAt: searchCharge.resetAt, tz: daily.tz,
+      },
+      { status: 429 }
+    );
+  }
+
+  // Cap the request by the hard per-find limit (10k), the available credits (so the
+  // post-insert charge always succeeds), AND the remaining daily lead allowance.
+  const dailyLeadsLeft = daily.leads.unlimited ? Infinity : daily.leads.remaining;
+  const max = Math.min(Math.max(1, Math.trunc(Number(body.max) || 30)), 10000, avail, dailyLeadsLeft);
 
   // Unique project name (appends random id if the slug already exists).
   const { name: projectName } = store.uniqueProjectName(name, userId);
@@ -194,6 +235,9 @@ export async function POST(request) {
       limit: max,
     }));
   } catch (err) {
+    // The search failed through no fault of the user — give back the daily search
+    // we just counted so it doesn't burn their allowance.
+    await billing.releaseDailySearch(userId).catch(() => {});
     store.writeState(dir, {
       running: false,
       queued: false,
@@ -221,6 +265,9 @@ export async function POST(request) {
 
   // Upsert into the per-tenant leads DB (dedupes + consumes quota for inserts).
   const res = await db.upsertLeads(userId, rows.map(warehouse.toLeadRow));
+
+  // Count the leads delivered this find against the daily lead cap (best-effort).
+  await billing.addDailyLeads(userId, rows.length).catch(() => {});
 
   // Mark project as finished (not running).
   store.writeState(dir, {
