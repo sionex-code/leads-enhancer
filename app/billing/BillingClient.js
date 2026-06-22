@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Check, Crown, Sparkles, ArrowUpRight, Star, Coins } from "lucide-react";
 import AppShell from "../components/app/AppShell";
 import { useMe } from "../components/AccountWidget";
@@ -31,6 +32,21 @@ function checkoutHref(planId) {
 export default function BillingClient() {
   const me = useMe();
   const loading = !me;
+
+  // When arriving from the landing pricing buttons (login → /billing?plan=pXX),
+  // highlight the chosen plan and scroll it into view so the user lands exactly
+  // on what they picked. Read from window so we don't need a Suspense boundary.
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get("plan");
+    if (p) setSelectedPlan(p);
+  }, []);
+  useEffect(() => {
+    if (!selectedPlan || !me) return;
+    const el = document.getElementById(`plan-${selectedPlan}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [selectedPlan, me]);
+
   const ent = me?.entitlement;
   const planKey = ent?.plan;
   const active = !!ent?.active;
@@ -134,15 +150,21 @@ export default function BillingClient() {
           <div className="grid items-start gap-5 lg:grid-cols-3">
             {visiblePlans.map((plan) => {
               const isCurrent = active && plan.id === planKey;
+              const isSelected = plan.id === selectedPlan && !isCurrent;
               return (
                 <Card
                   key={plan.id}
+                  id={`plan-${plan.id}`}
                   className={cn(
-                    "relative",
-                    plan.popular && !isCurrent && "border-primary/60 shadow-lg shadow-primary/10",
+                    "relative scroll-mt-28 transition-shadow",
+                    plan.popular && !isCurrent && !isSelected && "border-primary/60 shadow-lg shadow-primary/10",
+                    isSelected && "border-primary ring-2 ring-primary shadow-xl shadow-primary/15",
                     isCurrent && "border-primary ring-1 ring-primary"
                   )}
                 >
+                  {isSelected && (
+                    <Badge className="absolute -top-3 right-4 gap-1"><Sparkles className="h-3 w-3" /> Selected</Badge>
+                  )}
                   {plan.popular && !isCurrent && (
                     <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 gap-1"><Star className="h-3 w-3" /> Popular</Badge>
                   )}
