@@ -147,20 +147,28 @@ export default function BillingClient() {
     >
       <div className="mx-auto max-w-5xl space-y-8 p-4 sm:p-6 lg:p-8">
         {/* Current plan + credit balance */}
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden rounded-lg">
+          {/* Status strip — current plan chip pinned to the very top */}
+          <div className="flex flex-wrap items-center gap-2 border-b border-border/60 bg-muted/30 px-5 py-3">
+            <span className="text-sm font-medium text-muted-foreground">Current plan</span>
+            {loading ? (
+              <Skeleton className="h-5 w-24 rounded-md" />
+            ) : (
+              <>
+                <Badge variant={active ? "success" : "secondary"} className="gap-1 rounded-md">
+                  <Crown className="h-3 w-3" /> {current ? current.name : "Free"}
+                </Badge>
+                {active ? (
+                  <Badge variant="success" className="gap-1 rounded-md"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Active</Badge>
+                ) : (
+                  <Badge variant="warning" className="rounded-md">No active plan</Badge>
+                )}
+              </>
+            )}
+          </div>
           <div className="grid gap-px bg-border/60 md:grid-cols-[1.4fr_1fr]">
             <div className="bg-card p-6">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">Current plan</span>
-                {loading ? (
-                  <Skeleton className="h-5 w-16" />
-                ) : active ? (
-                  <Badge variant="success" className="gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Active</Badge>
-                ) : (
-                  <Badge variant="warning">No active plan</Badge>
-                )}
-              </div>
-              <div className="mt-3 flex items-center gap-3">
+              <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 text-primary">
                   <Crown className="h-6 w-6" />
                 </div>
@@ -225,7 +233,7 @@ export default function BillingClient() {
                 </p>
               </div>
               {daily ? (
-                <Badge variant="outline" className="gap-1.5">
+                <Badge variant="outline" className="gap-1.5 rounded-md">
                   <Clock className="h-3.5 w-3.5" /> Resets in {untilReset(daily.resetAt)} · midnight {daily.tz}
                 </Badge>
               ) : null}
@@ -273,13 +281,13 @@ export default function BillingClient() {
                   )}
                 >
                   {isSelected && (
-                    <Badge className="absolute -top-3 right-4 gap-1"><Sparkles className="h-3 w-3" /> Selected</Badge>
+                    <Badge className="absolute -top-3 right-4 gap-1 rounded-md"><Sparkles className="h-3 w-3" /> Selected</Badge>
                   )}
                   {plan.popular && !isCurrent && (
-                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 gap-1"><Star className="h-3 w-3" /> Popular</Badge>
+                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 gap-1 rounded-md"><Star className="h-3 w-3" /> Popular</Badge>
                   )}
                   {isCurrent && (
-                    <Badge variant="success" className="absolute -top-3 left-1/2 -translate-x-1/2">Current plan</Badge>
+                    <Badge variant="success" className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-md">Current plan</Badge>
                   )}
                   <CardHeader>
                     <CardTitle className="text-lg">{plan.name}</CardTitle>

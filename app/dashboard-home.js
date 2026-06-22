@@ -36,6 +36,7 @@ import {
   ArrowRight,
   SlidersHorizontal,
   MapPin,
+  Users,
 } from "lucide-react";
 
 import { Button } from "./components/ui/button";
@@ -377,28 +378,39 @@ function untilReset(resetAt) {
   return h > 0 ? `${h}h ${m}m` : `${Math.max(1, m)}m`;
 }
 
-// Live "searches left today" pill (reuses the /api/me poll behind useMe). Shows the
-// per-day search allowance so the remaining count is always visible. Hidden for
-// plans/tiers with no daily search cap (unlimited).
-function SearchesPill() {
-  const me = useMe();
-  const d = me?.daily?.searches;
-  if (!me || !d || d.unlimited) return null;
-  const remaining = d.remaining ?? 0;
+// One live "N/limit left today" pill for a daily metric (searches or leads).
+function DailyPill({ icon: Icon, metric, noun, resetAt, tz }) {
+  if (!metric || metric.unlimited) return null;
+  const remaining = metric.remaining ?? 0;
   const exhausted = remaining <= 0;
-  const resetIn = untilReset(me.daily.resetAt);
+  const resetIn = untilReset(resetAt);
   return (
     <span
       title={exhausted
-        ? `You've used all ${d.limit} searches today. Resets in ${resetIn} (at midnight ${me.daily.tz}).`
-        : `${remaining} of ${d.limit} daily searches left. Resets in ${resetIn} (at midnight ${me.daily.tz}).`}
+        ? `You've used all ${metric.limit.toLocaleString()} ${noun} today. Resets in ${resetIn} (at midnight ${tz}).`
+        : `${remaining.toLocaleString()} of ${metric.limit.toLocaleString()} daily ${noun} left. Resets in ${resetIn} (at midnight ${tz}).`}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium",
         exhausted ? "border-red-500/40 bg-red-500/10 text-red-600" : "border-border bg-card/60 text-foreground"
       )}
     >
-      <Search className="h-3.5 w-3.5" /> {remaining.toLocaleString()}/{d.limit.toLocaleString()} searches today
+      <Icon className="h-3.5 w-3.5" /> {remaining.toLocaleString()}/{metric.limit.toLocaleString()} {noun} today
     </span>
+  );
+}
+
+// Live "searches left today" + "leads left today" pills (reuse the /api/me poll
+// behind useMe) so the user always sees what's left of their daily allowance.
+// Each pill hides itself for tiers with no cap (unlimited) on that metric.
+function DailyUsagePills() {
+  const me = useMe();
+  const daily = me?.daily;
+  if (!me || !daily) return null;
+  return (
+    <>
+      <DailyPill icon={Search} metric={daily.searches} noun="searches" resetAt={daily.resetAt} tz={daily.tz} />
+      <DailyPill icon={Users} metric={daily.leads} noun="leads" resetAt={daily.resetAt} tz={daily.tz} />
+    </>
   );
 }
 
@@ -573,7 +585,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
       <div className="mb-8 flex items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <CreditsPill />
-          <SearchesPill />
+          <DailyUsagePills />
         </div>
         <button
           type="button"
@@ -1638,7 +1650,7 @@ export default function Dashboard({ view = "" }) {
   const actions = (
     <>
       <CreditsPill />
-      <SearchesPill />
+      <DailyUsagePills />
       <Button
         variant="outline"
         size="sm"
