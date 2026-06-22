@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import {
   MapPin,
@@ -7,7 +7,6 @@ import {
   Activity,
   ListChecks,
   ShieldCheck,
-  Zap,
   Check,
   Search,
   Star,
@@ -19,9 +18,81 @@ import {
   Lock,
   Plus,
   Minus,
+  Play,
 } from "lucide-react";
 import { GoogleSignInButton } from "./GoogleSignInButton";
 import { Button } from "./ui/button";
+
+// Lightweight scroll-reveal: fades + slides children up the first time they
+// enter the viewport. No dependency — just an IntersectionObserver.
+function Reveal({ children, className = "", delay = 0 }) {
+  const ref = useRef(null);
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (e.isIntersecting) {
+          setShown(true);
+          io.disconnect();
+        }
+      },
+      { threshold: 0.12, rootMargin: "0px 0px -8% 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return (
+    <div
+      ref={ref}
+      style={{ transitionDelay: `${delay}ms` }}
+      className={`transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] ${shown ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"} ${className}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+// Click-to-play hero video: shows the poster + a play button and downloads
+// nothing until the user clicks (preload="none"), then plays with sound.
+function HeroVideo() {
+  const [playing, setPlaying] = useState(false);
+  const ref = useRef(null);
+  return (
+    <div className="relative aspect-video w-full bg-muted">
+      <video
+        ref={ref}
+        className="block h-full w-full object-cover"
+        src="/leadsfunda-hyperframes.mp4"
+        poster="/leadsfunda-hero-poster.jpg"
+        preload="none"
+        playsInline
+        controls={playing}
+        onClick={() => playing && ref.current?.paused && ref.current.play()}
+      />
+      {!playing && (
+        <button
+          type="button"
+          aria-label="Play demo with sound"
+          onClick={() => {
+            setPlaying(true);
+            // play after controls render so audio is unmuted (user gesture)
+            requestAnimationFrame(() => ref.current?.play());
+          }}
+          className="group absolute inset-0 flex items-center justify-center bg-gradient-to-t from-black/30 to-transparent"
+        >
+          <span className="flex h-20 w-20 items-center justify-center rounded-full bg-white/95 shadow-2xl shadow-primary/30 ring-1 ring-black/5 transition-transform duration-300 group-hover:scale-110">
+            <Play className="ml-1 h-8 w-8 fill-primary text-primary" />
+          </span>
+          <span className="absolute bottom-5 rounded-full bg-black/60 px-4 py-1.5 text-sm font-medium text-white backdrop-blur">
+            Watch the 30s demo
+          </span>
+        </button>
+      )}
+    </div>
+  );
+}
 
 const NAV = [
   { href: "#features", label: "Features" },
@@ -158,6 +229,22 @@ function FaqItem({ q, a, open, onClick }) {
   );
 }
 
+function TestimonialCard({ t, i }) {
+  return (
+    <div className="w-[340px] shrink-0 rounded-3xl border border-border bg-card p-6">
+      <Stars />
+      <p className="mt-3 text-sm leading-relaxed text-foreground">“{t.body}”</p>
+      <div className="mt-4 flex items-center gap-3">
+        <span className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white ${AVATARS[i % AVATARS.length]}`}>{t.name[0]}</span>
+        <div>
+          <div className="text-sm font-semibold text-foreground">{t.name}</div>
+          <div className="text-xs text-muted-foreground">{t.role}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Landing({ checkout = {} }) {
   const [openFaq, setOpenFaq] = useState(0);
 
@@ -232,15 +319,7 @@ export default function Landing({ checkout = {} }) {
                 <Globe2 className="h-3 w-3" /> app.leadsfunda.com
               </div>
             </div>
-            <video
-              className="block aspect-video w-full bg-muted object-cover"
-              src="/leadsfunda-hyperframes.mp4"
-              autoPlay
-              muted
-              loop
-              playsInline
-              preload="metadata"
-            />
+            <HeroVideo />
           </div>
         </div>
       </section>
@@ -263,22 +342,26 @@ export default function Landing({ checkout = {} }) {
           <p className="mt-3 text-muted-foreground">Scrape, enrich, audit and organize — without stitching together five different tools.</p>
         </div>
         <div className="grid gap-6 lg:grid-cols-2">
-          <div className="grid items-center gap-6 rounded-3xl border border-border bg-card p-7 sm:grid-cols-2">
-            <div>
-              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600"><Search className="h-5 w-5" /></div>
-              <h3 className="font-heading text-xl font-bold">Find who needs you</h3>
-              <p className="mt-2 text-sm text-muted-foreground">Every business in a niche, scored by website health so the prospects worth calling rise to the top.</p>
+          <Reveal>
+            <div className="grid h-full items-center gap-6 rounded-3xl border border-border bg-card p-7 transition-shadow duration-300 hover:shadow-xl hover:shadow-primary/10 sm:grid-cols-2">
+              <div>
+                <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600"><Search className="h-5 w-5" /></div>
+                <h3 className="font-heading text-xl font-bold">Find who needs you</h3>
+                <p className="mt-2 text-sm text-muted-foreground">Every business in a niche, scored by website health so the prospects worth calling rise to the top.</p>
+              </div>
+              <MiniLeads />
             </div>
-            <MiniLeads />
-          </div>
-          <div className="grid items-center gap-6 rounded-3xl border border-border bg-card p-7 sm:grid-cols-2">
-            <div>
-              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600"><Mail className="h-5 w-5" /></div>
-              <h3 className="font-heading text-xl font-bold">Ready to outreach</h3>
-              <p className="mt-2 text-sm text-muted-foreground">Emails, socials and WhatsApp pulled from each site, so your list is sendable the moment it lands.</p>
+          </Reveal>
+          <Reveal delay={120}>
+            <div className="grid h-full items-center gap-6 rounded-3xl border border-border bg-card p-7 transition-shadow duration-300 hover:shadow-xl hover:shadow-primary/10 sm:grid-cols-2">
+              <div>
+                <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600"><Mail className="h-5 w-5" /></div>
+                <h3 className="font-heading text-xl font-bold">Ready to outreach</h3>
+                <p className="mt-2 text-sm text-muted-foreground">Emails, socials and WhatsApp pulled from each site, so your list is sendable the moment it lands.</p>
+              </div>
+              <MiniEnrich />
             </div>
-            <MiniEnrich />
-          </div>
+          </Reveal>
         </div>
       </section>
 
@@ -290,12 +373,14 @@ export default function Landing({ checkout = {} }) {
           <p className="mt-3 text-muted-foreground">Every detail is crafted to make lead-gen smoother, faster and more impactful.</p>
         </div>
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {FEATURES.map(({ icon: Icon, title, body, tile }) => (
-            <div key={title} className="group rounded-3xl border border-border bg-card p-6 transition-all hover:-translate-y-1 hover:shadow-xl hover:shadow-primary/5">
-              <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-2xl ${tile}`}><Icon className="h-5 w-5" /></div>
-              <h3 className="font-heading text-lg font-bold">{title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</p>
-            </div>
+          {FEATURES.map(({ icon: Icon, title, body, tile }, i) => (
+            <Reveal key={title} delay={(i % 3) * 90}>
+              <div className="group h-full rounded-3xl border border-border bg-card p-6 transition-all duration-300 hover:-translate-y-1.5 hover:border-primary/40 hover:shadow-xl hover:shadow-primary/10">
+                <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-2xl ${tile} transition-transform duration-300 group-hover:scale-110`}><Icon className="h-5 w-5" /></div>
+                <h3 className="font-heading text-lg font-bold">{title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</p>
+              </div>
+            </Reveal>
           ))}
         </div>
       </section>
@@ -309,12 +394,15 @@ export default function Landing({ checkout = {} }) {
             <p className="mt-3 text-muted-foreground">Three steps from a niche to a full pipeline.</p>
           </div>
           <div className="grid gap-6 md:grid-cols-3">
-            {STEPS.map(({ n, title, body }) => (
-              <div key={n} className="relative overflow-hidden rounded-3xl border border-border bg-card p-7">
-                <span className="font-heading block bg-gradient-to-br from-primary to-violet-500 bg-clip-text text-5xl font-bold text-transparent">{n}</span>
-                <h3 className="font-heading mt-4 text-lg font-bold">{title}</h3>
-                <p className="mt-2 text-sm text-muted-foreground">{body}</p>
-              </div>
+            {STEPS.map(({ n, title, body }, i) => (
+              <Reveal key={n} delay={i * 120}>
+                <div className="group relative h-full overflow-hidden rounded-3xl border border-border bg-card p-7 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-xl hover:shadow-primary/10">
+                  <div className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-gradient-to-br from-primary/20 to-transparent blur-2xl transition-opacity duration-300 group-hover:opacity-100 opacity-60" />
+                  <span className="font-heading block bg-gradient-to-br from-primary to-violet-500 bg-clip-text text-5xl font-bold text-transparent">{n}</span>
+                  <h3 className="font-heading mt-4 text-lg font-bold">{title}</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">{body}</p>
+                </div>
+              </Reveal>
             ))}
           </div>
         </div>
@@ -323,36 +411,29 @@ export default function Landing({ checkout = {} }) {
       {/* Stats band */}
       <section className="container py-16">
         <div className="grid grid-cols-2 gap-6 rounded-3xl border border-border bg-gradient-to-br from-card to-muted/40 p-10 text-center md:grid-cols-4">
-          {STATS.map((s) => (
-            <div key={s.l}>
+          {STATS.map((s, i) => (
+            <Reveal key={s.l} delay={i * 90}>
               <div className="font-heading text-3xl font-bold text-foreground sm:text-4xl">{s.v}</div>
               <div className="mt-1 text-sm text-muted-foreground">{s.l}</div>
-            </div>
+            </Reveal>
           ))}
         </div>
       </section>
 
-      {/* Testimonials wall */}
-      <section className="container py-16">
-        <div className="mx-auto mb-12 max-w-2xl text-center">
+      {/* Testimonials — two rows scrolling opposite directions, pause on hover */}
+      <section className="overflow-hidden py-16">
+        <Reveal className="container mx-auto mb-12 max-w-2xl text-center">
           <span className="text-sm font-semibold uppercase tracking-wider text-primary">Testimonials</span>
           <h2 className="font-heading mt-2 text-3xl font-bold tracking-tight sm:text-4xl">What our users are saying</h2>
           <p className="mt-3 text-muted-foreground">Real feedback from people who run outreach every day.</p>
-        </div>
-        <div className="columns-1 gap-5 sm:columns-2 lg:columns-3 [&>*]:mb-5">
-          {TESTIMONIALS.map((t, i) => (
-            <div key={t.name} className="break-inside-avoid rounded-3xl border border-border bg-card p-6">
-              <Stars />
-              <p className="mt-3 text-sm leading-relaxed text-foreground">“{t.body}”</p>
-              <div className="mt-4 flex items-center gap-3">
-                <span className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white ${AVATARS[i % AVATARS.length]}`}>{t.name[0]}</span>
-                <div>
-                  <div className="text-sm font-semibold text-foreground">{t.name}</div>
-                  <div className="text-xs text-muted-foreground">{t.role}</div>
-                </div>
-              </div>
-            </div>
-          ))}
+        </Reveal>
+        <div className="relative space-y-5 [mask-image:linear-gradient(to_right,transparent,black_6%,black_94%,transparent)]">
+          <div className="flex w-max gap-5 animate-marquee hover:[animation-play-state:paused]">
+            {[...TESTIMONIALS, ...TESTIMONIALS].map((t, i) => <TestimonialCard key={`a${i}`} t={t} i={i} />)}
+          </div>
+          <div className="flex w-max gap-5 animate-marquee-reverse hover:[animation-play-state:paused]">
+            {[...TESTIMONIALS.slice().reverse(), ...TESTIMONIALS.slice().reverse()].map((t, i) => <TestimonialCard key={`b${i}`} t={t} i={i + 2} />)}
+          </div>
         </div>
       </section>
 
@@ -364,10 +445,14 @@ export default function Landing({ checkout = {} }) {
           <p className="mt-3 text-muted-foreground">Pick a monthly credit pack. Upgrade or cancel anytime.</p>
         </div>
         <div className="mx-auto grid max-w-5xl items-stretch gap-6 lg:grid-cols-3">
-          {PLANS.map((plan) => (
-            <div key={plan.id} className={`relative flex flex-col rounded-3xl border bg-card p-7 ${plan.popular ? "border-primary shadow-2xl shadow-primary/10 lg:-mt-3 lg:mb-3" : "border-border"}`}>
+          {PLANS.map((plan, i) => (
+            <Reveal key={plan.id} delay={i * 90} className={plan.popular ? "lg:-mt-3 lg:mb-3" : ""}>
+            <div className={`relative flex h-full flex-col rounded-3xl border bg-card p-7 transition-all duration-300 hover:-translate-y-1.5 ${plan.popular ? "border-primary/60 shadow-2xl shadow-primary/15" : "border-border hover:shadow-xl hover:shadow-primary/10"}`}>
               {plan.popular && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">Most popular</span>
+                <>
+                  <span className="pointer-events-none absolute -inset-[2px] -z-10 rounded-[inherit] bg-[linear-gradient(120deg,#3147ff,#8b5cf6,#a2e435,#3147ff)] bg-[length:300%_300%] animate-gradient-pan" />
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-lg shadow-primary/30">Most popular</span>
+                </>
               )}
               <div className="text-sm font-medium text-muted-foreground">{plan.name}</div>
               <div className="mt-2 flex items-end gap-1">
@@ -391,6 +476,7 @@ export default function Landing({ checkout = {} }) {
                 ))}
               </ul>
             </div>
+            </Reveal>
           ))}
         </div>
         <p className="mt-6 text-center text-xs text-muted-foreground">Payments are processed securely by Whop. Sign in with Google first, then subscribe.</p>
@@ -423,26 +509,43 @@ export default function Landing({ checkout = {} }) {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-border/60">
-        <div className="container grid gap-8 py-12 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Footer — dark, glowing, with a giant clipped wordmark */}
+      <footer className="relative mt-12 overflow-hidden bg-[#0a0e1a] text-white">
+        <div className="pointer-events-none absolute inset-x-0 -top-24 h-72 bg-gradient-to-r from-primary/30 via-violet-500/20 to-[#a2e435]/20 blur-3xl" />
+        <div className="container relative grid gap-10 py-16 sm:grid-cols-2 lg:grid-cols-4">
           <div className="lg:col-span-2">
-            <Image src="/brand/leadsfunda-white.svg" alt="LeadsFunda" width={140} height={27} />
-            <p className="mt-3 max-w-xs text-sm text-muted-foreground">Turn Google Maps into a pipeline of enriched, ready-to-pitch leads.</p>
+            <Image src="/brand/leadsfunda-white.svg" alt="LeadsFunda" width={150} height={29} className="brightness-0 invert" />
+            <p className="mt-4 max-w-xs text-sm text-white/60">Turn Google Maps into a pipeline of enriched, ready-to-pitch leads.</p>
+            <div className="mt-6">
+              <GoogleSignInButton size="sm" variant="secondary" className="rounded-full">Start free with Google</GoogleSignInButton>
+            </div>
           </div>
           <div>
-            <div className="mb-3 text-sm font-semibold text-foreground">Pages</div>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              {NAV.map((n) => <li key={n.href}><a href={n.href} className="transition-colors hover:text-foreground">{n.label}</a></li>)}
+            <div className="mb-4 text-sm font-semibold">Pages</div>
+            <ul className="space-y-2.5 text-sm text-white/60">
+              {NAV.map((n) => <li key={n.href}><a href={n.href} className="transition-colors hover:text-white">{n.label}</a></li>)}
             </ul>
           </div>
           <div>
-            <div className="mb-3 text-sm font-semibold text-foreground">Get started</div>
-            <GoogleSignInButton size="sm" className="rounded-full">Sign in with Google</GoogleSignInButton>
+            <div className="mb-4 text-sm font-semibold">Social</div>
+            <ul className="space-y-2.5 text-sm text-white/60">
+              <li><a href="#" className="transition-colors hover:text-white">X (Twitter)</a></li>
+              <li><a href="#" className="transition-colors hover:text-white">LinkedIn</a></li>
+              <li><a href="#" className="transition-colors hover:text-white">Dribbble</a></li>
+            </ul>
           </div>
         </div>
-        <div className="border-t border-border/60">
-          <div className="container py-6 text-center text-sm text-muted-foreground">© {new Date().getFullYear()} LeadsFunda. All rights reserved.</div>
+        {/* Giant wordmark, fading into the page */}
+        <div className="pointer-events-none relative select-none">
+          <div className="container">
+            <div className="font-heading bg-gradient-to-b from-white/[0.12] to-white/[0.01] bg-clip-text text-center text-[19vw] font-bold leading-[0.78] tracking-tight text-transparent">LeadsFunda</div>
+          </div>
+        </div>
+        <div className="relative border-t border-white/10">
+          <div className="container flex flex-col items-center justify-between gap-3 py-6 text-sm text-white/50 sm:flex-row">
+            <span>© {new Date().getFullYear()} LeadsFunda. All rights reserved.</span>
+            <span>Built for people who actually outreach.</span>
+          </div>
         </div>
       </footer>
     </div>
