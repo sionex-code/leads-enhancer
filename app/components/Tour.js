@@ -16,28 +16,40 @@ export default function Tour({ steps = [], open, onClose }) {
 
   const step = steps[idx];
 
+  const getVisibleElement = useCallback(() => {
+    if (!step?.key) return null;
+    if (typeof document === "undefined") return null;
+    const elements = Array.from(document.querySelectorAll(`[data-tour="${step.key}"]`));
+    if (elements.length === 0) return null;
+    
+    const visible = elements.find(el => {
+      const isHidden = el.offsetParent === null && getComputedStyle(el).position !== "fixed";
+      return !isHidden;
+    });
+    return visible || elements[0];
+  }, [step]);
+
   const measure = useCallback(() => {
-    if (!step) return;
-    const el = typeof document !== "undefined" ? document.querySelector(`[data-tour="${step.key}"]`) : null;
-    // Treat a missing OR hidden target (e.g. desktop-only sidebar items that are
-    // display:none on mobile) as "no target" → center the card instead of
-    // spotlighting an off-screen/zero-size rect.
-    const hidden = el && el.offsetParent === null && getComputedStyle(el).position !== "fixed";
-    if (!el || hidden) { setRect(null); return; }
+    const el = getVisibleElement();
+    if (!el) { setRect(null); return; }
+    const hidden = el.offsetParent === null && getComputedStyle(el).position !== "fixed";
+    if (hidden) { setRect(null); return; }
     const r = el.getBoundingClientRect();
     if (!r.width && !r.height) { setRect(null); return; }
     setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
-  }, [step]);
+  }, [getVisibleElement]);
 
   // Scroll to target element once when step or visibility changes, avoiding scroll loops
   useLayoutEffect(() => {
     if (!open || !step) return;
-    const el = typeof document !== "undefined" ? document.querySelector(`[data-tour="${step.key}"]`) : null;
-    const hidden = el && el.offsetParent === null && getComputedStyle(el).position !== "fixed";
-    if (el && !hidden) {
-      el.scrollIntoView({ block: "center", behavior: "smooth" });
+    const el = getVisibleElement();
+    if (el) {
+      const hidden = el.offsetParent === null && getComputedStyle(el).position !== "fixed";
+      if (!hidden) {
+        el.scrollIntoView({ block: "center", behavior: "auto" });
+      }
     }
-  }, [open, idx]);
+  }, [open, idx, getVisibleElement]);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -45,11 +57,17 @@ export default function Tour({ steps = [], open, onClose }) {
     const onChange = () => measure();
     window.addEventListener("resize", onChange);
     window.addEventListener("scroll", onChange, true);
-    const t = setTimeout(measure, 250); // re-measure after scrollIntoView settles
+    const t1 = setTimeout(measure, 50);
+    const t2 = setTimeout(measure, 150);
+    const t3 = setTimeout(measure, 300);
+    const t4 = setTimeout(measure, 600);
     return () => {
       window.removeEventListener("resize", onChange);
       window.removeEventListener("scroll", onChange, true);
-      clearTimeout(t);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      clearTimeout(t4);
     };
   }, [open, idx, measure]);
 

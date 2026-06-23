@@ -78,7 +78,12 @@ export default function AccountWidget({ collapsed = false }) {
     return (
       <div className="flex justify-center p-2">
         <Link href="/billing" title={email}>
-          <Avatar src={me?.user?.image} alt={email} fallback={initial} />
+          <Avatar 
+            src={me?.user?.image} 
+            alt={email} 
+            fallback={initial} 
+            className={cn(ent?.active && "ring-2 ring-primary ring-offset-2 ring-offset-background")}
+          />
         </Link>
       </div>
     );
@@ -90,12 +95,22 @@ export default function AccountWidget({ collapsed = false }) {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="flex w-full items-center gap-2.5 rounded-lg p-1 text-left transition-colors hover:bg-accent/60">
-              <Avatar src={me?.user?.image} alt={email} fallback={initial} />
+              <Avatar 
+                src={me?.user?.image} 
+                alt={email} 
+                fallback={initial} 
+                className={cn(ent?.active && "ring-2 ring-primary ring-offset-2 ring-offset-background")}
+              />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-foreground">{email || "Loading…"}</span>
-                <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                   {plan ? (
-                    <><Crown className="h-3 w-3 text-primary" /> {plan} plan</>
+                    <>
+                      <span className="inline-flex items-center justify-center rounded-full border border-primary/40 bg-primary/10 p-0.5 shadow-[0_0_8px_rgba(20,184,166,0.15)]">
+                        <Crown className="h-3 w-3 text-primary" />
+                      </span>
+                      <span className="font-semibold text-primary">{plan} plan</span>
+                    </>
                   ) : (
                     "Free account"
                   )}

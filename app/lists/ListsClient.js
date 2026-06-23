@@ -20,7 +20,7 @@ async function jsonFetch(url, options = {}) {
 // Guided tour for the Lists page. Passed to AppShell as tourKey="lists".
 const LISTS_TOUR = [
   { key: "lists-new", title: "Create a list", body: "Name a new list here, then add leads to it from the Leads page." },
-  { key: "lists-favorites", title: "Favorites", body: "Favorites is a built-in list of every lead you star — always one click away." },
+  { key: "lists-favorites", title: "Favorites", body: "Favorites is a built-in list of every lead you star, which is always one click away." },
   { key: "lists-open", title: "Open a list", body: "Click any list to open the Leads table filtered to just those leads." },
 ];
 

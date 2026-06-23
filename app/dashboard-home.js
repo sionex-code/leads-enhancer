@@ -33,6 +33,7 @@ import {
   Zap,
   ChevronDown,
   CreditCard,
+  Crown,
   ArrowRight,
   SlidersHorizontal,
   MapPin,
@@ -56,10 +57,10 @@ const LeadsMap = dynamic(() => import("./components/LeadsMap"), { ssr: false });
 // order. Targets are data-tour attributes on the form (works on mobile since they
 // are all on-screen). Passed to AppShell as tourKey="find".
 const FIND_TOUR = [
-  { key: "find-service", title: "Pick a service", body: "Choose the type of business you want to reach — plumbers, dentists, real estate agencies, and so on." },
+  { key: "find-service", title: "Pick a service", body: "Choose the type of business you want to reach, such as plumbers, dentists, real estate agencies, and so on." },
   { key: "find-country", title: "Choose a country", body: "Pick the country to search in. The city list below updates to match." },
   { key: "find-city", title: "Pick a city", body: "Select a city, or choose \"All cities\" to search the whole country at once." },
-  { key: "find-rating", title: "Filter by rating", body: "Target top-rated businesses, or pick \"Below 4.0\" to find low-rated ones that need help — a great angle for selling websites or reputation services." },
+  { key: "find-rating", title: "Filter by rating", body: "Target top-rated businesses, or pick \"Below 4.0\" to find low-rated ones that need help, which is a great angle for selling websites or reputation services." },
   { key: "find-max", title: "How many leads", body: "Set how many leads to pull (up to 10,000). You're only charged 1 credit per brand-new lead." },
   { key: "find-radius", title: "Search radius", body: "Widen or tighten the search area around the center. \"All cities\" makes it country-wide." },
   { key: "find-map", title: "Refine the center", body: "Drag the pin to move the exact search center. The circle shows your radius." },
@@ -71,7 +72,7 @@ const FIND_TOUR = [
 // reports, plus where saved leads and lists live. Auto-opens once per browser
 // (tourKey "workspace") and replays from the topbar "Tour" button.
 const WORKSPACE_TOUR = [
-  { key: "", title: "Your leads workspace", body: "You found leads — here's how to enrich them, spot the weak websites, and turn them into outreach." },
+  { key: "", title: "Your leads workspace", body: "You found leads. Here's how to enrich them, spot the weak websites, and turn them into outreach." },
   { key: "ws-enrich", title: "Enrich", body: "Grab each lead's email address and social profiles automatically by crawling their website. This button does it for every captured lead at once." },
   { key: "ws-whatsapp", title: "Check WhatsApp", body: "See which leads' phone numbers are active on WhatsApp, so you know who you can message directly." },
   { key: "ws-stages", title: "Track progress", body: "Find, Enrich and WhatsApp each show their live status here as they run." },
@@ -388,16 +389,21 @@ function CreditsPill() {
       : credits > 0 || ent?.active
         ? `${credits.toLocaleString()} credits left`
         : "No active plan";
+  
+  const IconComponent = ent?.active ? Crown : CreditCard;
+  
   return (
     <Link
       href="/billing"
       title="Manage plan & credits"
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors hover:border-primary/50",
-        ent?.active ? "border-border bg-card/60 text-foreground" : "border-amber-500/40 bg-amber-500/10 text-amber-600"
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+        ent?.active 
+          ? "border-primary/40 bg-primary/10 text-primary shadow-[0_0_8px_rgba(20,184,166,0.15)] hover:border-primary/60" 
+          : "border-amber-500/40 bg-amber-500/10 text-amber-600 hover:border-amber-500/60"
       )}
     >
-      <CreditCard className="h-3.5 w-3.5" /> {label}
+      <IconComponent className="h-3.5 w-3.5" /> {label}
     </Link>
   );
 }
