@@ -32,6 +32,8 @@ import {
   Bell,
   Wand2,
   FileSpreadsheet,
+  Menu,
+  X,
 } from "lucide-react";
 import { GoogleSignInButton } from "./GoogleSignInButton";
 import { Button } from "./ui/button";
@@ -628,6 +630,8 @@ function DiscoverCards() {
 
 export default function Landing() {
   const [step, setStep] = useState(0);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [openFaqIndex, setOpenFaqIndex] = useState(null);
 
   return (
     <div className={`lf relative min-h-screen overflow-x-clip bg-background text-foreground ${HATCH}`}>
@@ -640,7 +644,7 @@ export default function Landing() {
 
       {/* ---- nav ---- */}
       <header className="sticky top-3 z-40 px-4">
-        <div className="container">
+        <div className="container relative">
           <div className="flex h-14 items-center justify-between rounded-full border border-border/70 bg-background/80 px-3 pl-5 shadow-sm backdrop-blur-xl">
             <Logo />
             <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 text-sm font-medium md:flex">
@@ -648,8 +652,38 @@ export default function Landing() {
                 <a key={n.href} href={n.href} className="rounded-full px-3 py-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">{n.label}</a>
               ))}
             </nav>
-            <GoogleSignInButton size="sm" className="lf-cta rounded-xl">Get started</GoogleSignInButton>
+            <div className="flex items-center gap-2">
+              <GoogleSignInButton size="sm" className="lf-cta rounded-xl hidden sm:inline-flex">Get started</GoogleSignInButton>
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground md:hidden hover:bg-muted transition-colors"
+                aria-label="Toggle menu"
+              >
+                {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
+
+          {/* Mobile nav dropdown */}
+          {mobileMenuOpen && (
+            <div className="absolute left-0 right-0 top-16 z-50 rounded-2xl border border-border/75 bg-background/95 p-4 shadow-xl backdrop-blur-xl md:hidden animate-in fade-in slide-in-from-top-5 duration-200">
+              <nav className="flex flex-col gap-1.5">
+                {NAV.map((n) => (
+                  <a
+                    key={n.href}
+                    href={n.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="rounded-xl px-4 py-2.5 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    {n.label}
+                  </a>
+                ))}
+                <div className="mt-2 border-t border-border/60 pt-3">
+                  <GoogleSignInButton size="lg" className="w-full rounded-xl">Get started</GoogleSignInButton>
+                </div>
+              </nav>
+            </div>
+          )}
         </div>
       </header>
 
@@ -715,10 +749,10 @@ export default function Landing() {
             return (
               <div
                 key={item.label}
-                className="group flex flex-col rounded-2xl border border-border bg-card p-5 transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5"
+                className="group flex flex-col items-center text-center rounded-2xl border border-border bg-card p-6 transition-all duration-300 hover:-translate-y-1.5 hover:border-primary/40 hover:shadow-xl hover:shadow-primary/5"
               >
-                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary transition-transform duration-300 group-hover:scale-110">
-                  <Icon className="h-5 w-5" />
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-all duration-300 group-hover:scale-110 group-hover:bg-primary group-hover:text-primary-foreground">
+                  <Icon className="h-6 w-6" />
                 </div>
                 <h3 className="font-heading text-base font-bold text-foreground">
                   {item.label}
@@ -897,10 +931,10 @@ export default function Landing() {
       <section id="pricing" className="container py-24">
         <Reveal><SectionHead icon={Zap} eyebrow="Pricing" title="Simple plans for every stage"
           sub="Choose a plan that fits your needs, budget and growth." className="mb-10" /></Reveal>
-        <div className="rounded-[2rem] border border-border bg-muted/30 p-5 sm:p-8">
+        <div className="rounded-[2rem] border border-border bg-muted/30 p-5 sm:p-8 pt-10 sm:pt-14">
           <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-4">
             {PLANS.map((plan, i) => (
-              <Reveal key={plan.id} delay={i * 80}><PriceCard plan={plan} /></Reveal>
+              <Reveal key={plan.id} delay={i * 80} className="h-full flex flex-col"><PriceCard plan={plan} /></Reveal>
             ))}
           </div>
         </div>
@@ -912,13 +946,30 @@ export default function Landing() {
         <div className="container">
           <Reveal><SectionHead icon={MessageCircle} eyebrow="FAQs" title="Explore our FAQs"
             sub="Quick answers to the questions we hear most. Still stuck? Reach out any time." className="mb-14" /></Reveal>
-          <div className="mx-auto grid grid-cols-1 max-w-5xl gap-x-12 gap-y-10 md:grid-cols-2 lg:grid-cols-3">
-            {FAQ.map((item, i) => (
-              <Reveal key={item.q} delay={(i % 3) * 90}>
-                <h3 className="font-heading text-lg font-bold text-foreground">{item.q}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{item.a}</p>
-              </Reveal>
-            ))}
+          <div className="mx-auto max-w-3xl space-y-4">
+            {FAQ.map((item, i) => {
+              const isOpen = openFaqIndex === i;
+              return (
+                <Reveal key={item.q} delay={i * 60}>
+                  <div className="overflow-hidden rounded-2xl border border-border bg-card transition-all duration-300 hover:border-primary/30">
+                    <button
+                      onClick={() => setOpenFaqIndex(isOpen ? null : i)}
+                      className="flex w-full items-center justify-between p-5 text-left font-heading text-base font-bold text-foreground transition-colors hover:text-primary"
+                    >
+                      <span>{item.q}</span>
+                      <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-300 shrink-0 ${isOpen ? "rotate-180 text-primary" : ""}`} />
+                    </button>
+                    <div
+                      className={`transition-all duration-300 ease-in-out ${isOpen ? "max-h-[300px] border-t border-border/50 opacity-100" : "max-h-0 opacity-0 pointer-events-none"}`}
+                    >
+                      <div className="p-5 text-sm leading-relaxed text-muted-foreground bg-muted/10">
+                        {item.a}
+                      </div>
+                    </div>
+                  </div>
+                </Reveal>
+              );
+            })}
           </div>
         </div>
       </section>
@@ -935,14 +986,13 @@ export default function Landing() {
           </div>
         </div>
       </section>
-
-      {/* ---- footer (light card, like the template) ---- */}
+      {/* ---- footer ---- */}
       <footer className="px-4 pb-6">
-        <div className={`container overflow-hidden rounded-[2rem] border border-border bg-card shadow-sm ${HATCH}`}>
-          <div className="grid grid-cols-1 gap-10 p-10 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="lg:col-span-2">
+        <div className={`container overflow-hidden bg-transparent md:bg-card border-none md:border md:rounded-[2rem] md:shadow-sm ${HATCH}`}>
+          <div className="grid grid-cols-2 gap-8 p-6 md:p-10 md:grid-cols-5">
+            <div className="col-span-2 md:col-span-2">
               <Logo />
-              <p className="mt-4 max-w-xs text-sm text-muted-foreground">Turn Google Maps into a pipeline of enriched, ready-to-pitch leads.</p>
+              <p className="mt-4 max-w-xs text-sm text-muted-foreground">Turn Google Maps into a pipeline of enriched, ready-to-pitch B2B leads with 99% email data accuracy.</p>
               <div className="mt-6"><GoogleSignInButton size="sm" className="lf-cta rounded-xl">Start free with Google</GoogleSignInButton></div>
             </div>
             <div>
@@ -952,6 +1002,21 @@ export default function Landing() {
               </ul>
             </div>
             <div>
+              <div className="mb-4 text-sm font-semibold text-foreground">Legal</div>
+              <ul className="space-y-2.5 text-sm text-muted-foreground">
+                <li><a href="/terms" className="transition-colors hover:text-foreground">Terms of Service</a></li>
+                <li><a href="/privacy" className="transition-colors hover:text-foreground">Privacy Policy</a></li>
+                <li><a href="/can-spam" className="transition-colors hover:text-foreground">CAN-SPAM Policy</a></li>
+              </ul>
+            </div>
+            <div>
+              <div className="mb-4 text-sm font-semibold text-foreground">Support</div>
+              <ul className="space-y-2.5 text-sm text-muted-foreground">
+                <li><a href="/contact" className="transition-colors hover:text-foreground">Contact Us</a></li>
+                <li><a href="mailto:support@leadsfunda.com" className="transition-colors hover:text-foreground">Email Support</a></li>
+              </ul>
+            </div>
+            <div className="col-span-2 md:col-span-1">
               <div className="mb-4 text-sm font-semibold text-foreground">Social</div>
               <ul className="space-y-2.5 text-sm text-muted-foreground">
                 <li><a href="https://x.com/leadsfunda" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-foreground">X (Twitter)</a></li>
@@ -961,7 +1026,7 @@ export default function Landing() {
               </ul>
             </div>
           </div>
-          <div className="flex flex-col items-center justify-between gap-2 border-t border-border px-10 py-5 text-sm text-muted-foreground sm:flex-row">
+          <div className="flex flex-col items-center justify-between gap-2 border-t border-border px-6 md:px-10 py-5 text-sm text-muted-foreground sm:flex-row">
             <span>© {new Date().getFullYear()} LeadsFunda. All rights reserved.</span>
             <span>Built for people who actually outreach.</span>
           </div>
