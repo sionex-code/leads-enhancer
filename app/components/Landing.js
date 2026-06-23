@@ -52,14 +52,14 @@ const NAV = [
 
 // Quiet, uniform "About" tag-pills (one subtle style, brand dot only).
 const PILLS = [
-  { label: "Verified emails", dot: "bg-violet-400", desc: "Crawl website domains and MX records live to extract valid, deliverable email addresses directly.", icon: Mail, tile: "bg-violet-500/10 text-violet-600" },
-  { label: "WhatsApp numbers", dot: "bg-emerald-400", desc: "Check phone numbers against the WhatsApp API to instantly verify active mobile outreach channels.", icon: MessageCircle, tile: "bg-emerald-500/10 text-emerald-600" },
-  { label: "Website health", dot: "bg-sky-400", desc: "Perform real-time page audits checking SSL certificates, loading speed, and mobile responsiveness.", icon: Gauge, tile: "bg-sky-500/10 text-sky-600" },
-  { label: "Owner contacts", dot: "bg-blue-400", desc: "Pinpoint owner, founder, and decision-maker contact details to skip the gatekeeper.", icon: Users, tile: "bg-blue-500/10 text-blue-600" },
-  { label: "Social profiles", dot: "bg-rose-400", desc: "Gather direct links to Facebook, Instagram, LinkedIn, and Twitter pages for multi-channel touches.", icon: Globe2, tile: "bg-rose-500/10 text-rose-600" },
-  { label: "Ratings & reviews", dot: "bg-amber-400", desc: "Track Google Maps review ratings and counts to identify businesses needing reputation management.", icon: Star, tile: "bg-amber-500/10 text-amber-600" },
-  { label: "Phone numbers", dot: "bg-cyan-400", desc: "Extract clean, formatted landline and mobile numbers from business pages and Maps.", icon: Phone, tile: "bg-cyan-500/10 text-cyan-600" },
-  { label: "Clean CSV export", dot: "bg-orange-400", desc: "Export structured lead lists formatted perfectly for immediate import into your CRM or outreach tool.", icon: FileSpreadsheet, tile: "bg-orange-500/10 text-orange-600" },
+  { label: "Verified emails", desc: "Crawl website domains and MX records live to extract valid, deliverable email addresses directly.", icon: Mail },
+  { label: "WhatsApp numbers", desc: "Check phone numbers against the WhatsApp API to instantly verify active mobile outreach channels.", icon: MessageCircle },
+  { label: "Website health", desc: "Perform real-time page audits checking SSL certificates, loading speed, and mobile responsiveness.", icon: Gauge },
+  { label: "Owner contacts", desc: "Pinpoint owner, founder, and decision-maker contact details to skip the gatekeeper.", icon: Users },
+  { label: "Social profiles", desc: "Gather direct links to Facebook, Instagram, LinkedIn, and Twitter pages for multi-channel touches.", icon: Globe2 },
+  { label: "Ratings & reviews", desc: "Track Google Maps review ratings and counts to identify businesses needing reputation management.", icon: Star },
+  { label: "Phone numbers", desc: "Extract clean, formatted landline and mobile numbers from business pages and Maps.", icon: Phone },
+  { label: "Clean CSV export", desc: "Export structured lead lists formatted perfectly for immediate import into your CRM or outreach tool.", icon: FileSpreadsheet },
 ];
 
 // Sticky-left "Discover" pastel card stack.
@@ -699,7 +699,7 @@ export default function Landing() {
         <Reveal delay={120} className="mx-auto mt-9 flex max-w-3xl flex-wrap items-center justify-center gap-3">
           {PILLS.map((p) => (
             <span key={p.label} className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground">
-              <span className={`h-1.5 w-1.5 rounded-full ${p.dot}`} /> {p.label}
+              <Check className="h-4 w-4 text-primary shrink-0" /> {p.label}
             </span>
           ))}
         </Reveal>
@@ -713,7 +713,7 @@ export default function Landing() {
                 key={item.label}
                 className="group flex flex-col rounded-2xl border border-border bg-card p-5 transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5"
               >
-                <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl ${item.tile} transition-transform duration-300 group-hover:scale-110`}>
+                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary transition-transform duration-300 group-hover:scale-110">
                   <Icon className="h-5 w-5" />
                 </div>
                 <h3 className="font-heading text-base font-bold text-foreground">
@@ -951,7 +951,7 @@ export default function Landing() {
               <div className="mb-4 text-sm font-semibold text-foreground">Social</div>
               <ul className="space-y-2.5 text-sm text-muted-foreground">
                 <li><a href="https://x.com/leadsfunda" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-foreground">X (Twitter)</a></li>
-                <li><a href="https://instagram.com/leadsfunda.com" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-foreground">Instagram</a></li>
+                <li><a href="https://instagram.com/leadsfunda" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-foreground">Instagram</a></li>
                 <li><a href="https://facebook.com/leadsfunda" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-foreground">Facebook</a></li>
                 <li><a href="#" className="transition-colors hover:text-foreground">LinkedIn</a></li>
               </ul>
