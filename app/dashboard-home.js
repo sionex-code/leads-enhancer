@@ -497,16 +497,32 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   // Pick a random element from an array
   const randomPick = (arr) => arr?.length ? arr[Math.floor(Math.random() * arr.length)] : undefined;
 
+  const [isShuffling, setIsShuffling] = useState(false);
+  const shuffleIntervalRef = useRef(null);
+
+  const stopShuffle = () => {
+    if (shuffleIntervalRef.current) {
+      clearInterval(shuffleIntervalRef.current);
+      shuffleIntervalRef.current = null;
+    }
+    setIsShuffling(false);
+  };
+
   // ── Form state ─────────────────────────────────────────────────────────────
-  const [countryCode, setCountryCode] = useState(() => randomPick(catalogCountries)?.code || randomPick(QUICK_COUNTRIES).code);
+  // Start with stable static defaults to prevent double-switching on reload
+  const [countryCode, setCountryCode] = useState(() => QUICK_COUNTRIES[0].code);
   const country = useMemo(
     () => catalogCountries.find((c) => c.code === countryCode) || catalogCountries[0] || { code: "", name: "", cities: [] },
     [catalogCountries, countryCode]
   );
 
-  const [service, setService] = useState(() => randomPick(catalogServices)?.name || randomPick(QUICK_SERVICES));
+  const [service, setService] = useState(() => QUICK_SERVICES[0]);
   // cityObj = { id, name, admin, lat, lng } from the catalog
-  const [cityObj, setCityObj] = useState(() => randomPick(country.cities) || null);
+  const [cityObj, setCityObj] = useState(() => {
+    const fallbackCountry = QUICK_COUNTRIES[0];
+    const defaultCityName = fallbackCountry.cities[10] || fallbackCountry.cities[0];
+    return { id: null, name: defaultCityName, admin: "", lat: null, lng: null, leadCount: 0 };
+  });
   const [citySearch, setCitySearch] = useState("");
   const [showChips, setShowChips] = useState(false);
   const [max, setMax] = useState("30");
@@ -530,28 +546,44 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   };
   const [query, setQuery] = useState(() => buildQuery(service, cityObj, country));
 
-  // When catalog loads, resync selections to a random entry
+  // When catalog loads, trigger a smooth slot-machine/shuffle animation settling on random selections
   useEffect(() => {
     if (!catalog) return;
     const countries = catalog.countries || [];
     const services = catalog.services || [];
-    const randCountry = randomPick(countries);
-    const randService = randomPick(services)?.name;
-    if (randCountry) {
-      setCountryCode(randCountry.code);
-      const randCity = randomPick(randCountry.cities) || null;
-      setCityObj(randCity);
-      if (randCity?.lat != null) setCenter({ lat: randCity.lat, lng: randCity.lng });
-      if (randService) {
-        setService(randService);
-        setQuery(buildQuery(randService, randCity, randCountry));
-      } else {
-        setQuery(buildQuery(service, randCity, randCountry));
+    if (!countries.length || !services.length) return;
+
+    setIsShuffling(true);
+    let ticks = 0;
+    const maxTicks = 12;
+
+    shuffleIntervalRef.current = setInterval(() => {
+      const randCountry = randomPick(countries);
+      const randService = randomPick(services)?.name;
+      if (randCountry) {
+        setCountryCode(randCountry.code);
+        const randCity = randomPick(randCountry.cities) || null;
+        setCityObj(randCity);
+        if (randCity?.lat != null) setCenter({ lat: randCity.lat, lng: randCity.lng });
+        if (randService) {
+          setService(randService);
+          setQuery(buildQuery(randService, randCity, randCountry));
+        } else {
+          setQuery(buildQuery(service, randCity, randCountry));
+        }
       }
-    } else if (randService) {
-      setService(randService);
-      setQuery(buildQuery(randService, cityObj, country));
-    }
+      
+      ticks++;
+      if (ticks >= maxTicks) {
+        stopShuffle();
+      }
+    }, 70);
+
+    return () => {
+      if (shuffleIntervalRef.current) {
+        clearInterval(shuffleIntervalRef.current);
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [catalog]);
 
@@ -563,6 +595,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   }, [citySearch, country]);
 
   function changeCountry(nextCode) {
+    stopShuffle();
     const nextCountry = catalogCountries.find((c) => c.code === nextCode) || catalogCountries[0];
     if (!nextCountry) return;
     const nextCity = nextCountry.cities?.[0] || null;
@@ -574,11 +607,13 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   }
 
   function selectService(nextService) {
+    stopShuffle();
     setService(nextService);
     setQuery(buildQuery(nextService, allCities ? null : cityObj, country));
   }
 
   function selectCity(nextCityObj) {
+    stopShuffle();
     setAllCities(false);
     setCityObj(nextCityObj);
     if (nextCityObj?.lat != null && nextCityObj?.lng != null) {
@@ -589,6 +624,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
 
   // "All cities" searches the whole country (no city/radius filter).
   function selectAllCities() {
+    stopShuffle();
     setAllCities(true);
     setQuery(buildQuery(service, null, country));
   }
@@ -674,14 +710,24 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
         </div>
       )}
 
-      <form className="mt-8 flex flex-col gap-2 sm:flex-row" onSubmit={submit}>
+      <form className="mt-8 flex flex-col gap-2 sm:flex-row" onSubmit={(e) => { stopShuffle(); submit(e); }}>
         <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          {isShuffling ? (
+            <Loader2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-primary animate-spin" />
+          ) : (
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          )}
           <Input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              stopShuffle();
+              setQuery(e.target.value);
+            }}
             placeholder="plumber in Austin TX"
-            className="h-12 pl-10 text-base"
+            className={cn(
+              "h-12 pl-10 text-base transition-all duration-200",
+              isShuffling && "border-primary/50 text-primary/80 ring-2 ring-primary/20 bg-primary/5 font-mono"
+            )}
             autoFocus
           />
         </div>
