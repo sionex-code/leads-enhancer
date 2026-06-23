@@ -16,6 +16,8 @@ import {
 import { cn } from "./../lib/utils";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
+// Sign-out returns to the marketing landing (on its own host in prod).
+const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || "";
 // Canonical plan keys — must match billing.cjs (p19 Starter · p35 Growth · p49
 // Scale). The old p49/p99 mapping linked checkout to ?plan=p99, which the server
 // rejects as "Unknown plan", so upgrades silently failed.
@@ -121,7 +123,7 @@ export default function AccountWidget({ collapsed = false }) {
               </DropdownMenuItem>
             ))}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })} className="text-red-600 hover:text-red-700">
+            <DropdownMenuItem onClick={() => signOut({ callbackUrl: MARKETING_URL || "/" })} className="text-red-600 hover:text-red-700">
               <LogOut className="h-4 w-4" /> Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>

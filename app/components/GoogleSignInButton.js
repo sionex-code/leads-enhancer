@@ -2,6 +2,24 @@
 import { signIn } from "next-auth/react";
 import { Button } from "./ui/button";
 
+// In production the landing lives on the marketing host (leadsfunda.com) but auth
+// lives on the app host (app.leadsfunda.com, = NEXTAUTH_URL). So from the landing
+// we hand off to the app host's /login, which owns the OAuth flow. On the app host
+// itself (or local single-host dev) we sign in right here.
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "";
+
+function startSignIn(callbackUrl) {
+  if (APP_URL && typeof window !== "undefined") {
+    try {
+      if (window.location.host !== new URL(APP_URL).host) {
+        window.location.href = `${APP_URL}/login?callbackUrl=${encodeURIComponent(callbackUrl)}`;
+        return;
+      }
+    } catch {}
+  }
+  signIn("google", { callbackUrl });
+}
+
 function GoogleIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true">
@@ -15,7 +33,7 @@ function GoogleIcon() {
 
 export function GoogleSignInButton({ callbackUrl = "/dashboard", children, variant, size, className }) {
   return (
-    <Button variant={variant} size={size} className={className} onClick={() => signIn("google", { callbackUrl })}>
+    <Button variant={variant} size={size} className={className} onClick={() => startSignIn(callbackUrl)}>
       <GoogleIcon />
       {children || "Sign in with Google"}
     </Button>

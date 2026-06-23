@@ -1,20 +1,29 @@
-name: Deploy LeadsFunda SaaS → new.leadsfunda.com
+name: Deploy LeadsFunda SaaS → app.leadsfunda.com
 
 # Deploys the LeadsFunda SaaS app (NOT the legacy /leads dashboard — that has its
 # own deploy.yml). Pushing this branch ships the working tree to the EXISTING prod
 # install and rebuilds it in place.
 #
+# Two-host topology (one Next.js process on :3001 behind two nginx vhosts):
+#   • Marketing landing  -> leadsfunda.com (+ www)
+#   • Authenticated app  -> app.leadsfunda.com   (= NEXTAUTH_URL; all auth lives here)
+# The split is enforced by middleware.js using NEXT_PUBLIC_APP_URL /
+# NEXT_PUBLIC_MARKETING_URL, which MUST be present in the VPS `.env.local` BEFORE
+# this build runs (NEXT_PUBLIC_* are inlined at build time).
+#
 # Hard-won invariants (see vps-deploy memory). Changing any of these breaks prod:
 #   • App dir is /home/adminsafe/leadsfunda — it already holds the prod `.env.local`
 #     (DATABASE_URL → local PG, WAREHOUSE_DATABASE_URL, Whop, Google auth, OWA
-#     WhatsApp). We NEVER ship `.env.local` (the tar excludes it; a clean CI checkout
-#     wouldn't have it anyway) and NEVER inject those secrets here — the VPS owns them.
+#     WhatsApp, NEXTAUTH_URL=https://app.leadsfunda.com, NEXT_PUBLIC_APP_URL,
+#     NEXT_PUBLIC_MARKETING_URL). We NEVER ship `.env.local` (the tar excludes it; a
+#     clean CI checkout wouldn't have it anyway) and NEVER inject those secrets here —
+#     the VPS owns them.
 #   • pm2 app is `leadsfunda-ui` on PORT 3001. We restart the existing process; we do
 #     NOT create a second one (a 2nd process on 3001 → EADDRINUSE crash-loop).
 #   • Build happens ON the VPS. Next 16 / Turbopack externalizes `pg` as a content-
 #     hashed virtual module, so a locally-built `.next` is NOT runnable here — the tar
 #     excludes `.next` and we run `npm run build` remotely.
-#   • Root build (no basePath); new.leadsfunda.com serves at /.
+#   • Root build (no basePath); both hosts serve at /.
 
 on:
   push:
@@ -93,11 +102,26 @@ jobs:
             fi
           "
 
+      # Validate the process is up AND the two-host split is wired correctly.
+      # Uses Host headers against the local port (origin) so it does not depend on
+      # DNS/Cloudflare. Marketing host serves the landing (200); app host has no
+      # landing so "/" and the gated pages redirect (3xx) to sign-in.
       - name: Health check
         run: |
           sleep 8
-          ssh -i ~/.ssh/id_ed25519 "$VPS_USER@$VPS_HOST" \
-            'r=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:'"$APP_PORT"'/);
-             a=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:'"$APP_PORT"'/api/me);
-             echo "root=$r api/me=$a";
-             [ "$r" = "200" ] && { [ "$a" = "401" ] || [ "$a" = "200" ]; }'
+          ssh -i ~/.ssh/id_ed25519 "$VPS_USER@$VPS_HOST" '
+            P='"$APP_PORT"'
+            code() { curl -s -o /dev/null -w "%{http_code}" -H "Host: $1" "http://localhost:$P$2"; }
+            mroot=$(code leadsfunda.com /);
+            aroot=$(code app.leadsfunda.com /);
+            adash=$(code app.leadsfunda.com /dashboard);
+            mdash=$(code leadsfunda.com /dashboard);
+            api=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$P/api/me");
+            echo "marketing/=$mroot  app/=$aroot  app/dashboard=$adash  marketing/dashboard=$mdash  api/me=$api";
+            [ "$mroot" = "200" ] || { echo "FAIL: marketing landing not 200"; exit 1; };
+            { [ "$api" = "401" ] || [ "$api" = "200" ]; } || { echo "FAIL: api/me bad"; exit 1; };
+            case "$aroot" in 3??) ;; *) echo "FAIL: app / should redirect"; exit 1;; esac;
+            case "$adash" in 3??) ;; *) echo "FAIL: app /dashboard should redirect"; exit 1;; esac;
+            case "$mdash" in 3??) ;; *) echo "FAIL: marketing /dashboard should redirect to app"; exit 1;; esac;
+            echo "OK: app up + two-host split verified"
+          '

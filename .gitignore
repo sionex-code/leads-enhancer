@@ -13,3 +13,8 @@ package.json.packbak
 
 # stray Lighthouse/report test artifacts in repo root
 /*.report.html
+
+# Remotion demo project (large; not part of the web app)
+video/
+# Local MCP server config
+.mcp.json
