@@ -24,11 +24,20 @@ export default function Tour({ steps = [], open, onClose }) {
     // spotlighting an off-screen/zero-size rect.
     const hidden = el && el.offsetParent === null && getComputedStyle(el).position !== "fixed";
     if (!el || hidden) { setRect(null); return; }
-    el.scrollIntoView({ block: "center", behavior: "smooth" });
     const r = el.getBoundingClientRect();
     if (!r.width && !r.height) { setRect(null); return; }
     setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
   }, [step]);
+
+  // Scroll to target element once when step or visibility changes, avoiding scroll loops
+  useLayoutEffect(() => {
+    if (!open || !step) return;
+    const el = typeof document !== "undefined" ? document.querySelector(`[data-tour="${step.key}"]`) : null;
+    const hidden = el && el.offsetParent === null && getComputedStyle(el).position !== "fixed";
+    if (el && !hidden) {
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }, [open, idx]);
 
   useLayoutEffect(() => {
     if (!open) return;

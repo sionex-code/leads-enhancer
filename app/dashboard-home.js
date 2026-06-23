@@ -799,6 +799,9 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
             value={radiusKm}
             disabled={allCities}
             onChange={(e) => setRadiusKm(Number(e.target.value) || 1)}
+            style={{
+              "--slider-percentage": `${((radiusKm - 1) / 199) * 100}%`
+            }}
             className="h-9 w-full cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-40"
           />
         </label>
@@ -880,12 +883,12 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   );
 }
 
-function StatCard({ value, label }) {
+function StatCard({ value, label, className }) {
   return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="text-2xl font-bold"><AnimatedNumber value={value} /></div>
-        <div className="text-xs text-muted-foreground">{label}</div>
+    <Card className={className}>
+      <CardContent className="p-3 sm:p-4">
+        <div className="text-xl sm:text-2xl font-bold"><AnimatedNumber value={value} /></div>
+        <div className="text-[10px] sm:text-xs text-muted-foreground whitespace-nowrap">{label}</div>
       </CardContent>
     </Card>
   );
@@ -946,6 +949,7 @@ export default function Dashboard({ view = "" }) {
   const [bulkBusy, setBulkBusy] = useState("");
   // Progress for a realtime (queue-free) enrich/whatsapp batch: { kind, done, total }.
   const [realtimeBatch, setRealtimeBatch] = useState(null);
+  const [showDetails, setShowDetails] = useState(false);
   const [credits, setCredits] = useState(null);
   // Full plan entitlement ({ active, remaining, plan, credits }) used to pre-check
   // searches before hitting the server. remaining === null means unlimited.
@@ -1806,7 +1810,7 @@ export default function Dashboard({ view = "" }) {
   }
 
   const actions = (
-    <>
+    <div className="hidden md:flex items-center gap-2">
       <CreditsPill />
       <DailyUsagePills />
       <Button
@@ -1822,7 +1826,7 @@ export default function Dashboard({ view = "" }) {
       <Button variant="destructive" size="sm" disabled={!!busy || running || !selected} onClick={() => projectAction("delete")}>
         <Trash2 size={15} /> <span className="hidden sm:inline">Delete</span>
       </Button>
-    </>
+    </div>
   );
 
   return (
@@ -1863,18 +1867,76 @@ export default function Dashboard({ view = "" }) {
         )}
 
         {/* Stats — at the top of the workspace */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          <StatCard value={status?.counts?.raw || 0} label="Scraped leads" />
-          <StatCard value={status?.counts?.websites || 0} label="Websites" />
-          <StatCard value={status?.counts?.enriched || 0} label="Enriched rows" />
-          <StatCard value={status?.counts?.desktopAudits || 0} label="Desktop audits" />
-          <StatCard value={status?.counts?.mobileAudits || 0} label="Mobile audits" />
+        <div className="flex gap-2 overflow-x-auto pb-1.5 -mx-4 px-4 md:mx-0 md:px-0 md:grid md:grid-cols-5 md:gap-3 scrollbar-none">
+          <StatCard className="w-[110px] shrink-0 md:w-auto md:shrink" value={status?.counts?.raw || 0} label="Scraped leads" />
+          <StatCard className="w-[110px] shrink-0 md:w-auto md:shrink" value={status?.counts?.websites || 0} label="Websites" />
+          <StatCard className="w-[110px] shrink-0 md:w-auto md:shrink" value={status?.counts?.enriched || 0} label="Enriched rows" />
+          <StatCard className="w-[110px] shrink-0 md:w-auto md:shrink" value={status?.counts?.desktopAudits || 0} label="Desktop audits" />
+          <StatCard className="w-[110px] shrink-0 md:w-auto md:shrink" value={status?.counts?.mobileAudits || 0} label="Mobile audits" />
         </div>
 
         {/* Project details (read-only on an existing project) */}
         <Card>
           <CardContent className="space-y-4 p-4">
-            <div className="grid gap-3 sm:grid-cols-[1.2fr_2fr_0.6fr_0.9fr]">
+            {/* Action buttons (placed at the top on mobile, bottom on desktop) */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border/40 pb-4 sm:border-0 sm:pb-0">
+              <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" data-tour="ws-enrich" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("enrich")} title="Grab email + socials for captured leads not enriched yet (realtime, no queue; shared with all users)">
+                  {bulkBusy === "enrich" ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />} Enrich{realtimeBatch?.kind === "enrich" ? ` (${realtimeBatch.done}/${realtimeBatch.total})` : ""}
+                </Button>
+                <Button variant="secondary" data-tour="ws-whatsapp" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("whatsapp")} title="Check WhatsApp for captured numbers not checked yet (realtime, no queue; cached for all users)">
+                  {bulkBusy === "whatsapp" ? <Loader2 size={16} className="animate-spin" /> : <MessageCircle size={16} />} WhatsApp{realtimeBatch?.kind === "whatsapp" ? ` (${realtimeBatch.done}/${realtimeBatch.total})` : ""}
+                </Button>
+                {running ? (
+                  <Button variant="outline" disabled={!!busy} onClick={() => projectAction("stop")}><PauseCircle size={16} /> Stop</Button>
+                ) : (
+                  <Button variant="outline" disabled={!!busy || !selected} onClick={() => projectAction("resume")}><RotateCcw size={16} /> Resume</Button>
+                )}
+                {status?.files?.report && (
+                  <Button asChild variant="outline">
+                    <a href={`${BASE_PATH}/api/projects/${encodeURIComponent(selected)}/report`} target="_blank" rel="noreferrer"><Globe2 size={16} /> Open report</a>
+                  </Button>
+                )}
+
+                {/* Mobile-only Favorite/Delete buttons */}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className={cn("sm:hidden h-9 w-9", selectedProject?.watchlist && "border-amber-500/50 text-amber-600")}
+                  disabled={!selectedProject}
+                  onClick={() => toggleProjectWatch()}
+                  title={selectedProject?.watchlist ? "Remove project from favorites" : "Add project to favorites"}
+                >
+                  <Star size={15} fill={selectedProject?.watchlist ? "currentColor" : "none"} />
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="icon"
+                  className="sm:hidden h-9 w-9"
+                  disabled={!!busy || running || !selected}
+                  onClick={() => projectAction("delete")}
+                  title="Delete project"
+                >
+                  <Trash2 size={15} />
+                </Button>
+              </div>
+
+              {/* Mobile details toggle */}
+              <button
+                type="button"
+                onClick={() => setShowDetails(!showDetails)}
+                className="flex items-center justify-between rounded-md border border-border px-3 h-9 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground sm:hidden"
+              >
+                <span>{showDetails ? "Hide settings" : "Show settings"}</span>
+                <ChevronDown className={cn("ml-1.5 h-3.5 w-3.5 transition-transform duration-200", showDetails && "rotate-180")} />
+              </button>
+            </div>
+
+            {/* Inputs grid (collapsible on mobile, always visible on desktop) */}
+            <div className={cn(
+              "grid gap-3 sm:grid-cols-[1.2fr_2fr_0.6fr_0.9fr]",
+              showDetails ? "grid grid-cols-1" : "hidden sm:grid"
+            )}>
               <label className="space-y-1">
                 <span className="text-xs font-medium text-muted-foreground">Project</span>
                 <Input value={form.name} readOnly className="cursor-default bg-muted/40" title={form.name} />
@@ -1892,29 +1954,13 @@ export default function Dashboard({ view = "" }) {
                 <Input value={status?.state?.publicId || selected || ""} readOnly className="cursor-default bg-muted/40 font-mono uppercase tracking-wide" title="Share this ID with support" />
               </label>
             </div>
+
             {formRunning && (
               <div className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-600">
                 "{form.name}" is already running. Change the project name to launch another in parallel.
               </div>
             )}
-            <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" data-tour="ws-enrich" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("enrich")} title="Grab email + socials for captured leads not enriched yet (realtime, no queue; shared with all users)">
-                {bulkBusy === "enrich" ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />} Enrich{realtimeBatch?.kind === "enrich" ? ` (${realtimeBatch.done}/${realtimeBatch.total})` : ""}
-              </Button>
-              <Button variant="secondary" data-tour="ws-whatsapp" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("whatsapp")} title="Check WhatsApp for captured numbers not checked yet (realtime, no queue; cached for all users)">
-                {bulkBusy === "whatsapp" ? <Loader2 size={16} className="animate-spin" /> : <MessageCircle size={16} />} WhatsApp{realtimeBatch?.kind === "whatsapp" ? ` (${realtimeBatch.done}/${realtimeBatch.total})` : ""}
-              </Button>
-              {running ? (
-                <Button variant="outline" disabled={!!busy} onClick={() => projectAction("stop")}><PauseCircle size={16} /> Stop</Button>
-              ) : (
-                <Button variant="outline" disabled={!!busy || !selected} onClick={() => projectAction("resume")}><RotateCcw size={16} /> Resume</Button>
-              )}
-              {status?.files?.report && (
-                <Button asChild variant="outline">
-                  <a href={`${BASE_PATH}/api/projects/${encodeURIComponent(selected)}/report`} target="_blank" rel="noreferrer"><Globe2 size={16} /> Open report</a>
-                </Button>
-              )}
-            </div>
+
             <div className={cn(
               "text-xs",
               isQueued && !busy ? "font-medium text-amber-600" : "text-muted-foreground"
@@ -2072,7 +2118,7 @@ export default function Dashboard({ view = "" }) {
               </div>
 
               {/* Desktop table — columns: # | Name | Contact | Rating | Reviews | Owner reply | Website | Socials | Health | Actions */}
-              <div className="hidden md:block">
+              <div className="hidden md:block overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
