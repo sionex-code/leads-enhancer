@@ -10,7 +10,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Menu,
-  ShieldCheck,
   Plus,
   HelpCircle,
 } from "lucide-react";
@@ -42,9 +41,7 @@ function Brand({ collapsed }) {
   return (
     <Link href="/dashboard" title="Find leads" className="flex items-center">
       {collapsed ? (
-        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <ShieldCheck className="h-5 w-5" />
-        </span>
+        <Image src="/brand/leadsfunda-icon.svg" alt="LeadsFunda" width={36} height={36} priority />
       ) : (
         <Image src="/brand/leadsfunda-white.svg" alt="LeadsFunda" width={140} height={27} priority />
       )}
