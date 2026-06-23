@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { X, ArrowRight, ArrowLeft, Check } from "lucide-react";
 import { Button } from "./ui/button";
 
@@ -11,8 +12,13 @@ import { Button } from "./ui/button";
 //
 // Props: steps = [{ key, title, body }], open, onClose(completed: boolean).
 export default function Tour({ steps = [], open, onClose }) {
+  const [mounted, setMounted] = useState(false);
   const [idx, setIdx] = useState(0);
   const [rect, setRect] = useState(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const step = steps[idx];
 
@@ -86,7 +92,7 @@ export default function Tour({ steps = [], open, onClose }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, steps.length, onClose]);
 
-  if (!open || !step) return null;
+  if (!mounted || !open || !step) return null;
 
   const pad = 6;
   const isLast = idx === steps.length - 1;
@@ -110,7 +116,7 @@ export default function Tour({ steps = [], open, onClose }) {
     tipStyle = { position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: tipWidth };
   }
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[80]" aria-modal="true" role="dialog">
       {/* Spotlight (or full dim when no target) */}
       {rect ? (
@@ -153,6 +159,7 @@ export default function Tour({ steps = [], open, onClose }) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
