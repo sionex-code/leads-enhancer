@@ -400,7 +400,7 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot, on
           </div>
         </header>
 
-        <div className="space-y-4 p-5">
+        <div className="space-y-4 p-5 flex-1 overflow-y-auto thin-scroll">
           <DrawerCard title="Email status">
             <div className="grid grid-cols-2 gap-2">
               <button className={cn("flex flex-col items-center gap-1 rounded-lg border p-3 text-sm transition-colors", lead.watchlist ? "border-amber-500/50 bg-amber-500/10 text-amber-600" : "border-border hover:bg-accent")} onClick={() => patch({ watchlist: !lead.watchlist })}>
