@@ -287,7 +287,7 @@ export default function BillingClient() {
                     <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 gap-1 rounded-md"><Star className="h-3 w-3" /> Popular</Badge>
                   )}
                   {isCurrent && (
-                    <Badge variant="success" className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-md">Current plan</Badge>
+                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-md bg-emerald-600 text-white border-0 shadow-sm px-3 py-0.5 hover:bg-emerald-600">Current plan</Badge>
                   )}
                   <CardHeader>
                     <CardTitle className="text-lg">{plan.name}</CardTitle>

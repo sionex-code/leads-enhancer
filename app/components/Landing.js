@@ -52,14 +52,14 @@ const NAV = [
 
 // Quiet, uniform "About" tag-pills (one subtle style, brand dot only).
 const PILLS = [
-  { label: "Verified emails", dot: "bg-violet-400" },
-  { label: "WhatsApp numbers", dot: "bg-emerald-400" },
-  { label: "Website health", dot: "bg-sky-400" },
-  { label: "Owner contacts", dot: "bg-blue-400" },
-  { label: "Social profiles", dot: "bg-rose-400" },
-  { label: "Ratings & reviews", dot: "bg-amber-400" },
-  { label: "Phone numbers", dot: "bg-cyan-400" },
-  { label: "Clean CSV export", dot: "bg-orange-400" },
+  { label: "Verified emails", dot: "bg-violet-400", desc: "Crawl website domains and MX records live to extract valid, deliverable email addresses directly.", icon: Mail, tile: "bg-violet-500/10 text-violet-600" },
+  { label: "WhatsApp numbers", dot: "bg-emerald-400", desc: "Check phone numbers against the WhatsApp API to instantly verify active mobile outreach channels.", icon: MessageCircle, tile: "bg-emerald-500/10 text-emerald-600" },
+  { label: "Website health", dot: "bg-sky-400", desc: "Perform real-time page audits checking SSL certificates, loading speed, and mobile responsiveness.", icon: Gauge, tile: "bg-sky-500/10 text-sky-600" },
+  { label: "Owner contacts", dot: "bg-blue-400", desc: "Pinpoint owner, founder, and decision-maker contact details to skip the gatekeeper.", icon: Users, tile: "bg-blue-500/10 text-blue-600" },
+  { label: "Social profiles", dot: "bg-rose-400", desc: "Gather direct links to Facebook, Instagram, LinkedIn, and Twitter pages for multi-channel touches.", icon: Globe2, tile: "bg-rose-500/10 text-rose-600" },
+  { label: "Ratings & reviews", dot: "bg-amber-400", desc: "Track Google Maps review ratings and counts to identify businesses needing reputation management.", icon: Star, tile: "bg-amber-500/10 text-amber-600" },
+  { label: "Phone numbers", dot: "bg-cyan-400", desc: "Extract clean, formatted landline and mobile numbers from business pages and Maps.", icon: Phone, tile: "bg-cyan-500/10 text-cyan-600" },
+  { label: "Clean CSV export", dot: "bg-orange-400", desc: "Export structured lead lists formatted perfectly for immediate import into your CRM or outreach tool.", icon: FileSpreadsheet, tile: "bg-orange-500/10 text-orange-600" },
 ];
 
 // Sticky-left "Discover" pastel card stack.
@@ -67,7 +67,7 @@ const DISCOVER = [
   { icon: Filter, title: "Smart filters", body: "Slice any niche by rating, reviews and website status so you only work the leads worth your time.", grad: "from-emerald-50 to-emerald-100/40", ring: "ring-emerald-200/70", dot: "bg-emerald-400", chip: "bg-emerald-500/10 text-emerald-600" },
   { icon: Mail, title: "Contact enrichment", body: "Emails, socials and WhatsApp pulled from each business's own site, so your list is sendable on arrival.", grad: "from-violet-50 to-violet-100/40", ring: "ring-violet-200/70", dot: "bg-violet-400", chip: "bg-violet-500/10 text-violet-600" },
   { icon: Gauge, title: "Website health", body: "Real-Chrome audits flag broken, slow or missing sites so the warmest pitches rise to the top.", grad: "from-sky-50 to-sky-100/40", ring: "ring-sky-200/70", dot: "bg-sky-400", chip: "bg-sky-500/10 text-sky-600" },
-  { icon: Zap, title: "Instant results", body: "Leads delivered in seconds from our database of millions of verified businesses — no waiting, no browser needed.", grad: "from-orange-50 to-orange-100/40", ring: "ring-orange-200/70", dot: "bg-orange-400", chip: "bg-orange-500/10 text-orange-600" },
+  { icon: Zap, title: "Instant results", body: "Leads delivered in seconds from our database of millions of verified businesses. No waiting, no browser needed.", grad: "from-orange-50 to-orange-100/40", ring: "ring-orange-200/70", dot: "bg-orange-400", chip: "bg-orange-500/10 text-orange-600" },
   { icon: Database, title: "One clean export", body: "Every field deduped and normalised, exported to a tidy CSV that drops straight into your CRM.", grad: "from-rose-50 to-rose-100/40", ring: "ring-rose-200/70", dot: "bg-rose-400", chip: "bg-rose-500/10 text-rose-600" },
 ];
 
@@ -703,6 +703,29 @@ export default function Landing() {
             </span>
           ))}
         </Reveal>
+        
+        {/* Rich features grid with detailed info cards */}
+        <Reveal delay={180} className="mx-auto mt-16 grid max-w-5xl grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {PILLS.map((item) => {
+            const Icon = item.icon;
+            return (
+              <div
+                key={item.label}
+                className="group flex flex-col rounded-2xl border border-border bg-card p-5 transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5"
+              >
+                <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl ${item.tile} transition-transform duration-300 group-hover:scale-110`}>
+                  <Icon className="h-5 w-5" />
+                </div>
+                <h3 className="font-heading text-base font-bold text-foreground">
+                  {item.label}
+                </h3>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  {item.desc}
+                </p>
+              </div>
+            );
+          })}
+        </Reveal>
       </section>
 
       {/* ---- smarter research: two widget cards ---- */}
@@ -777,7 +800,7 @@ export default function Landing() {
           </BentoCell></Reveal>
 
           {/* row 2: two wide cells */}
-          <Reveal delay={120} className="lg:col-span-2"><BentoCell icon={Zap} tile="bg-cyan-500/10 text-cyan-600" title="Instant delivery" body="Leads arrive in seconds from our pre-built database — no scraping delays, no browser needed.">
+          <Reveal delay={120} className="lg:col-span-2"><BentoCell icon={Zap} tile="bg-cyan-500/10 text-cyan-600" title="Instant delivery" body="Leads arrive in seconds from our pre-built database. No scraping delays, no browser needed.">
             <div className="flex items-center justify-between rounded-xl border border-border bg-background px-3 py-3">
               <div><div className="text-[11px] text-muted-foreground">Avg. delivery</div><div className="font-heading text-lg font-bold text-foreground">&lt; 5s</div></div>
               <Sparkline />
@@ -871,15 +894,6 @@ export default function Landing() {
         <Reveal><SectionHead icon={Zap} eyebrow="Pricing" title="Simple plans for every stage"
           sub="Choose a plan that fits your needs, budget and growth." className="mb-10" /></Reveal>
         <div className="rounded-[2rem] border border-border bg-muted/30 p-5 sm:p-8">
-          {/* decorative period toggle: monthly only for now */}
-          <div className="mb-8 flex justify-center">
-            <div className="inline-flex items-center gap-1 rounded-full border border-border bg-card p-1 text-sm shadow-sm">
-              <span className="rounded-full bg-foreground px-4 py-1.5 font-semibold text-background">Monthly</span>
-              <span className="flex cursor-not-allowed items-center gap-1.5 rounded-full px-4 py-1.5 font-medium text-muted-foreground/60">
-                Yearly <span className="rounded-full bg-[#a2e435]/30 px-2 py-0.5 text-[10px] font-semibold text-[#3a6b00]">Save 30%</span>
-              </span>
-            </div>
-          </div>
           <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-4">
             {PLANS.map((plan, i) => (
               <Reveal key={plan.id} delay={i * 80}><PriceCard plan={plan} /></Reveal>
@@ -936,9 +950,10 @@ export default function Landing() {
             <div>
               <div className="mb-4 text-sm font-semibold text-foreground">Social</div>
               <ul className="space-y-2.5 text-sm text-muted-foreground">
-                <li><a href="#" className="transition-colors hover:text-foreground">X (Twitter)</a></li>
+                <li><a href="https://x.com/leadsfunda" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-foreground">X (Twitter)</a></li>
+                <li><a href="https://instagram.com/leadsfunda.com" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-foreground">Instagram</a></li>
+                <li><a href="https://facebook.com/leadsfunda" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-foreground">Facebook</a></li>
                 <li><a href="#" className="transition-colors hover:text-foreground">LinkedIn</a></li>
-                <li><a href="#" className="transition-colors hover:text-foreground">YouTube</a></li>
               </ul>
             </div>
           </div>
