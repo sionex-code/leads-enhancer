@@ -646,6 +646,30 @@ async function listLists(userId) {
   return rows;
 }
 
+async function deleteList(userId, listId) {
+  await q(`DELETE FROM list_members WHERE list_id = $1`, [Number(listId)]);
+  const res = await q(`DELETE FROM lists WHERE id = $1 AND user_id = $2`, [Number(listId), userId]);
+  return res.rowCount > 0;
+}
+
+async function renameList(userId, listId, newName) {
+  const clean = String(newName || "").trim().slice(0, 80);
+  if (!clean) throw new Error("List name is required");
+  const { rows: existing } = await q(
+    `SELECT id FROM lists WHERE user_id = $1 AND lower(name) = lower($2) AND id != $3`,
+    [userId, clean, Number(listId)]
+  );
+  if (existing.length > 0) {
+    throw new Error("A list with this name already exists");
+  }
+  const res = await q(
+    `UPDATE lists SET name = $1 WHERE id = $2 AND user_id = $3 RETURNING id, name, created_at`,
+    [clean, Number(listId), userId]
+  );
+  return res.rows[0] || null;
+}
+
+
 // Create (or return existing, case-insensitive) named list for this user.
 async function createList(userId, name) {
   const clean = String(name || "").trim().slice(0, 80);
@@ -1030,4 +1054,6 @@ module.exports = {
   getLeadListIds,
   setLeadLists,
   addLeadsToList,
+  deleteList,
+  renameList,
 };

@@ -32,12 +32,12 @@ const SheetContent = React.forwardRef(({ className, children, side = "right", sh
   const { onOpenChange } = React.useContext(SheetCtx);
   return (
     <div className="lf fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm animate-in fade-in-0" onClick={() => onOpenChange?.(false)} />
+      <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm animate-in fade-in-0" onClick={() => onOpenChange?.(false)} />
       <div
         ref={ref}
         role="dialog"
         aria-modal="true"
-        className={cn("absolute z-10 flex flex-col overflow-y-auto bg-card text-card-foreground border-border shadow-2xl", sideClass[side], className)}
+        className={cn("fixed z-50 flex flex-col overflow-y-auto bg-card text-card-foreground border-border shadow-2xl transition ease-in-out duration-300", sideClass[side], className)}
         {...props}
       >
         {showClose && (

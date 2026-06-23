@@ -80,27 +80,33 @@ export default function ListsDialog({ lead, ids, lists, onClose, onSavedLead, on
           <DialogTitle>{bulk ? `Add ${ids.length} lead${ids.length === 1 ? "" : "s"} to lists` : "Lists"}</DialogTitle>
           <DialogDescription>{bulk ? "Pick the list(s) to add the selected leads to." : "Choose which lists this lead belongs to."}</DialogDescription>
         </DialogHeader>
-        <div className="max-h-[40vh] space-y-1.5 overflow-auto py-1">
-          {allLists.length === 0 && <p className="text-sm text-muted-foreground">No lists yet — create one below.</p>}
-          {allLists.map((l) => (
-            <label key={l.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-accent">
-              <input type="checkbox" checked={checked.has(l.id)} onChange={() => toggle(l.id)} className="accent-[hsl(var(--primary))]" />
-              <span className="flex-1">{l.name}</span>
-              <span className="text-xs text-muted-foreground">{l.count}</span>
-            </label>
-          ))}
+
+        <div className="flex flex-col gap-4 p-5">
+          <div className="max-h-[30vh] space-y-1.5 overflow-y-auto pr-1">
+            {allLists.length === 0 && <p className="text-sm text-muted-foreground">No lists yet — create one below.</p>}
+            {allLists.map((l) => (
+              <label key={l.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent">
+                <input type="checkbox" checked={checked.has(l.id)} onChange={() => toggle(l.id)} className="accent-[hsl(var(--primary))]" />
+                <span className="flex-1 truncate">{l.name}</span>
+                <span className="text-xs text-muted-foreground">{l.count}</span>
+              </label>
+            ))}
+          </div>
+
+          <div className="flex gap-2">
+            <Input placeholder="New list name…" value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createList(); } }} />
+            <Button variant="outline" onClick={createList} disabled={!newName.trim()}>Create</Button>
+          </div>
+
+          {error && <div className="text-sm text-red-600">{error}</div>}
         </div>
-        <div className="flex gap-2">
-          <Input placeholder="New list name…" value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createList(); } }} />
-          <Button variant="outline" onClick={createList} disabled={!newName.trim()}>Create</Button>
-        </div>
-        {error && <div className="text-sm text-red-600">{error}</div>}
-        <div className="mt-1 flex justify-end gap-2">
+
+        <DialogFooter>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <Button onClick={save} disabled={saving || (bulk && checked.size === 0)}>
             {saving ? <Loader2 size={15} className="animate-spin" /> : null} {bulk ? "Add to list" : "Save"}
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

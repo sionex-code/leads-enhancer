@@ -127,16 +127,18 @@ export default function AppShell({ active, title, subtitle, actions, sidebarExtr
       >
         <div className={cn("flex h-16 items-center border-b border-border/60", collapsed ? "justify-center gap-1 px-2" : "justify-between px-4")}>
           <Brand collapsed={collapsed} />
-          <button
-            onClick={toggleCollapsed}
-            className={cn(
-              "inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
-              collapsed && "mt-0"
-            )}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-          </button>
+          {!collapsed && (
+            <button
+              onClick={toggleCollapsed}
+              className={cn(
+                "inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+                collapsed && "mt-0"
+              )}
+              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            </button>
+          )}
         </div>
 
         <div className={cn("px-3 py-4", collapsed && "px-2")}>
@@ -157,7 +159,7 @@ export default function AppShell({ active, title, subtitle, actions, sidebarExtr
       {/* Mobile drawer */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="p-0">
-          <div className="flex h-16 items-center border-b border-border/60 px-4">
+          <div className="flex h-16 items-center justify-center border-b border-border/60 px-4">
             <Brand collapsed={false} />
           </div>
           <div className="thin-scroll flex-1 overflow-y-auto px-3 py-4">
