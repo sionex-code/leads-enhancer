@@ -72,7 +72,7 @@ const DISCOVER = [
 ];
 
 const STATS = [
-  { v: "2.4M+", l: "Leads scraped" },
+  { v: "40M", l: "Leads scraped" },
   { v: "190+", l: "Niches covered" },
   { v: "9", l: "Socials per lead" },
   { v: "< 5s", l: "Average delivery" },
@@ -228,7 +228,7 @@ function FloatCard({ className = "", delay = 0, children }) {
   return (
     <div
       style={{ animationDelay: `${delay}ms` }}
-      className={`animate-float absolute z-20 hidden rounded-2xl border border-border bg-card/95 p-4 shadow-2xl shadow-black/10 backdrop-blur-md lg:block ${className}`}
+      className={`absolute z-20 hidden rounded-2xl border border-border bg-card/95 p-4 shadow-2xl shadow-black/10 backdrop-blur-md lg:block ${className}`}
     >
       {children}
     </div>
@@ -692,7 +692,7 @@ export default function Landing() {
       <section id="about" className="container py-24">
         <Reveal className="mx-auto max-w-3xl text-center">
           <Eyebrow icon={Users}>Why LeadsFunda</Eyebrow>
-          <p className="font-heading mx-auto mt-6 max-w-2xl text-2xl font-bold leading-snug tracking-tight sm:text-[2rem]">
+          <p className="font-heading mx-auto mt-6 max-w-2xl text-lg font-bold leading-snug tracking-tight sm:text-xl">
             Everything you need to find local businesses, reach the decision-maker and know exactly who needs your help, in one tab.
           </p>
         </Reveal>
