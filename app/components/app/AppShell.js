@@ -37,9 +37,9 @@ const PROJECT_NAV = [
   { key: "lists", label: "Lists", href: "/lists", icon: List },
 ];
 
-function Brand({ collapsed }) {
+function Brand({ collapsed, onClick }) {
   return (
-    <Link href="/dashboard" title="Find leads" className="flex items-center">
+    <Link href="/dashboard" title="Find leads" className="flex items-center" onClick={onClick}>
       {collapsed ? (
         <Image src="/brand/leadsfunda-icon.svg" alt="LeadsFunda" width={36} height={36} priority />
       ) : (
@@ -126,7 +126,15 @@ export default function AppShell({ active, title, subtitle, actions, sidebarExtr
         )}
       >
         <div className={cn("flex h-16 items-center border-b border-border/60", collapsed ? "justify-center gap-1 px-2" : "justify-between px-4")}>
-          <Brand collapsed={collapsed} />
+          <Brand
+            collapsed={collapsed}
+            onClick={(e) => {
+              if (collapsed) {
+                e.preventDefault();
+                toggleCollapsed();
+              }
+            }}
+          />
           {!collapsed && (
             <button
               onClick={toggleCollapsed}
