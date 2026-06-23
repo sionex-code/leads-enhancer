@@ -17,7 +17,7 @@ import {
   Zap,
   Sparkles,
   Building2,
-  Cloud,
+
   ShieldCheck,
   Gauge,
   Filter,
@@ -67,7 +67,7 @@ const DISCOVER = [
   { icon: Filter, title: "Smart filters", body: "Slice any niche by rating, reviews and website status so you only work the leads worth your time.", grad: "from-emerald-50 to-emerald-100/40", ring: "ring-emerald-200/70", dot: "bg-emerald-400", chip: "bg-emerald-500/10 text-emerald-600" },
   { icon: Mail, title: "Contact enrichment", body: "Emails, socials and WhatsApp pulled from each business's own site, so your list is sendable on arrival.", grad: "from-violet-50 to-violet-100/40", ring: "ring-violet-200/70", dot: "bg-violet-400", chip: "bg-violet-500/10 text-violet-600" },
   { icon: Gauge, title: "Website health", body: "Real-Chrome audits flag broken, slow or missing sites so the warmest pitches rise to the top.", grad: "from-sky-50 to-sky-100/40", ring: "ring-sky-200/70", dot: "bg-sky-400", chip: "bg-sky-500/10 text-sky-600" },
-  { icon: Cloud, title: "Cloud jobs", body: "Six jobs run in parallel on our servers. Start a scrape, close the laptop, come back to a finished list.", grad: "from-orange-50 to-orange-100/40", ring: "ring-orange-200/70", dot: "bg-orange-400", chip: "bg-orange-500/10 text-orange-600" },
+  { icon: Zap, title: "Instant results", body: "Leads delivered in seconds from our database of millions of verified businesses — no waiting, no browser needed.", grad: "from-orange-50 to-orange-100/40", ring: "ring-orange-200/70", dot: "bg-orange-400", chip: "bg-orange-500/10 text-orange-600" },
   { icon: Database, title: "One clean export", body: "Every field deduped and normalised, exported to a tidy CSV that drops straight into your CRM.", grad: "from-rose-50 to-rose-100/40", ring: "ring-rose-200/70", dot: "bg-rose-400", chip: "bg-rose-500/10 text-rose-600" },
 ];
 
@@ -75,7 +75,7 @@ const STATS = [
   { v: "2.4M+", l: "Leads scraped" },
   { v: "190+", l: "Niches covered" },
   { v: "9", l: "Socials per lead" },
-  { v: "6", l: "Jobs run in parallel" },
+  { v: "< 5s", l: "Average delivery" },
 ];
 
 const STEPS = [
@@ -777,9 +777,9 @@ export default function Landing() {
           </BentoCell></Reveal>
 
           {/* row 2: two wide cells */}
-          <Reveal delay={120} className="lg:col-span-2"><BentoCell icon={Cloud} tile="bg-cyan-500/10 text-cyan-600" title="Runs in the cloud" body="Six jobs run in parallel on our servers, so close the tab and we'll keep going.">
+          <Reveal delay={120} className="lg:col-span-2"><BentoCell icon={Zap} tile="bg-cyan-500/10 text-cyan-600" title="Instant delivery" body="Leads arrive in seconds from our pre-built database — no scraping delays, no browser needed.">
             <div className="flex items-center justify-between rounded-xl border border-border bg-background px-3 py-3">
-              <div><div className="text-[11px] text-muted-foreground">Throughput</div><div className="font-heading text-lg font-bold text-foreground">+20%</div></div>
+              <div><div className="text-[11px] text-muted-foreground">Avg. delivery</div><div className="font-heading text-lg font-bold text-foreground">< 5s</div></div>
               <Sparkline />
             </div>
           </BentoCell></Reveal>
