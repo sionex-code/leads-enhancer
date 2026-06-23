@@ -47,7 +47,7 @@ import { Select } from "./components/ui/select";
 import { Progress } from "./components/ui/progress";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "./components/ui/table";
 import { InfoPopover } from "./components/ui/info-popover";
-import { cn, waMeLink, waState } from "./lib/utils";
+import { cn, waMeLink, waState, prettyEnrichStatus } from "./lib/utils";
 import { Socials, WaIcon, WaPhone } from "./components/SocialIcons";
 
 const LeadsMap = dynamic(() => import("./components/LeadsMap"), { ssr: false });
@@ -64,6 +64,20 @@ const FIND_TOUR = [
   { key: "find-radius", title: "Search radius", body: "Widen or tighten the search area around the center. \"All cities\" makes it country-wide." },
   { key: "find-map", title: "Refine the center", body: "Drag the pin to move the exact search center. The circle shows your radius." },
   { key: "find-submit", title: "Find leads", body: "Hit Find leads and we'll pull matching businesses straight into your project." },
+];
+
+// Walkthrough for the projects workspace (shown after leads are found). Explains
+// the outreach workflow for first-timers: enrich, WhatsApp, page-speed audits,
+// reports, plus where saved leads and lists live. Auto-opens once per browser
+// (tourKey "workspace") and replays from the topbar "Tour" button.
+const WORKSPACE_TOUR = [
+  { key: "", title: "Your leads workspace", body: "You found leads — here's how to enrich them, spot the weak websites, and turn them into outreach." },
+  { key: "ws-enrich", title: "Enrich", body: "Grab each lead's email address and social profiles automatically by crawling their website. This button does it for every captured lead at once." },
+  { key: "ws-whatsapp", title: "Check WhatsApp", body: "See which leads' phone numbers are active on WhatsApp, so you know who you can message directly." },
+  { key: "ws-stages", title: "Track progress", body: "Find, Enrich and WhatsApp each show their live status here as they run." },
+  { key: "ws-leads", title: "Per-lead actions", body: "Every row has quick actions: grab email & socials, check WhatsApp, run a website page-speed audit (desktop + mobile Performance / SEO scores), and generate a full website report. Tick the checkboxes to audit or report many leads at once." },
+  { key: "nav-leads", title: "All your leads", body: "Every lead you capture across projects is saved here under Leads." },
+  { key: "nav-lists", title: "Build lists", body: "Group leads into Lists to organize your outreach campaigns." },
 ];
 
 const blankForm = {
@@ -172,13 +186,34 @@ function Score({ label, value }) {
 // Per-row actions on the captured-leads table: grab email/socials, check
 // WhatsApp, run a quick audit (Health scores), open the website report, and
 // remove from this list. Matches the Leads-manager row actions for consistency.
+// Build a Google Maps link for a lead: prefer its captured Maps URL, else fall
+// back to a Maps search by business name + address so every row is clickable.
+function leadMapsHref(lead) {
+  if (lead.mapsUrl || lead.maps_url) return lead.mapsUrl || lead.maps_url;
+  const q = [lead.name, lead.address || lead.city || ""].filter(Boolean).join(" ").trim();
+  return q ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}` : "";
+}
+
 function CapturedActions({ lead, busy = {}, onEnrich, onWhatsapp, onAudit, onReport, onRemove }) {
   const waLink = waMeLink(lead);
+  const mapsHref = leadMapsHref(lead);
   // Enriched = the website crawl has run (email/socials found, or it reported a
   // status like "no email"). Show a green check so a finished row reads as done.
   const enriched = !!(lead.email || lead.enrichStatus || lead.enrich_status);
   return (
     <>
+      {mapsHref && (
+        <a
+          href={mapsHref}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          title="Open in Google Maps"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
+        >
+          <MapPin size={14} />
+        </a>
+      )}
       <Button variant="ghost" size="icon" className={cn("h-8 w-8", enriched && "text-emerald-600")} title={enriched ? "Enriched — re-grab email + socials" : "Grab email + socials"} disabled={!lead.website || busy.enrich} onClick={() => onEnrich(lead)}>
         {busy.enrich ? <Loader2 size={14} className="animate-spin" /> : enriched ? <MailCheck size={14} /> : <Mail size={14} />}
       </Button>
@@ -394,7 +429,7 @@ function DailyPill({ icon: Icon, metric, noun, resetAt, tz }) {
         exhausted ? "border-red-500/40 bg-red-500/10 text-red-600" : "border-border bg-card/60 text-foreground"
       )}
     >
-      <Icon className="h-3.5 w-3.5" /> {remaining.toLocaleString()}/{metric.limit.toLocaleString()} {noun} today
+      <Icon className="h-3.5 w-3.5" /> {exhausted ? `No ${noun} left` : `${remaining.toLocaleString()} ${noun} left`}
     </span>
   );
 }
@@ -581,7 +616,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   const citySelectVal = allCities ? "__all__" : cityObj?.id ?? cityObj?.name ?? "";
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:py-16">
+    <div className="animate-page-in motion-reduce:animate-none mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:py-16">
       <div className="mb-8 flex items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <CreditsPill />
@@ -1674,6 +1709,8 @@ export default function Dashboard({ view = "" }) {
       subtitle={status?.query || form.query}
       actions={actions}
       sidebarExtra={projectList}
+      tourKey="workspace"
+      tourSteps={WORKSPACE_TOUR}
     >
       {toast && (
         <div className="pointer-events-none fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-border bg-foreground px-4 py-2.5 text-sm font-medium text-background shadow-lg">
@@ -1681,7 +1718,7 @@ export default function Dashboard({ view = "" }) {
         </div>
       )}
       <FindResultAlert result={findResult} onClose={() => setFindResult(null)} />
-      <div className="space-y-5 overflow-x-clip p-4 sm:p-6">
+      <div className="animate-page-in motion-reduce:animate-none space-y-5 overflow-x-clip p-4 sm:p-6">
         {/* Mobile project switcher */}
         {projects.length > 0 && (
           <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:hidden">
@@ -1738,10 +1775,10 @@ export default function Dashboard({ view = "" }) {
               </div>
             )}
             <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("enrich")} title="Grab email + socials for captured leads not enriched yet (realtime, no queue; shared with all users)">
+              <Button variant="secondary" data-tour="ws-enrich" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("enrich")} title="Grab email + socials for captured leads not enriched yet (realtime, no queue; shared with all users)">
                 {bulkBusy === "enrich" ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />} Enrich{realtimeBatch?.kind === "enrich" ? ` (${realtimeBatch.done}/${realtimeBatch.total})` : ""}
               </Button>
-              <Button variant="secondary" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("whatsapp")} title="Check WhatsApp for captured numbers not checked yet (realtime, no queue; cached for all users)">
+              <Button variant="secondary" data-tour="ws-whatsapp" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("whatsapp")} title="Check WhatsApp for captured numbers not checked yet (realtime, no queue; cached for all users)">
                 {bulkBusy === "whatsapp" ? <Loader2 size={16} className="animate-spin" /> : <MessageCircle size={16} />} WhatsApp{realtimeBatch?.kind === "whatsapp" ? ` (${realtimeBatch.done}/${realtimeBatch.total})` : ""}
               </Button>
               {running ? (
@@ -1802,7 +1839,7 @@ export default function Dashboard({ view = "" }) {
           </div>
         )}
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-3" data-tour="ws-stages">
           <Stage title="Find leads" stage={busy?.includes("scrape") && !stages.scrape ? { status: "starting" } : stages.scrape} />
           <Stage title="Enrich" stage={stages.enrich} />
           <Stage title="WhatsApp" stage={stages.whatsapp} />
@@ -1857,7 +1894,7 @@ export default function Dashboard({ view = "" }) {
           );
         })()}
 
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden" data-tour="ws-leads">
           {!leads.length ? (
             <div className="p-10 text-center text-sm text-muted-foreground">No leads loaded</div>
           ) : (
@@ -1963,7 +2000,7 @@ export default function Dashboard({ view = "" }) {
                           {/* #12 email truncated with tooltip */}
                           {lead.email
                             ? <a className="block max-w-[160px] truncate text-xs text-primary hover:underline" href={`mailto:${lead.email}`} title={lead.email} onClick={(e) => e.stopPropagation()}>{lead.email}</a>
-                            : <span className="text-xs text-muted-foreground">{lead.enrichStatus || "-"}</span>
+                            : <span className="text-xs text-muted-foreground">{prettyEnrichStatus(lead.enrichStatus) || "-"}</span>
                           }
                         </TableCell>
                         {/* #11 Rating column — only meaningful with reviews */}

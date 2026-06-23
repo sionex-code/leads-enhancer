@@ -39,7 +39,7 @@ import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Sheet, SheetContent } from "../components/ui/sheet";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/table";
 import { InfoPopover } from "../components/ui/info-popover";
-import { cn, waMeLink, waState } from "../lib/utils";
+import { cn, waMeLink, waState, prettyEnrichStatus } from "../lib/utils";
 import { Socials, WaIcon, WaPhone } from "../components/SocialIcons";
 
 const LeadsMap = dynamic(() => import("../components/LeadsMap"), { ssr: false });
@@ -1353,7 +1353,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                           {lead.email ? (
                             <a onClick={(e) => e.stopPropagation()} className="block max-w-full truncate text-xs text-primary hover:underline" href={`mailto:${lead.email}`} title={lead.email}>{lead.email}</a>
                           ) : (
-                            <span className="text-xs text-muted-foreground">{lead.enrich_status || "no email"}</span>
+                            <span className="text-xs text-muted-foreground">{prettyEnrichStatus(lead.enrich_status) || "no email"}</span>
                           )}
                           <div className="mt-0.5 flex items-center gap-1.5 text-xs">
                             {lead.phone ? <WaPhone lead={lead} /> : <span>-</span>}

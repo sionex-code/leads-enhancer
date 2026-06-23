@@ -23,6 +23,19 @@ export function waMeLink(lead) {
   return "";
 }
 
+// Human-friendly enrichment status for display. Hides raw network/error codes
+// (e.g. "error: ENOTFOUND") that may still linger in older cached results — to
+// the user, a site we couldn't read simply means no email was found. Returns ""
+// for a lead that was never enriched.
+export function prettyEnrichStatus(status) {
+  const s = String(status || "").trim();
+  if (!s) return "";
+  if (/^error\b/i.test(s) || /ENOTFOUND|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|getaddrinfo|certificate|socket hang up|timeout/i.test(s)) {
+    return "no email found";
+  }
+  return s;
+}
+
 // Normalize a lead's WhatsApp registration result to a badge state, handling
 // both data shapes used across the app:
 //   - DB-backed leads carry the descriptive `whatsapp_status` ("on whatsapp",

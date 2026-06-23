@@ -69,6 +69,9 @@ export default {
         // Seamless vertical auto-scroll for the live mini-UI showcase panels.
         // Lists are duplicated, so -50% loops without a visible jump.
         "scroll-y": { from: { transform: "translateY(0)" }, to: { transform: "translateY(-50%)" } },
+        // Page/route enter transition: subtle fade + slide-up, replayed by app/template.js
+        // on every navigation and on the dashboard's Find-leads view swap.
+        "page-in": { from: { opacity: "0", transform: "translateY(8px)" }, to: { opacity: "1", transform: "translateY(0)" } },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -81,6 +84,7 @@ export default {
         "fade-up": "fade-up 0.7s cubic-bezier(0.16,1,0.3,1) both",
         shine: "shine 3.8s ease-in-out infinite",
         "scroll-y": "scroll-y 16s linear infinite",
+        "page-in": "page-in 0.28s ease-out both",
       },
     },
   },

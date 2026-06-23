@@ -582,11 +582,14 @@ async function enrichSite(website) {
 
   result.email = list[0] || "";
   result.allEmails = list.join(" | ");
+  // A timeout, a blocked request, an unreachable host (ENOTFOUND/ECONNREFUSED), or
+  // simply a site with no address on it all reduce to the same user-facing
+  // outcome: no email. Never surface raw network codes — they read as scary
+  // "errors" to non-engineers. firstError is kept for the debug log only.
+  if (firstError && !list.length) console.log(`  enrich: ${siteHost || website} -> no email (${firstError})`);
   result.enrichStatus = list.length
     ? `ok (${list.length} email${list.length > 1 ? "s" : ""}${viaBrowser ? ", via browser" : ""})`
-    : firstError
-      ? `error: ${firstError}`.slice(0, 90)
-      : "no email found";
+    : "no email found";
   return result;
 }
 
@@ -804,7 +807,9 @@ if (require.main === module)
       try {
         result = await withTimeout(enrichSite(job.website), SITE_TIMEOUT, "site timeout");
       } catch (err) {
-        result = { ...EXTRA_HEADERS.reduce((o, h) => ((o[h] = ""), o), {}), enrichStatus: "error: " + err.message };
+        // Don't leak raw error text (timeouts, ENOTFOUND, …) into the lead's
+        // status — to the user it's simply: no email found.
+        result = { ...EXTRA_HEADERS.reduce((o, h) => ((o[h] = ""), o), {}), enrichStatus: "no email found" };
       }
       state.set(job.key, result);
       fs.appendFileSync(
