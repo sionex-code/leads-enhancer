@@ -546,6 +546,7 @@ function buildLeadWhere(
     search = "",
     hasEmail = "",
     hasPhone = false,
+    hasWhatsapp = "",
     hasWebsite = "",
     minScore = 0,
     project = "",
@@ -578,6 +579,15 @@ function buildLeadWhere(
   if (hasEmail === "no") where.push("(email IS NULL OR email = '')");
   else if (hasEmail === true || hasEmail === "1" || hasEmail === "yes") where.push("email IS NOT NULL AND email != ''");
   if (hasPhone) where.push("phone IS NOT NULL AND phone != ''");
+  const whatsappYes = `(
+    (whatsapp_status IS NOT NULL AND whatsapp_status != '' AND (lower(whatsapp_status) = 'yes' OR lower(whatsapp_status) LIKE 'on whatsapp%'))
+    OR (whatsapp_id IS NOT NULL AND whatsapp_id != '')
+    OR whatsapp ILIKE '%wa.me%'
+    OR whatsapp ILIKE '%whatsapp%'
+  )`;
+  const whatsappNo = `(whatsapp_status IS NOT NULL AND whatsapp_status != '' AND (lower(whatsapp_status) = 'no' OR lower(whatsapp_status) LIKE 'not on whatsapp%'))`;
+  if (hasWhatsapp === "yes" || hasWhatsapp === true || hasWhatsapp === "1") where.push(whatsappYes);
+  if (hasWhatsapp === "no") where.push(whatsappNo);
   if (hasWebsite === "yes") where.push("website IS NOT NULL AND website != ''");
   if (hasWebsite === "no") where.push("(website IS NULL OR website = '')");
   // Website HTTP status (populated by the "Check status" scan).
@@ -585,9 +595,23 @@ function buildLeadWhere(
   else if (httpStatus === "redirect") where.push("http_status BETWEEN 300 AND 399");
   else if (httpStatus === "broken") where.push("http_status >= 400");
   else if (httpStatus === "unreachable") where.push("http_checked_at IS NOT NULL AND http_status IS NULL");
-  if (project) where.push(`lower(project) = lower(${add(project)})`);
-  if (country) where.push(`lower(country) = lower(${add(country)})`);
-  if (city) where.push(`lower(city) = lower(${add(city)})`);
+  if (project) where.push(`lower(trim(project)) = lower(trim(${add(project)}))`);
+  if (country) {
+    const p = add(country);
+    where.push(`(
+      lower(trim(country)) = lower(trim(${p}))
+      OR lower(trim(country)) LIKE '%' || lower(trim(${p})) || '%'
+      OR lower(trim(${p})) LIKE '%' || lower(trim(country)) || '%'
+    )`);
+  }
+  if (city) {
+    const p = add(city);
+    where.push(`(
+      lower(trim(city)) = lower(trim(${p}))
+      OR lower(trim(city)) LIKE '%' || lower(trim(${p})) || '%'
+      OR lower(trim(${p})) LIKE '%' || lower(trim(city)) || '%'
+    )`);
+  }
   if (minScore > 0) {
     const p = add(Number(minScore));
     where.push(`(COALESCE(desktop_performance,0) >= ${p} OR COALESCE(mobile_performance,0) >= ${p})`);
@@ -874,7 +898,12 @@ async function listCities(userId, country = "") {
   if (country) {
     const { rows } = await q(
       `SELECT city AS name, COUNT(*)::int AS count FROM leads
-        WHERE user_id = $1 AND city IS NOT NULL AND city != '' AND lower(country) = lower($2)
+        WHERE user_id = $1 AND city IS NOT NULL AND city != ''
+          AND (
+            lower(trim(country)) = lower(trim($2))
+            OR lower(trim(country)) LIKE '%' || lower(trim($2)) || '%'
+            OR lower(trim($2)) LIKE '%' || lower(trim(country)) || '%'
+          )
         GROUP BY city ORDER BY count DESC, city`,
       [userId, country]
     );
@@ -968,6 +997,7 @@ async function statsLeads(userId) {
     `SELECT
        COUNT(*)::int AS total,
        COUNT(*) FILTER (WHERE email IS NOT NULL AND email != '')::int AS "withEmail",
+       COUNT(*) FILTER (WHERE (whatsapp_status IS NOT NULL AND whatsapp_status != '' AND (lower(whatsapp_status) = 'yes' OR lower(whatsapp_status) LIKE 'on whatsapp%')) OR (whatsapp_id IS NOT NULL AND whatsapp_id != '') OR whatsapp ILIKE '%wa.me%' OR whatsapp ILIKE '%whatsapp%')::int AS "withWhatsapp",
        COUNT(*) FILTER (WHERE website IS NOT NULL AND website != '')::int AS "withWebsite",
        COUNT(*) FILTER (WHERE desktop_performance IS NOT NULL OR mobile_performance IS NOT NULL)::int AS audited,
        COUNT(DISTINCT project) FILTER (WHERE project != '')::int AS projects,

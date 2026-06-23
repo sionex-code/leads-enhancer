@@ -19,6 +19,7 @@ export async function GET(request) {
   const csv = await db.exportCsv(userId, {
     search: searchParams.get("search") || "",
     hasEmail: searchParams.get("hasEmail") || "",
+    hasWhatsapp: searchParams.get("hasWhatsapp") || "",
     hasWebsite: searchParams.get("hasWebsite") || "",
     httpStatus: searchParams.get("httpStatus") || "",
     minScore: Number(searchParams.get("minScore") || 0),

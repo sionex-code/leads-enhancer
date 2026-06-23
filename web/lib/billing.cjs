@@ -135,10 +135,18 @@ async function ensureCredits(userId) {
           [ts, userId]
         )
       : await pool().query(
-          `UPDATE memberships SET credits = credits + $1, credits_renewed_at = $2, updated_at = $2
+          `UPDATE memberships SET credits = LEAST($1, GREATEST(0, credits + $1)), credits_renewed_at = $2, updated_at = $2
              WHERE user_id = $3 RETURNING *`,
           [grant, ts, userId]
-        );
+    );
+    m = upd.rows[0] || m;
+  }
+  const cap = effectiveMonthly(m, free);
+  if (cap != null && (m.credits || 0) > cap) {
+    const upd = await pool().query(
+      `UPDATE memberships SET credits = $1, updated_at = $2 WHERE user_id = $3 RETURNING *`,
+      [cap, now(), userId]
+    );
     m = upd.rows[0] || m;
   }
   return m;
@@ -192,11 +200,18 @@ async function consumeCredits(userId, n, meta = {}) {
 async function addCredits(userId, n, meta = {}) {
   n = Math.floor(n || 0);
   if (!n) return getCredits(userId);
-  await ensureCredits(userId);
-  const { rows } = await pool().query(
-    `UPDATE memberships SET credits = GREATEST(0, credits + $1), updated_at = $2 WHERE user_id = $3 RETURNING credits`,
-    [n, now(), userId]
-  );
+  const m = await ensureCredits(userId);
+  const free = await getFreeMonthlyConfig();
+  const cap = effectiveMonthly(m, free);
+  const { rows } = n > 0 && cap != null
+    ? await pool().query(
+        `UPDATE memberships SET credits = LEAST($1, GREATEST(0, credits + $2)), updated_at = $3 WHERE user_id = $4 RETURNING credits`,
+        [cap, n, now(), userId]
+      )
+    : await pool().query(
+        `UPDATE memberships SET credits = GREATEST(0, credits + $1), updated_at = $2 WHERE user_id = $3 RETURNING credits`,
+        [n, now(), userId]
+      );
   const credits = rows[0] ? rows[0].credits : 0;
   await recordCreditTxn(userId, { delta: n, reason: meta.reason || (n > 0 ? "topup" : "adjust"), count: meta.count, project: meta.project, balanceAfter: credits });
   return credits;
@@ -217,8 +232,11 @@ async function listCreditTransactions(userId, { limit = 20, offset = 0 } = {}) {
 
 // Set an absolute credit balance (admin).
 async function setUserCredits(userId, credits) {
-  const value = Math.max(0, Math.floor(credits || 0));
-  await ensureCredits(userId);
+  const m = await ensureCredits(userId);
+  const free = await getFreeMonthlyConfig();
+  const cap = effectiveMonthly(m, free);
+  const requested = Math.max(0, Math.floor(credits || 0));
+  const value = cap == null ? requested : Math.min(requested, cap);
   await pool().query(`UPDATE memberships SET credits = $1, updated_at = $2 WHERE user_id = $3`, [value, now(), userId]);
   return value;
 }

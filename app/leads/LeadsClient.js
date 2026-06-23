@@ -35,7 +35,6 @@ import { Card, CardContent } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Select } from "../components/ui/select";
 import { Textarea } from "../components/ui/textarea";
-import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Sheet, SheetContent } from "../components/ui/sheet";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/table";
 import { InfoPopover } from "../components/ui/info-popover";
@@ -76,7 +75,7 @@ function showRating(lead) {
 // Guided tour for the Leads page. Targets are data-tour attributes on-screen, so
 // it works on mobile. Passed to AppShell as tourKey="leads".
 const LEADS_TOUR = [
-  { key: "leads-tabs", title: "Switch views", body: "Jump between Needs action, Favorites, your custom lists, Email ready, Sent and Complete." },
+  { key: "leads-tabs", title: "Lead views", body: "Use the view dropdown to jump between favorites, lists, email-ready leads, and outreach status." },
   { key: "leads-search", title: "Search your leads", body: "Search across name, domain, phone, email, category and notes at once." },
   { key: "leads-filters", title: "Narrow it down", body: "Filter by project, country, city, whether they have an email or website, and site performance." },
   { key: "leads-listfilter", title: "Saved lists", body: "Filter to one of your saved lists, then work just those leads." },
@@ -85,7 +84,7 @@ const LEADS_TOUR = [
 ];
 
 const WORKFLOWS = [
-  // "All leads" tab intentionally hidden for the SaaS launch.
+  { key: "", label: "All leads" },
   { key: "needs-action", label: "Needs action" },
   { key: "watchlist", label: "Favorites" },
   { key: "contacts", label: "Custom list" },
@@ -202,7 +201,7 @@ function EmailBadge({ status }) {
 // Colorful social chips + WhatsApp badge/phone are shared with the dashboard via
 // ./../components/SocialIcons (Socials, WaIcon, WaPhone).
 
-function QuickLeadActions({ lead, onPatch, onLists, compact = false }) {
+function QuickLeadActions({ lead, onPatch, onLists }) {
   const busy = false;
   const iconSize = 15;
   return (
@@ -213,60 +212,33 @@ function QuickLeadActions({ lead, onPatch, onLists, compact = false }) {
       <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.list_count > 0 && "text-primary")} disabled={busy} onClick={() => onLists && onLists(lead)} title={lead.list_count > 0 ? `In ${lead.list_count} list${lead.list_count === 1 ? "" : "s"} — edit` : "Add to a list"}>
         <ListPlus size={iconSize} />
       </Button>
-      <Button variant="ghost" size="icon" className="h-8 w-8" disabled={busy} onClick={() => onPatch(lead.id, { email_status: lead.email_status === "send" ? "unset" : "send", contact_list: true })} title="Toggle send email">
-        <MailCheck size={iconSize} />
-      </Button>
-      <Button variant="ghost" size="icon" className="h-8 w-8" disabled={busy} onClick={() => onPatch(lead.id, { outreach_status: "sent", contact_list: true })} title="Mark message sent">
-        <Send size={iconSize} />
-      </Button>
-      <Button variant="ghost" size="icon" className="h-8 w-8" disabled={busy} onClick={() => onPatch(lead.id, { outreach_status: "complete", contact_list: true })} title="Mark complete">
-        <CheckCircle2 size={iconSize} />
-      </Button>
     </div>
   );
 }
 
-// Inline per-row contact actions: grab email/socials, check status/chatbot/
-// WhatsApp, run a quick audit (Health scores), open the website report, and
-// remove. Remove is context-aware (see removeLead in parent): in a watch/custom-
-// list view it just drops the lead from that view; in the full leads view it
-// deletes permanently. The audit button spins while its job runs; the report
-// button is tinted once a report exists for the domain.
-function RowActions({ lead, busy = {}, onEnrich, onWhatsapp, onAudit, onReport, onRemove, onStatus, onChatbot, removeTitle }) {
+function EmailRevealAction({ lead, busy, onEnrich, className = "" }) {
+  if (lead.email) return null;
+  return (
+    <Button variant="outline" size="sm" className={cn("h-7 px-2 text-xs", className)} title={lead.website ? "Reveal email" : "No website to reveal email"} disabled={!lead.website || busy} onClick={(e) => { e.stopPropagation(); onEnrich(lead); }}>
+      {busy ? <Loader2 size={13} className="animate-spin" /> : <Mail size={13} />}
+      Reveal email
+    </Button>
+  );
+}
+
+function WhatsappCheckAction({ lead, busy, onWhatsapp }) {
   const wa = waState(lead);
-  const waLink = waMeLink(lead);
+  if (!lead.phone || wa) return null;
+  return (
+    <Button variant="ghost" size="icon" className="h-7 w-7" title="Check WhatsApp" disabled={busy} onClick={(e) => { e.stopPropagation(); onWhatsapp(lead); }}>
+      {busy ? <Loader2 size={13} className="animate-spin" /> : <MessageCircle size={13} />}
+    </Button>
+  );
+}
+
+function RowActions({ lead, busy = {}, onRemove, removeTitle }) {
   return (
     <div className="flex flex-wrap items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
-      <Button variant="ghost" size="icon" className="h-8 w-8" title={lead.email ? "Re-grab email + socials" : "Grab email + socials"} disabled={!lead.website || busy.enrich} onClick={() => onEnrich(lead)}>
-        {busy.enrich ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
-      </Button>
-      <Button variant="ghost" size="icon" className="h-8 w-8" title={lead.website ? `Check website status${lead.http_status ? ` (last: ${lead.http_status || "down"})` : ""}` : "No website to check"} disabled={!lead.website || busy.status} onClick={() => onStatus(lead)}>
-        {busy.status ? <Loader2 size={14} className="animate-spin" /> : <Globe2 size={14} />}
-      </Button>
-      <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.chatbot === "yes" && "text-emerald-600")} title={lead.website ? `Scan for chatbot${lead.chatbot ? ` (last: ${lead.chatbot})` : ""}` : "No website to scan"} disabled={!lead.website || busy.chatbot} onClick={() => onChatbot(lead)}>
-        {busy.chatbot ? <Loader2 size={14} className="animate-spin" /> : <Bot size={14} />}
-      </Button>
-      <Button variant="ghost" size="icon" className={cn("h-8 w-8", wa === "yes" && "text-emerald-600", wa === "no" && "text-red-600")} title={lead.phone ? (wa ? `WhatsApp: ${lead.whatsapp_status}` : "Check WhatsApp") : "No phone to check"} disabled={!lead.phone || busy.whatsapp} onClick={() => onWhatsapp(lead)}>
-        {busy.whatsapp ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />}
-      </Button>
-      {waLink && (
-        <a
-          href={waLink}
-          target="_blank"
-          rel="noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          title={`Message on WhatsApp (${waLink.replace(/^https?:\/\//, "")})`}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-emerald-600 transition hover:bg-emerald-500/10"
-        >
-          <Send size={14} />
-        </a>
-      )}
-      <Button variant="ghost" size="icon" className="h-8 w-8" title={lead.website ? `Quick audit — desktop + mobile scores (${AUDIT_COST} credits)` : "No website to audit"} disabled={!lead.website || busy.audit} onClick={() => onAudit(lead)}>
-        {busy.audit ? <Loader2 size={14} className="animate-spin" /> : <BarChart3 size={14} />}
-      </Button>
-      <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.has_report && "text-primary")} title={lead.website ? (lead.has_report ? "Report ready — view / regenerate" : "Generate website report") : "No website for a report"} disabled={!lead.website} onClick={() => onReport(lead)}>
-        <FileText size={14} />
-      </Button>
       <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" title={removeTitle} disabled={busy.remove} onClick={() => onRemove(lead)}>
         {busy.remove ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
       </Button>
@@ -283,7 +255,7 @@ function DrawerCard({ title, children }) {
   );
 }
 
-function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot, onCharged }) {
+function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot, onEnrich, onWhatsapp, busy = {}, onCharged }) {
   const [reports, setReports] = useState([]);
   const [job, setJob] = useState(null);
   const [error, setError] = useState("");
@@ -448,9 +420,14 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot, on
                   <Phone size={13} className="text-muted-foreground" />
                   <WaPhone lead={lead} />
                   <WaIcon lead={lead} />
+                  <WhatsappCheckAction lead={lead} busy={busy.whatsapp} onWhatsapp={onWhatsapp} />
                 </div>
               )}
-              {lead.email && <div className="flex items-center gap-2"><Mail size={13} className="text-muted-foreground" /> <a className="text-primary hover:underline" href={`mailto:${lead.email}`}>{lead.email}</a></div>}
+              {lead.email ? (
+                <div className="flex items-center gap-2"><Mail size={13} className="text-muted-foreground" /> <a className="text-primary hover:underline" href={`mailto:${lead.email}`}>{lead.email}</a></div>
+              ) : (
+                <EmailRevealAction lead={lead} busy={busy.enrich} onEnrich={onEnrich} className="mt-1" />
+              )}
               {lead.all_emails && lead.all_emails !== lead.email && <div className="text-xs text-muted-foreground">Also: {lead.all_emails}</div>}
               {lead.address && <div className="flex items-center gap-2"><MapPin size={13} className="text-muted-foreground" /> {lead.address}</div>}
               {lead.website && <div className="flex items-center gap-2"><ExternalLink size={13} className="text-muted-foreground" /> <a className="text-primary hover:underline" href={lead.website} target="_blank" rel="noreferrer">{lead.domain || lead.website}</a></div>}
@@ -573,6 +550,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
   const [cities, setCities] = useState([]);
   const [workflow, setWorkflow] = useState(initialWorkflow);
   const [hasEmail, setHasEmail] = useState(""); // "" | "yes" | "no"
+  const [hasWhatsapp, setHasWhatsapp] = useState(""); // "" | "yes" | "no"
   const [hasWebsite, setHasWebsite] = useState(""); // "" | "yes" | "no"
   const [httpStatus, setHttpStatus] = useState(""); // "" | "200" | "redirect" | "broken" | "unreachable"
   const [minScore, setMinScore] = useState(0);
@@ -948,12 +926,13 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
     if (city) params.set("city", city);
     if (workflow) params.set("workflow", workflow);
     if (hasEmail) params.set("hasEmail", hasEmail);
+    if (hasWhatsapp) params.set("hasWhatsapp", hasWhatsapp);
     if (hasWebsite) params.set("hasWebsite", hasWebsite);
     if (httpStatus) params.set("httpStatus", httpStatus);
     if (minScore) params.set("minScore", String(minScore));
     if (listFilter) params.set("list", listFilter);
     return params;
-  }, [search, project, country, city, workflow, hasEmail, hasWebsite, httpStatus, minScore, listFilter]);
+  }, [search, project, country, city, workflow, hasEmail, hasWhatsapp, hasWebsite, httpStatus, minScore, listFilter]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -984,7 +963,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
 
   useEffect(() => {
     setPage(0);
-  }, [city, country, hasEmail, hasWebsite, httpStatus, initialWorkflow, initialList, listFilter, minScore, project, search, workflow]);
+  }, [city, country, hasEmail, hasWhatsapp, hasWebsite, httpStatus, initialWorkflow, initialList, listFilter, minScore, project, search, workflow]);
 
   useEffect(() => {
     setWorkflow(initialWorkflow);
@@ -1032,11 +1011,12 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
 
   // A clear, non-overlapping overview. Each tile applies a single concrete filter
   // (the old "Email ready / Queued / Sent" mix was confusing).
-  const clearFilters = () => { setWorkflow(""); setHasEmail(""); setHasWebsite(""); setHttpStatus(""); };
+  const clearFilters = () => { setWorkflow(""); setHasEmail(""); setHasWhatsapp(""); setHasWebsite(""); setHttpStatus(""); };
   const statTiles = [
-    { label: "Total", value: stats?.total || 0, onClick: clearFilters, active: !workflow && !hasEmail && !hasWebsite && !httpStatus },
-    { label: "With email", value: stats?.withEmail || 0, onClick: () => { setWorkflow(""); setHasWebsite(""); setHasEmail("yes"); }, active: hasEmail === "yes" },
-    { label: "With website", value: stats?.withWebsite || 0, onClick: () => { setWorkflow(""); setHasEmail(""); setHasWebsite("yes"); }, active: hasWebsite === "yes" },
+    { label: "Total", value: stats?.total || 0, onClick: clearFilters, active: !workflow && !hasEmail && !hasWhatsapp && !hasWebsite && !httpStatus },
+    { label: "With email", value: stats?.withEmail || 0, onClick: () => { setWorkflow(""); setHasWebsite(""); setHasWhatsapp(""); setHasEmail("yes"); }, active: hasEmail === "yes" },
+    { label: "With WhatsApp", value: stats?.withWhatsapp || 0, onClick: () => { setWorkflow(""); setHasEmail(""); setHasWebsite(""); setHasWhatsapp("yes"); }, active: hasWhatsapp === "yes" },
+    { label: "With website", value: stats?.withWebsite || 0, onClick: () => { setWorkflow(""); setHasEmail(""); setHasWhatsapp(""); setHasWebsite("yes"); }, active: hasWebsite === "yes" },
     { label: "Favorites", value: stats?.watchlist || 0, onClick: () => setWorkflow("watchlist"), active: workflow === "watchlist" },
     { label: "In a list", value: stats?.contactList || 0, onClick: () => setWorkflow("contacts"), active: workflow === "contacts" },
     { label: "Contacted", value: stats?.completed || 0, onClick: () => setWorkflow("complete"), active: workflow === "complete" },
@@ -1126,21 +1106,14 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
               <Button disabled={!manualSite.trim() || !!adding} onClick={() => addManualLead("contact_list")}><ListPlus size={15} /> List</Button>
             </div>
 
-            <div data-tour="leads-tabs">
-              <Tabs value={workflow} onValueChange={setWorkflow}>
-                <TabsList className="flex-wrap">
-                  {WORKFLOWS.map((item) => (
-                    <TabsTrigger key={item.key || "all"} value={item.key}>{item.label}</TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
-            </div>
-
             <div className="flex flex-wrap items-center gap-2" data-tour="leads-filters">
               <div className="relative w-full min-w-0 flex-1 sm:w-auto sm:min-w-[220px]" data-tour="leads-search">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input placeholder="Search name, domain, phone, email, category, notes..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
               </div>
+              <Select value={workflow} onChange={(e) => setWorkflow(e.target.value)} className="w-full sm:w-auto sm:min-w-[150px]" title="Lead view" data-tour="leads-tabs">
+                {WORKFLOWS.map((item) => <option key={item.key || "all"} value={item.key}>{item.label}</option>)}
+              </Select>
               <Select value={project} onChange={(e) => setProject(e.target.value)} className="w-full sm:w-auto sm:min-w-[140px]">
                 <option value="">All projects</option>
                 {projects.map((name) => <option key={name} value={name}>{name}</option>)}
@@ -1161,6 +1134,11 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                 <option value="">Any email</option>
                 <option value="yes">Has email</option>
                 <option value="no">No email</option>
+              </Select>
+              <Select value={hasWhatsapp} onChange={(e) => setHasWhatsapp(e.target.value)} className="w-full sm:w-auto sm:min-w-[140px]" title="Filter by WhatsApp">
+                <option value="">Any WhatsApp</option>
+                <option value="yes">Has WhatsApp</option>
+                <option value="no">No WhatsApp</option>
               </Select>
               <Select value={hasWebsite} onChange={(e) => setHasWebsite(e.target.value)} className="w-full sm:w-auto sm:min-w-[120px]" title="Filter by website">
                 <option value="">Any website</option>
@@ -1186,31 +1164,13 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
           </CardContent>
         </Card>
 
-        {/* Bulk action bar — add to a list, audit, report, or delete the selection */}
+        {/* Bulk action bar — keep the leads page focused on list membership and deletion. */}
         {selectedCount > 0 && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-primary/40 bg-primary/5 px-4 py-2.5 text-sm">
             <span className="font-medium">{selectedCount} selected</span>
-            {reportableCount > 0 && (
-              <span className="text-muted-foreground">
-                {reportableCount} with site · audit <strong className="text-foreground">{auditCost}</strong> / chatbot <strong className="text-foreground">{chatbotCost}</strong> / report <strong className="text-foreground">{reportCost}</strong> credits
-                {credits != null && <> · balance {credits}</>}
-              </span>
-            )}
             <div className="ml-auto flex flex-wrap items-center gap-2">
               <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>Clear</Button>
               <Button variant="outline" size="sm" onClick={() => setListDialog({ ids: [...selected] })}><ListPlus size={15} /> Add to list</Button>
-              <Button variant="outline" size="sm" disabled={!!bulkBusy || batchRunning || reportableCount === 0 || notEnoughForAudit} onClick={bulkAudit} title={notEnoughForAudit ? "Not enough credits" : `Audit ${reportableCount} site(s) — ${auditCost} credits`}>
-                {bulkBusy === "audit" ? <Loader2 size={15} className="animate-spin" /> : <BarChart3 size={15} />}
-                Audit {reportableCount}
-              </Button>
-              <Button variant="outline" size="sm" disabled={!!bulkBusy || batchRunning || reportableCount === 0 || notEnoughForChatbot} onClick={bulkChatbot} title={notEnoughForChatbot ? "Not enough credits" : `Scan ${reportableCount} site(s) for chatbots — ${chatbotCost} credits`}>
-                {bulkBusy === "chatbot" ? <Loader2 size={15} className="animate-spin" /> : <Bot size={15} />}
-                Chatbots {reportableCount}
-              </Button>
-              <Button size="sm" disabled={!!bulkBusy || batchRunning || reportableCount === 0 || notEnoughForReport} onClick={bulkReport} title={notEnoughForReport ? "Not enough credits" : `Generate ${reportableCount} report(s) — ${reportCost} credits`}>
-                {bulkBusy === "report" ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
-                Report {reportableCount}
-              </Button>
               <Button variant="destructive" size="sm" disabled={!!bulkBusy} onClick={bulkDelete} title={workflow === "watchlist" || workflow === "contacts" ? "Remove selected from this list" : "Delete selected permanently"}>
                 {bulkBusy === "delete" ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
                 {workflow === "watchlist" || workflow === "contacts" ? "Remove" : "Delete"}
@@ -1257,9 +1217,14 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                     <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
                       {lead.phone && <WaPhone lead={lead} />}
                       <WaIcon lead={lead} />
+                      <WhatsappCheckAction lead={lead} busy={busy[`${lead.id}:whatsapp`]} onWhatsapp={checkWhatsapp} />
                       {lead.domain && <span className="max-w-[120px] truncate text-xs text-muted-foreground" title={lead.domain}>{lead.domain}</span>}
                     </div>
-                    {lead.email && <div className="mt-1 truncate text-sm text-primary" title={lead.email}>{lead.email}</div>}
+                    {lead.email ? (
+                      <div className="mt-1 truncate text-sm text-primary" title={lead.email}>{lead.email}</div>
+                    ) : (
+                      <div className="mt-1"><EmailRevealAction lead={lead} busy={busy[`${lead.id}:enrich`]} onEnrich={enrichOne} /></div>
+                    )}
                     {lead.notes && <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{lead.notes}</div>}
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       <StatusPill lead={lead} />
@@ -1281,14 +1246,8 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                     <div className="mt-1 flex flex-wrap items-center gap-1">
                       <RowActions
                         lead={lead}
-                        busy={{ enrich: busy[`${lead.id}:enrich`], whatsapp: busy[`${lead.id}:whatsapp`], remove: busy[`${lead.id}:remove`], status: busy[`${lead.id}:status`], chatbot: busy[`${lead.id}:chatbot`], audit: busy[`${lead.id}:audit`] }}
-                        onEnrich={enrichOne}
-                        onWhatsapp={checkWhatsapp}
-                        onAudit={auditOne}
-                        onReport={setReportLead}
+                        busy={{ remove: busy[`${lead.id}:remove`] }}
                         onRemove={removeLead}
-                        onStatus={checkStatusOne}
-                        onChatbot={scanChatbotOne}
                         removeTitle={removeTitle}
                       />
                     </div>
@@ -1358,7 +1317,13 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                           <div className="mt-0.5 flex items-center gap-1.5 text-xs">
                             {lead.phone ? <WaPhone lead={lead} /> : <span>-</span>}
                             <WaIcon lead={lead} />
+                            <WhatsappCheckAction lead={lead} busy={busy[`${lead.id}:whatsapp`]} onWhatsapp={checkWhatsapp} />
                           </div>
+                          {!lead.email && (
+                            <div className="mt-1">
+                              <EmailRevealAction lead={lead} busy={busy[`${lead.id}:enrich`]} onEnrich={enrichOne} />
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="text-xs">
                           {showRating(lead) ? (
@@ -1413,13 +1378,8 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                           <QuickLeadActions lead={lead} onPatch={patchLead} onLists={(l) => setListDialog({ lead: l })} compact />
                           <RowActions
                             lead={lead}
-                            busy={{ enrich: busy[`${lead.id}:enrich`], whatsapp: busy[`${lead.id}:whatsapp`], remove: busy[`${lead.id}:remove`], status: busy[`${lead.id}:status`], chatbot: busy[`${lead.id}:chatbot`] }}
-                            onEnrich={enrichOne}
-                            onWhatsapp={checkWhatsapp}
-                            onReport={setReportLead}
+                            busy={{ remove: busy[`${lead.id}:remove`] }}
                             onRemove={removeLead}
-                            onStatus={checkStatusOne}
-                            onChatbot={scanChatbotOne}
                             removeTitle={removeTitle}
                           />
                         </TableCell>
@@ -1459,6 +1419,12 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
           onPatch={patchLead}
           onStatus={checkStatusOne}
           onChatbot={scanChatbotOne}
+          onEnrich={enrichOne}
+          onWhatsapp={checkWhatsapp}
+          busy={{
+            enrich: busy[`${active.id}:enrich`],
+            whatsapp: busy[`${active.id}:whatsapp`],
+          }}
           onCharged={(c) => { if (typeof c === "number") setCredits(c); }}
           onDeleted={(id) => {
             setActive(null);
