@@ -575,9 +575,20 @@ function DiscoverCards() {
       const progress = clamp(-rect.top / total, 0, 1);
       const active = progress * cards.length;
       cards.forEach((el, i) => {
-        const tilt = i % 2 === 0 ? 2.2 : -2.2;
-        const depth = clamp(active - i - 0.6, 0, 3); // how far behind the front
-        el.style.transform = `scale(${1 - depth * 0.05}) rotate(${tilt}deg)`;
+        const stickyTop = 100 + i * 16;
+        const currentTop = el.getBoundingClientRect().top;
+        
+        // Progress of the card scrolling into its sticky position (0 = below viewport, 1 = pinned)
+        const progressToSticky = clamp((window.innerHeight - currentTop) / (window.innerHeight - stickyTop), 0, 1);
+        
+        const finalTilt = i % 2 === 0 ? 2.2 : -2.2;
+        const initialTilt = -finalTilt * 2.5; // opposite tilt direction
+        const tilt = initialTilt + (finalTilt - initialTilt) * progressToSticky;
+        
+        const translateY = (1 - progressToSticky) * 40; // slide up 40px as it enters
+        const depth = clamp(active - i - 0.6, 0, 3); // how far behind the front card
+        
+        el.style.transform = `translateY(${translateY}px) scale(${1 - depth * 0.05}) rotate(${tilt}deg)`;
         el.style.opacity = String(1 - depth * 0.06);
       });
     };
