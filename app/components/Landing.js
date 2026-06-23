@@ -52,8 +52,14 @@ const NAV = [
 
 // Quiet, uniform "About" tag-pills (one subtle style, brand dot only).
 const PILLS = [
-  "Verified emails", "WhatsApp numbers", "Website health", "Owner contacts",
-  "Social profiles", "Ratings & reviews", "Phone numbers", "Clean CSV export",
+  { label: "Verified emails", dot: "bg-violet-400" },
+  { label: "WhatsApp numbers", dot: "bg-emerald-400" },
+  { label: "Website health", dot: "bg-sky-400" },
+  { label: "Owner contacts", dot: "bg-blue-400" },
+  { label: "Social profiles", dot: "bg-rose-400" },
+  { label: "Ratings & reviews", dot: "bg-amber-400" },
+  { label: "Phone numbers", dot: "bg-cyan-400" },
+  { label: "Clean CSV export", dot: "bg-orange-400" },
 ];
 
 // Sticky-left "Discover" pastel card stack.
@@ -692,7 +698,7 @@ export default function Landing() {
         </Reveal>
         <Reveal delay={120} className="mx-auto mt-9 flex max-w-3xl flex-wrap items-center justify-center gap-3">
           {PILLS.map((p) => (
-            <span key={p.label} className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium ${p.c}`}>
+            <span key={p.label} className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground">
               <span className={`h-1.5 w-1.5 rounded-full ${p.dot}`} /> {p.label}
             </span>
           ))}
