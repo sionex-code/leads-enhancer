@@ -593,14 +593,31 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
     const effectiveCity = allCities ? null : cityObj;
     const cleanQuery = query.trim() || buildQuery(service, effectiveCity, country);
     const isCustom = cleanQuery !== buildQuery(service, effectiveCity, country);
+    const isUnknownKeyword = !catalogServices.some(s => 
+      cleanQuery.toLowerCase().includes(s.name.toLowerCase())
+    );
     const cityLabel = allCities ? (country.name || "All cities") : cityObj?.name || "";
-    const name = isCustom ? projectNameFromQuery(cleanQuery) : quickProjectName(service, cityLabel);
+    
+    let name;
+    if (isUnknownKeyword) {
+      const cityPart = allCities ? "" : (cityObj?.name ? `${cityObj.name}, ` : "");
+      const countryPart = country?.name || "";
+      const baseName = `Leads in ${cityPart}${countryPart}`.trim();
+      const id = Date.now().toString(36).slice(-4);
+      name = `${baseName} #${id}`;
+    } else {
+      name = isCustom ? projectNameFromQuery(cleanQuery) : quickProjectName(service, cityLabel);
+    }
+
     onFind({
       name,
       query: cleanQuery,
       cityId: allCities ? null : cityObj?.id || null,
+      cityName: allCities ? "" : cityObj?.name || "",
       countryCode: country.code || "",
+      countryName: country.name || "",
       service,
+      isUnknownKeyword,
       minRating: rating.startsWith("gte:") ? Number(rating.slice(4)) : undefined,
       maxRating: rating.startsWith("lt:") ? Number(rating.slice(3)) : undefined,
       centerLat: allCities ? undefined : center.lat,
@@ -825,6 +842,25 @@ function StatCard({ value, label }) {
 
 export default function Dashboard({ view = "" }) {
   const router = useRouter();
+
+  const getProjectDisplayName = (p) => {
+    if (!p) return "";
+    if (p.isUnknownKeyword) {
+      const cityPart = p.cityName ? `${p.cityName}, ` : "";
+      return `${cityPart}${p.countryName || ""} Leads`;
+    }
+    return p.name;
+  };
+
+  const getProjectDisplayQuery = (p) => {
+    if (!p) return "";
+    if (p.isUnknownKeyword) {
+      const cityPart = p.cityName ? `${p.cityName}, ` : "";
+      return `${cityPart}${p.countryName || ""} Leads`;
+    }
+    return p.query || "";
+  };
+
   // The find-leads home vs. the projects workspace is driven by the URL (?view=projects),
   // so the logo, "New search", and the "Projects" nav item can all navigate to it.
   const simpleMode = view !== "projects";
@@ -1069,8 +1105,11 @@ export default function Dashboard({ view = "" }) {
           name: findParams.name,
           query: findParams.query,
           cityId: findParams.cityId,
+          cityName: findParams.cityName,
           countryCode: findParams.countryCode,
+          countryName: findParams.countryName,
           service: findParams.service,
+          isUnknownKeyword: findParams.isUnknownKeyword,
           minRating: findParams.minRating,
           maxRating: findParams.maxRating,
           centerLat: findParams.centerLat,
@@ -1644,7 +1683,7 @@ export default function Dashboard({ view = "" }) {
             <span className="min-w-0 flex-1">
               <span className="flex items-center gap-1.5 truncate text-sm font-medium">
                 {project.running && <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-emerald-500" title="Running" />}
-                <span className="truncate">{project.name}</span>
+                <span className="truncate">{getProjectDisplayName(project) || project.name}</span>
               </span>
               <span className="text-[11px] text-muted-foreground">
                 <AnimatedNumber value={project.counts?.raw || 0} /> leads · {project.counts?.desktopAudits || 0}/{project.counts?.mobileAudits || 0} audits
@@ -1705,8 +1744,8 @@ export default function Dashboard({ view = "" }) {
   return (
     <AppShell
       active="dashboard"
-      title={status?.name || selectedProject?.name || "Lead Generation"}
-      subtitle={status?.query || form.query}
+      title={getProjectDisplayName(status || selectedProject) || status?.name || selectedProject?.name || "Lead Generation"}
+      subtitle={getProjectDisplayQuery(status || selectedProject) || status?.query || form.query}
       actions={actions}
       sidebarExtra={projectList}
       tourKey="workspace"
@@ -1733,7 +1772,7 @@ export default function Dashboard({ view = "" }) {
               >
                 {p.running && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />}
                 {p.watchlist && <Star size={12} fill="currentColor" />}
-                {p.name}
+                {getProjectDisplayName(p) || p.name}
               </button>
             ))}
           </div>
@@ -1758,7 +1797,7 @@ export default function Dashboard({ view = "" }) {
               </label>
               <label className="space-y-1">
                 <span className="text-xs font-medium text-muted-foreground">Maps query</span>
-                <Input value={form.query} readOnly className="cursor-default bg-muted/40" title={form.query} />
+                <Input value={getProjectDisplayQuery(status) || form.query} readOnly className="cursor-default bg-muted/40" title={getProjectDisplayQuery(status) || form.query} />
               </label>
               <label className="space-y-1">
                 <span className="text-xs font-medium text-muted-foreground">Leads</span>

@@ -123,7 +123,7 @@ export default function AccountWidget({ collapsed = false }) {
               </DropdownMenuItem>
             ))}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => signOut({ callbackUrl: MARKETING_URL || "/" })} className="text-red-600 hover:text-red-700">
+            <DropdownMenuItem onClick={() => signOut({ redirectTo: MARKETING_URL || "/" })} className="text-red-600 hover:text-red-700">
               <LogOut className="h-4 w-4" /> Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>

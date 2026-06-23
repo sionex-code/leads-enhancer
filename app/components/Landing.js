@@ -202,10 +202,10 @@ function Logo({ height = 28, className = "" }) {
     <Image
       src="/brand/leadsfunda-white.svg"
       alt="LeadsFunda"
-      width={Math.round(height * 5.17)}
-      height={height}
+      width={145}
+      height={28}
       priority
-      className={className}
+      className={`h-[20px] w-auto sm:h-[28px] sm:w-auto ${className}`}
     />
   );
 }
@@ -654,7 +654,7 @@ export default function Landing() {
           </span>
           <h1 className="font-heading max-w-4xl text-5xl font-bold leading-[1.03] tracking-tight sm:text-6xl xl:text-[5.25rem]">
             Turn Google Maps into a{" "}
-            <span className="relative whitespace-nowrap text-primary">
+            <span className="relative text-primary sm:whitespace-nowrap">
               pipeline of leads
               <span className="absolute -bottom-1 left-0 h-3 w-full rounded-full bg-[#a2e435]/50" />
             </span>
@@ -711,7 +711,7 @@ export default function Landing() {
           <SectionHead icon={Sparkles} eyebrow="See it work" title="From raw Maps listing to ready-to-pitch lead"
             sub="Let LeadsFunda do the heavy lifting. It gathers every business, then enriches and scores it for you." className="mb-12" />
         </Reveal>
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Reveal className="relative overflow-hidden rounded-3xl border border-border bg-card p-7 shadow-sm">
             <div className="pointer-events-none absolute -left-10 -top-10 h-40 w-40 rounded-full bg-rose-400/10 blur-2xl" />
             <h3 className="font-heading text-xl font-bold">Your pipeline at a glance</h3>
@@ -729,7 +729,7 @@ export default function Landing() {
 
       {/* ---- discover: sticky-left + pastel card stack ---- */}
       <section className="border-y border-border/60 bg-muted/20 py-24">
-        <div className="container grid gap-10 lg:grid-cols-2">
+        <div className="container grid grid-cols-1 gap-10 lg:grid-cols-2">
           <div className="lg:sticky lg:top-28 lg:h-fit lg:self-start">
             <Eyebrow icon={Sparkles}>Features</Eyebrow>
             <h2 className="font-heading mt-4 text-3xl font-bold leading-tight tracking-tight sm:text-[2.6rem]">Discover everything we built with you in mind</h2>
@@ -746,7 +746,7 @@ export default function Landing() {
       <section id="features" className="container py-24">
         <Reveal><SectionHead icon={Sparkles} eyebrow="Features" title="Everything in one tab"
           sub="Scrape, enrich, audit and organize. The whole outreach workflow, with no stitching tools together." className="mb-12" /></Reveal>
-        <div className="grid auto-rows-fr gap-5 lg:grid-cols-6">
+        <div className="grid grid-cols-1 auto-rows-fr gap-5 lg:grid-cols-6">
           {/* row 1: three equal cells */}
           <Reveal className="lg:col-span-2"><BentoCell icon={MapPin} tile="bg-blue-500/10 text-blue-600" title="Scrape Google Maps" body="Name, phone, website, rating, reviews and hours for any niche + city.">
             <div className="space-y-2">
@@ -815,7 +815,7 @@ export default function Landing() {
       <section id="how" className="container py-24">
         <Reveal><SectionHead icon={ListChecks} eyebrow="How to use" title="Designed for simplicity"
           sub="Three steps from a niche to a full, enriched pipeline." className="mb-12" /></Reveal>
-        <div className="grid items-center gap-10 lg:grid-cols-2">
+        <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2">
           <div className="space-y-3">
             {STEPS.map((s, i) => {
               const active = step === i;
@@ -846,7 +846,7 @@ export default function Landing() {
         <div className="container">
           <Reveal><SectionHead icon={Star} eyebrow="Testimonials" title="What our users are saying"
             sub="Real feedback from people who run outreach every day." className="mb-12" /></Reveal>
-          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
             {TESTIMONIALS.map((t, i) => (
               <Reveal key={t.name} delay={(i % 3) * 90}>
                 <div className="h-full rounded-3xl border border-border bg-card p-6 shadow-sm">
@@ -880,7 +880,7 @@ export default function Landing() {
               </span>
             </div>
           </div>
-          <div className="grid items-stretch gap-5 lg:grid-cols-4">
+          <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-4">
             {PLANS.map((plan, i) => (
               <Reveal key={plan.id} delay={i * 80}><PriceCard plan={plan} /></Reveal>
             ))}
@@ -894,7 +894,7 @@ export default function Landing() {
         <div className="container">
           <Reveal><SectionHead icon={MessageCircle} eyebrow="FAQs" title="Explore our FAQs"
             sub="Quick answers to the questions we hear most. Still stuck? Reach out any time." className="mb-14" /></Reveal>
-          <div className="mx-auto grid max-w-5xl gap-x-12 gap-y-10 md:grid-cols-2 lg:grid-cols-3">
+          <div className="mx-auto grid grid-cols-1 max-w-5xl gap-x-12 gap-y-10 md:grid-cols-2 lg:grid-cols-3">
             {FAQ.map((item, i) => (
               <Reveal key={item.q} delay={(i % 3) * 90}>
                 <h3 className="font-heading text-lg font-bold text-foreground">{item.q}</h3>
@@ -921,7 +921,7 @@ export default function Landing() {
       {/* ---- footer (light card, like the template) ---- */}
       <footer className="px-4 pb-6">
         <div className={`container overflow-hidden rounded-[2rem] border border-border bg-card shadow-sm ${HATCH}`}>
-          <div className="grid gap-10 p-10 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-10 p-10 sm:grid-cols-2 lg:grid-cols-4">
             <div className="lg:col-span-2">
               <Logo />
               <p className="mt-4 max-w-xs text-sm text-muted-foreground">Turn Google Maps into a pipeline of enriched, ready-to-pitch leads.</p>

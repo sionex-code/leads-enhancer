@@ -175,7 +175,7 @@ export async function POST(request) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const { name, query, cityId, countryCode, service, minRating, maxRating, centerLat, centerLng, radiusKm } = body || {};
+  const { name, query, cityId, cityName, countryCode, countryName, service, minRating, maxRating, centerLat, centerLng, radiusKm, isUnknownKeyword } = body || {};
 
   if (!name) return Response.json({ error: "Project name is required" }, { status: 400 });
 
@@ -218,6 +218,10 @@ export async function POST(request) {
     query: query || "",
     max: String(max),
     publicId,
+    cityName: cityName || "",
+    countryName: countryName || "",
+    service: service || "",
+    isUnknownKeyword: isUnknownKeyword ? "1" : "",
   });
 
   // Query the warehouse. A warehouse outage must return a clean error, not a 500.
@@ -267,7 +271,7 @@ export async function POST(request) {
   const res = await db.upsertLeads(userId, rows.map(warehouse.toLeadRow));
 
   // Count the leads delivered this find against the daily lead cap (best-effort).
-  await billing.addDailyLeads(userId, rows.length).catch(() => {});
+  await billing.addDailyLeads(userId, res.inserted).catch(() => {});
 
   // Mark project as finished (not running).
   store.writeState(dir, {
