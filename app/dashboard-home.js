@@ -2035,9 +2035,8 @@ export default function Dashboard({ view = "" }) {
                         <input type="checkbox" aria-label={`Select ${lead.name || "lead"}`} checked={selectedLeads.has(key)} onClick={(e) => e.stopPropagation()} onChange={() => toggleLead(key)} className="mt-0.5 accent-[hsl(var(--primary))]" />
                         {/* #3 row index */}
                         <span className="shrink-0 text-[10px] text-muted-foreground">#{index + 1}</span>
-                        {/* #4 truncate long name */}
                         <strong className="line-clamp-1 max-w-[200px] text-sm font-medium" title={lead.name || "Unknown"}>
-                          {lead.mapsUrl ? <a className="text-primary hover:underline" href={lead.mapsUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{lead.name || "Unknown"}</a> : lead.name || "Unknown"}
+                          {leadMapsHref(lead) ? <a className="text-primary hover:underline" href={leadMapsHref(lead)} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{lead.name || "Unknown"}</a> : lead.name || "Unknown"}
                         </strong>
                       </div>
                       <span className="text-xs text-muted-foreground">{lead.category || ""}</span>
@@ -2109,7 +2108,7 @@ export default function Dashboard({ view = "" }) {
                         {/* #4 truncate long name */}
                         <TableCell className="max-w-[200px]">
                           <div className="truncate font-medium" title={lead.name || "Unknown"}>
-                            {lead.mapsUrl ? <a className="text-primary hover:underline" href={lead.mapsUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{lead.name || "Unknown"}</a> : lead.name || "Unknown"}
+                            {leadMapsHref(lead) ? <a className="text-primary hover:underline" href={leadMapsHref(lead)} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{lead.name || "Unknown"}</a> : lead.name || "Unknown"}
                           </div>
                           <div className="truncate text-xs text-muted-foreground" title={lead.category || lead.address || ""}>{lead.category || lead.address || ""}</div>
                         </TableCell>
