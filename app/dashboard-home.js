@@ -938,6 +938,7 @@ export default function Dashboard({ view = "" }) {
   // How many projects the sidebar shows; "Load more" reveals 10 at a time so a
   // big account doesn't render hundreds of rows on every poll.
   const [projectLimit, setProjectLimit] = useState(10);
+  const [visibleChipCount, setVisibleChipCount] = useState(5);
   const [reportLead, setReportLead] = useState(null);
   // Captured lead currently open in the shared "Add to list" dialog (saved to the
   // DB first so it has an id). Mirrors the Leads manager for a consistent flow.
@@ -1849,7 +1850,7 @@ export default function Dashboard({ view = "" }) {
         {/* Mobile project switcher */}
         {projects.length > 0 && (
           <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:hidden">
-            {projects.map((p) => (
+            {projects.slice(0, visibleChipCount).map((p) => (
               <button
                 key={p.slug}
                 onClick={() => setSelected(p.slug)}
@@ -1863,6 +1864,14 @@ export default function Dashboard({ view = "" }) {
                 {getProjectDisplayName(p) || p.name}
               </button>
             ))}
+            {projects.length > visibleChipCount && (
+              <button
+                onClick={() => setVisibleChipCount((v) => v + 5)}
+                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/60 transition-colors"
+              >
+                +{projects.length - visibleChipCount} more
+              </button>
+            )}
           </div>
         )}
 
