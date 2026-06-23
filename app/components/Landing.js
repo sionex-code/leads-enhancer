@@ -52,14 +52,14 @@ const NAV = [
 
 // Quiet, uniform "About" tag-pills (one subtle style, brand dot only).
 const PILLS = [
-  { label: "Verified emails", desc: "Crawl website domains and MX records live to extract valid, deliverable email addresses directly.", icon: Mail },
-  { label: "WhatsApp numbers", desc: "Check phone numbers against the WhatsApp API to instantly verify active mobile outreach channels.", icon: MessageCircle },
-  { label: "Website health", desc: "Perform real-time page audits checking SSL certificates, loading speed, and mobile responsiveness.", icon: Gauge },
-  { label: "Owner contacts", desc: "Pinpoint owner, founder, and decision-maker contact details to skip the gatekeeper.", icon: Users },
-  { label: "Social profiles", desc: "Gather direct links to Facebook, Instagram, LinkedIn, and Twitter pages for multi-channel touches.", icon: Globe2 },
-  { label: "Ratings & reviews", desc: "Track Google Maps review ratings and counts to identify businesses needing reputation management.", icon: Star },
-  { label: "Phone numbers", desc: "Extract clean, formatted landline and mobile numbers from business pages and Maps.", icon: Phone },
-  { label: "Clean CSV export", desc: "Export structured lead lists formatted perfectly for immediate import into your CRM or outreach tool.", icon: FileSpreadsheet },
+  { label: "Verified emails", desc: "Extract valid, deliverable emails directly from websites.", icon: Mail },
+  { label: "WhatsApp numbers", desc: "Verify active WhatsApp numbers for direct outreach.", icon: MessageCircle },
+  { label: "Website health", desc: "Check SSL, speed, and mobile friendliness instantly.", icon: Gauge },
+  { label: "Owner contacts", desc: "Pinpoint owner and decision-maker details directly.", icon: Users },
+  { label: "Social profiles", desc: "Gather Facebook, Instagram, and LinkedIn links.", icon: Globe2 },
+  { label: "Ratings & reviews", desc: "Track ratings and reviews to find the best niches.", icon: Star },
+  { label: "Phone numbers", desc: "Pull formatted phone numbers from Maps and sites.", icon: Phone },
+  { label: "Clean CSV export", desc: "Export structured leads ready for your CRM.", icon: FileSpreadsheet },
 ];
 
 // Sticky-left "Discover" pastel card stack.
@@ -699,7 +699,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ---- about + pills ---- */}
+      {/* ---- about ---- */}
       <section id="about" className="container py-24">
         <Reveal className="mx-auto max-w-3xl text-center">
           <Eyebrow icon={Users}>Why LeadsFunda</Eyebrow>
@@ -707,16 +707,9 @@ export default function Landing() {
             Everything you need to find and reach local leads in one tab.
           </p>
         </Reveal>
-        <Reveal delay={120} className="mx-auto mt-9 flex max-w-3xl flex-wrap items-center justify-center gap-3">
-          {PILLS.map((p) => (
-            <span key={p.label} className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground">
-              <Check className="h-4 w-4 text-primary shrink-0" /> {p.label}
-            </span>
-          ))}
-        </Reveal>
         
-        {/* Rich features grid with detailed info cards */}
-        <Reveal delay={180} className="mx-auto mt-16 grid max-w-5xl grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Simple & precise features grid with short info cards */}
+        <Reveal delay={120} className="mx-auto mt-14 grid max-w-5xl grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {PILLS.map((item) => {
             const Icon = item.icon;
             return (
