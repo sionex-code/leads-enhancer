@@ -68,7 +68,7 @@ async function setSetting(key, value) {
 async function getFreeMonthlyConfig() {
   const [enabled, amount] = await Promise.all([
     getSetting("free_monthly_credits_enabled", "1"),
-    getSetting("free_monthly_credits", "100"),
+    getSetting("free_monthly_credits", "300"),
   ]);
   return { enabled: enabled === "1" || enabled === "true", amount: Math.max(0, parseInt(amount, 10) || 0) };
 }

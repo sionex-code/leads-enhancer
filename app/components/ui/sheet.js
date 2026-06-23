@@ -25,7 +25,7 @@ function Sheet({ open, onOpenChange, children }) {
 
 const sideClass = {
   right: "right-0 top-0 h-full w-full max-w-md border-l animate-in slide-in-from-right",
-  left: "left-0 top-0 h-full w-[82%] max-w-xs border-r animate-in slide-in-from-left",
+  left: "left-0 top-0 h-full w-60 max-w-[65%] border-r animate-in slide-in-from-left",
 };
 
 const SheetContent = React.forwardRef(({ className, children, side = "right", showClose = true, ...props }, ref) => {
