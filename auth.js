@@ -29,6 +29,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (session.user && user) session.user.id = user.id;
       return session;
     },
+    async redirect({ url, baseUrl }) {
+      // Allows relative callback URLs
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      
+      const marketingUrl = process.env.NEXT_PUBLIC_MARKETING_URL || "";
+      try {
+        const urlObj = new URL(url);
+        const baseObj = new URL(baseUrl);
+        // Allows callback URLs on the same origin (app host)
+        if (urlObj.origin === baseObj.origin) {
+          return url;
+        }
+        // Allows callback URLs on the marketing domain
+        if (marketingUrl) {
+          const marketingObj = new URL(marketingUrl);
+          if (urlObj.origin === marketingObj.origin) {
+            return url;
+          }
+        }
+      } catch (e) {}
+      return baseUrl;
+    },
   },
   events: {
     // Apply any Whop grant that arrived before this email had an account
