@@ -922,6 +922,7 @@ export default function Dashboard({ view = "" }) {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [needPlan, setNeedPlan] = useState(false);
+  const [isTransitioningOut, setIsTransitioningOut] = useState(false);
   const [findResult, setFindResult] = useState(null); // dismissible "grabbed N leads" alert
   const [hideSyncBanner, setHideSyncBanner] = useState(false); // dismiss the dbSync banner
   const [tablePage, setTablePage] = useState(0); // captured-leads table pagination
@@ -1021,6 +1022,12 @@ export default function Dashboard({ view = "" }) {
   useEffect(() => {
     if (simpleMode) return;
     loadProjects().catch((err) => setError(err.message));
+  }, [simpleMode]);
+
+  useEffect(() => {
+    if (simpleMode) {
+      setIsTransitioningOut(false);
+    }
   }, [simpleMode]);
 
   useEffect(() => {
@@ -1139,7 +1146,12 @@ export default function Dashboard({ view = "" }) {
     // Only drop into the workspace once a project actually started — on a billing
     // error we stay on the find-leads home so the plan prompt is right there.
     const ok = await run(["scrape"], nextForm);
-    if (ok) router.push("/dashboard?view=projects");
+    if (ok) {
+      setIsTransitioningOut(true);
+      setTimeout(() => {
+        router.push("/dashboard?view=projects");
+      }, 300);
+    }
   }
 
   // POST to /api/projects/find (warehouse-backed instant delivery).
@@ -1175,7 +1187,12 @@ export default function Dashboard({ view = "" }) {
       refreshCredits();
       await loadProjects();
       await loadStatus(data.slug);
-      router.push("/dashboard?view=projects");
+      
+      // Smooth page transition out
+      setIsTransitioningOut(true);
+      setTimeout(() => {
+        router.push("/dashboard?view=projects");
+      }, 300);
     } catch (err) {
       setError(err.message);
       if (["no_plan", "quota_exceeded", "no_credits", "daily_search_limit", "daily_lead_limit"].includes(err.code)) setNeedPlan(true);
@@ -1767,7 +1784,23 @@ export default function Dashboard({ view = "" }) {
   if (simpleMode) {
     return (
       <AppShell active="new" title="Find leads" subtitle="Start a Google Maps lead project" tourKey="find" tourSteps={FIND_TOUR}>
-        <QuickScrapeHome busy={busy} onFind={startFindLeads} onOpenDashboard={() => router.push("/dashboard?view=projects")} error={error} needPlan={needPlan} />
+        <div className={cn(
+          "transition-all duration-300 ease-out transform origin-center",
+          isTransitioningOut ? "opacity-0 scale-95 -translate-y-4" : "opacity-100 scale-100 translate-y-0"
+        )}>
+          <QuickScrapeHome
+            busy={busy}
+            onFind={startFindLeads}
+            onOpenDashboard={() => {
+              setIsTransitioningOut(true);
+              setTimeout(() => {
+                router.push("/dashboard?view=projects");
+              }, 300);
+            }}
+            error={error}
+            needPlan={needPlan}
+          />
+        </div>
       </AppShell>
     );
   }
