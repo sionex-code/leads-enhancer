@@ -37,7 +37,7 @@ const SheetContent = React.forwardRef(({ className, children, side = "right", sh
         ref={ref}
         role="dialog"
         aria-modal="true"
-        className={cn("fixed z-50 flex flex-col overflow-y-auto bg-card text-card-foreground border-border shadow-2xl transition ease-in-out duration-300", sideClass[side], className)}
+        className={cn("fixed z-50 flex flex-col bg-card text-card-foreground border-border shadow-2xl transition ease-in-out duration-300", sideClass[side], className)}
         {...props}
       >
         {showClose && (

@@ -166,15 +166,15 @@ export default function AppShell({ active, title, subtitle, actions, sidebarExtr
 
       {/* Mobile drawer */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="p-0">
-          <div className="flex h-16 items-center justify-center border-b border-border/60 px-4">
+        <SheetContent side="left" className="flex h-full flex-col p-0 overflow-hidden">
+          <div className="flex h-16 shrink-0 items-center justify-center border-b border-border/60 px-4">
             <Brand collapsed={false} />
           </div>
-          <div className="thin-scroll flex-1 overflow-y-auto px-3 py-4">
+          <div className="thin-scroll min-h-0 flex-1 overflow-y-auto px-3 py-4">
             <NavLinks active={active} collapsed={false} onNavigate={() => setMobileOpen(false)} />
             {sidebarExtra ? <div className="mt-4">{sidebarExtra}</div> : null}
           </div>
-          <div className="border-t border-border/60">
+          <div className="shrink-0 border-t border-border/60">
             <AccountWidget />
           </div>
         </SheetContent>

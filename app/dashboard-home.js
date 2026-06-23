@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import AppShell from "./components/app/AppShell";
 import AnimatedNumber from "./components/AnimatedNumber";
@@ -690,9 +689,6 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
         </button>
       </div>
       <div className="flex flex-col items-center text-center">
-        <div className="mb-6 flex justify-center">
-          <Image src="/brand/leadsfunda-white.svg" alt="LeadsFunda" width={180} height={35} priority />
-        </div>
         <Badge variant="outline" className="mb-4 gap-1.5"><Zap className="h-3 w-3 text-primary" /> Google Maps lead engine</Badge>
         <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">What leads do you want to find?</h1>
         <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
