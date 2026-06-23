@@ -494,16 +494,19 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   const catalogCountries = resolved.countries || [];
   const catalogServices = resolved.services || [];
 
+  // Pick a random element from an array
+  const randomPick = (arr) => arr?.length ? arr[Math.floor(Math.random() * arr.length)] : undefined;
+
   // ── Form state ─────────────────────────────────────────────────────────────
-  const [countryCode, setCountryCode] = useState(() => catalogCountries[0]?.code || QUICK_COUNTRIES[0].code);
+  const [countryCode, setCountryCode] = useState(() => randomPick(catalogCountries)?.code || randomPick(QUICK_COUNTRIES).code);
   const country = useMemo(
     () => catalogCountries.find((c) => c.code === countryCode) || catalogCountries[0] || { code: "", name: "", cities: [] },
     [catalogCountries, countryCode]
   );
 
-  const [service, setService] = useState(() => catalogServices[0]?.name || QUICK_SERVICES[0]);
+  const [service, setService] = useState(() => randomPick(catalogServices)?.name || randomPick(QUICK_SERVICES));
   // cityObj = { id, name, admin, lat, lng } from the catalog
-  const [cityObj, setCityObj] = useState(() => country.cities?.[10] || country.cities?.[0] || null);
+  const [cityObj, setCityObj] = useState(() => randomPick(country.cities) || null);
   const [citySearch, setCitySearch] = useState("");
   const [showChips, setShowChips] = useState(false);
   const [max, setMax] = useState("30");
@@ -527,25 +530,27 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   };
   const [query, setQuery] = useState(() => buildQuery(service, cityObj, country));
 
-  // When catalog loads, resync selections to first available entry
+  // When catalog loads, resync selections to a random entry
   useEffect(() => {
     if (!catalog) return;
-    const firstCountry = catalog.countries?.[0];
-    const firstService = catalog.services?.[0]?.name;
-    if (firstCountry) {
-      setCountryCode(firstCountry.code);
-      const firstCity = firstCountry.cities?.[10] || firstCountry.cities?.[0] || null;
-      setCityObj(firstCity);
-      if (firstCity?.lat != null) setCenter({ lat: firstCity.lat, lng: firstCity.lng });
-      if (firstService) {
-        setService(firstService);
-        setQuery(buildQuery(firstService, firstCity, firstCountry));
+    const countries = catalog.countries || [];
+    const services = catalog.services || [];
+    const randCountry = randomPick(countries);
+    const randService = randomPick(services)?.name;
+    if (randCountry) {
+      setCountryCode(randCountry.code);
+      const randCity = randomPick(randCountry.cities) || null;
+      setCityObj(randCity);
+      if (randCity?.lat != null) setCenter({ lat: randCity.lat, lng: randCity.lng });
+      if (randService) {
+        setService(randService);
+        setQuery(buildQuery(randService, randCity, randCountry));
       } else {
-        setQuery(buildQuery(service, firstCity, firstCountry));
+        setQuery(buildQuery(service, randCity, randCountry));
       }
-    } else if (firstService) {
-      setService(firstService);
-      setQuery(buildQuery(firstService, cityObj, country));
+    } else if (randService) {
+      setService(randService);
+      setQuery(buildQuery(randService, cityObj, country));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [catalog]);
