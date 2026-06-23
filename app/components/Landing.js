@@ -692,8 +692,8 @@ export default function Landing() {
       <section id="about" className="container py-24">
         <Reveal className="mx-auto max-w-3xl text-center">
           <Eyebrow icon={Users}>Why LeadsFunda</Eyebrow>
-          <p className="font-heading mx-auto mt-6 max-w-2xl text-lg font-bold leading-snug tracking-tight sm:text-xl">
-            Everything you need to find local businesses, reach the decision-maker and know exactly who needs your help, in one tab.
+          <p className="font-heading mx-auto mt-6 max-w-2xl text-2xl font-bold leading-snug tracking-tight sm:text-[2rem]">
+            Everything you need to find and reach local leads in one tab.
           </p>
         </Reveal>
         <Reveal delay={120} className="mx-auto mt-9 flex max-w-3xl flex-wrap items-center justify-center gap-3">
