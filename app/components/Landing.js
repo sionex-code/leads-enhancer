@@ -779,7 +779,7 @@ export default function Landing() {
           {/* row 2: two wide cells */}
           <Reveal delay={120} className="lg:col-span-2"><BentoCell icon={Zap} tile="bg-cyan-500/10 text-cyan-600" title="Instant delivery" body="Leads arrive in seconds from our pre-built database — no scraping delays, no browser needed.">
             <div className="flex items-center justify-between rounded-xl border border-border bg-background px-3 py-3">
-              <div><div className="text-[11px] text-muted-foreground">Avg. delivery</div><div className="font-heading text-lg font-bold text-foreground">< 5s</div></div>
+              <div><div className="text-[11px] text-muted-foreground">Avg. delivery</div><div className="font-heading text-lg font-bold text-foreground">&lt; 5s</div></div>
               <Sparkline />
             </div>
           </BentoCell></Reveal>
