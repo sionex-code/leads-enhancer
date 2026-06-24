@@ -11,6 +11,7 @@ import {
   BarChart3,
   Bot,
   CheckCircle2,
+  Columns3,
   Download,
   ExternalLink,
   FileText,
@@ -32,12 +33,15 @@ import {
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "../components/ui/dropdown-menu";
 import { Input } from "../components/ui/input";
 import { Select } from "../components/ui/select";
+import { Switch } from "../components/ui/switch";
 import { Textarea } from "../components/ui/textarea";
 import { Sheet, SheetContent } from "../components/ui/sheet";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/table";
 import { InfoPopover } from "../components/ui/info-popover";
+import useColumnVisibility from "../components/useColumnVisibility";
 import { cn, waMeLink, waState, prettyEnrichStatus } from "../lib/utils";
 import { Socials, WaIcon, WaPhone } from "../components/SocialIcons";
 
@@ -48,6 +52,24 @@ const PAGE_SIZE = 120;
 const REPORT_COST = 10; // credits per website report (mirrors billing.REPORT_COST)
 const AUDIT_COST = 3; // credits per quick audit (mirrors billing.AUDIT_COST)
 const CHATBOT_COST = 5; // credits per website chatbot scan (mirrors billing.CHATBOT_COST)
+
+// Desktop table column definitions. id is used for visibility toggling; label is
+// shown in the column picker. Non-toggleable columns (checkbox, actions) are omitted.
+const COLUMNS = [
+  { id: "index", label: "#", defaultVisible: true },
+  { id: "lead", label: "Lead", defaultVisible: true },
+  { id: "contact", label: "Contact", defaultVisible: true },
+  { id: "rating", label: "Rating", defaultVisible: true },
+  { id: "reviews", label: "Reviews", defaultVisible: true },
+  { id: "ownerReply", label: "Owner reply", defaultVisible: true },
+  { id: "status", label: "Status", defaultVisible: true },
+  { id: "emailStatus", label: "Email status", defaultVisible: true },
+  { id: "website", label: "Website", defaultVisible: true },
+  { id: "health", label: "Health", defaultVisible: true },
+  { id: "location", label: "Location", defaultVisible: true },
+  { id: "address", label: "Address", defaultVisible: false },
+  { id: "category", label: "Category", defaultVisible: false },
+];
 
 // Explanations surfaced behind (i) icons in the table headers.
 const HEALTH_INFO = (
@@ -563,6 +585,8 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
   const [selected, setSelected] = useState(() => new Set());
   const [credits, setCredits] = useState(null);
   const [bulkBusy, setBulkBusy] = useState("");
+  // Desktop table column visibility — persisted to localStorage per browser.
+  const { isVisible, toggle: toggleColumn, reset: resetColumns } = useColumnVisibility();
   // Live progress for an in-flight bulk batch — reports OR audits. The card and
   // poller are shared; `kind` ("report" | "audit") just switches the labels.
   // { kind, total, done, failed, latest, finished, jobIds }.
@@ -1117,6 +1141,32 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
               <span className="ml-auto text-xs text-muted-foreground">
                 {loading ? "Loading..." : total ? `${pageStart}-${pageEnd} of ${total}` : "0 shown"}
               </span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" title="Show or hide columns" className="shrink-0">
+                    <Columns3 size={15} /> <span className="hidden sm:inline">Columns</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[13rem]">
+                  <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <div className="max-h-[60vh] overflow-y-auto p-1" onClick={(e) => e.stopPropagation()}>
+                    {COLUMNS.map((col) => (
+                      <label
+                        key={col.id}
+                        className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-md px-2.5 py-2 text-sm hover:bg-accent"
+                      >
+                        <span className="select-none">{col.label}</span>
+                        <Switch checked={isVisible(col.id)} onCheckedChange={() => toggleColumn(col.id)} />
+                      </label>
+                    ))}
+                  </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={resetColumns} className="justify-center text-muted-foreground">
+                    Reset to default
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </CardContent>
         </Card>
@@ -1228,17 +1278,19 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                           className="accent-[hsl(var(--primary))]"
                         />
                       </TableHead>
-                      <TableHead className="w-8 text-muted-foreground">#</TableHead>
-                      <TableHead>Lead</TableHead>
-                      <TableHead>Contact</TableHead>
-                      <TableHead>Rating</TableHead>
-                      <TableHead>Reviews</TableHead>
-                      <TableHead><span className="inline-flex items-center gap-1">Owner reply <InfoPopover label="About owner reply">{OWNER_REPLY_INFO}</InfoPopover></span></TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Email status</TableHead>
-                      <TableHead>Website</TableHead>
-                      <TableHead><span className="inline-flex items-center gap-1">Health <InfoPopover label="About website health">{HEALTH_INFO}</InfoPopover></span></TableHead>
-                      <TableHead>Location</TableHead>
+                      {isVisible("index") && <TableHead className="w-8 text-muted-foreground">#</TableHead>}
+                      {isVisible("lead") && <TableHead>Lead</TableHead>}
+                      {isVisible("contact") && <TableHead>Contact</TableHead>}
+                      {isVisible("rating") && <TableHead>Rating</TableHead>}
+                      {isVisible("reviews") && <TableHead>Reviews</TableHead>}
+                      {isVisible("ownerReply") && <TableHead><span className="inline-flex items-center gap-1">Owner reply <InfoPopover label="About owner reply">{OWNER_REPLY_INFO}</InfoPopover></span></TableHead>}
+                      {isVisible("status") && <TableHead>Status</TableHead>}
+                      {isVisible("emailStatus") && <TableHead>Email status</TableHead>}
+                      {isVisible("website") && <TableHead>Website</TableHead>}
+                      {isVisible("health") && <TableHead><span className="inline-flex items-center gap-1">Health <InfoPopover label="About website health">{HEALTH_INFO}</InfoPopover></span></TableHead>}
+                      {isVisible("location") && <TableHead>Location</TableHead>}
+                      {isVisible("address") && <TableHead>Address</TableHead>}
+                      {isVisible("category") && <TableHead>Category</TableHead>}
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1257,80 +1309,112 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                             title="Select lead"
                           />
                         </TableCell>
-                        <TableCell className="w-8 text-xs text-muted-foreground tabular-nums">
-                          {page * PAGE_SIZE + idx + 1}
-                        </TableCell>
-                        <TableCell className="max-w-[180px]">
-                          <button type="button" className="block max-w-full truncate text-left font-medium hover:text-primary hover:underline" onClick={(e) => { e.stopPropagation(); setActive(lead); }} title={lead.name || "Unknown"}>{lead.name || "Unknown"}</button>
-                          <div className="truncate text-xs text-muted-foreground" title={lead.category || lead.address || ""}>{lead.category || lead.address || ""}</div>
-                          {lead.notes && <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{lead.notes}</div>}
-                        </TableCell>
-                        <TableCell className="max-w-[180px]">
-                          {lead.email ? (
-                            <a onClick={(e) => e.stopPropagation()} className="block max-w-full truncate text-xs text-primary hover:underline" href={`mailto:${lead.email}`} title={lead.email}>{lead.email}</a>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">{prettyEnrichStatus(lead.enrich_status) || "no email"}</span>
-                          )}
-                          <div className="mt-0.5 flex items-center gap-1.5 text-xs">
-                            {lead.phone ? <WaPhone lead={lead} /> : <span>-</span>}
-                            <WaIcon lead={lead} />
-                            <WhatsappCheckAction lead={lead} busy={busy[`${lead.id}:whatsapp`]} onWhatsapp={checkWhatsapp} />
-                          </div>
-                          {!lead.email && (
-                            <div className="mt-1">
-                              <EmailRevealAction lead={lead} busy={busy[`${lead.id}:enrich`]} onEnrich={enrichOne} />
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-xs">
-                          {showRating(lead) ? (
-                            <span className="flex items-center gap-1"><Star size={12} className="text-amber-500" fill="currentColor" />{lead.rating}</span>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-xs tabular-nums">{reviewCount(lead).toLocaleString()}</TableCell>
-                        <TableCell className="text-xs">
-                          {ownerReplied === 1 ? (
-                            <span className="text-emerald-600">Yes {lead.owner_reply_count != null ? `(${lead.owner_reply_count})` : ""}</span>
-                          ) : ownerReplied === 0 ? (
-                            <span className="text-muted-foreground">No</span>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap items-center gap-1">
-                            <WorkflowBadge lead={lead} />
-                            {lead.watchlist ? <Pill tone="watch"><Star size={12} fill="currentColor" /> Favorite</Pill> : null}
-                            {lead.contact_list ? <Pill tone="contact"><Users size={12} /> List</Pill> : null}
-                            {lead.has_report ? <Pill tone="sent"><FileText size={12} /> Report</Pill> : null}
-                          </div>
-                        </TableCell>
-                        <TableCell><EmailBadge status={lead.email_status} /></TableCell>
-                        <TableCell onClick={(e) => e.stopPropagation()} className="max-w-[160px]">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            {lead.website ? (
-                              <a className="max-w-[120px] truncate text-primary hover:underline" href={lead.website} target="_blank" rel="noreferrer" title={lead.website}>{lead.domain || lead.website}</a>
+                        {isVisible("index") && (
+                          <TableCell className="w-8 text-xs text-muted-foreground tabular-nums">
+                            {page * PAGE_SIZE + idx + 1}
+                          </TableCell>
+                        )}
+                        {isVisible("lead") && (
+                          <TableCell className="max-w-[180px]">
+                            <button type="button" className="block max-w-full truncate text-left font-medium hover:text-primary hover:underline" onClick={(e) => { e.stopPropagation(); setActive(lead); }} title={lead.name || "Unknown"}>{lead.name || "Unknown"}</button>
+                            <div className="truncate text-xs text-muted-foreground" title={lead.category || lead.address || ""}>{lead.category || lead.address || ""}</div>
+                            {lead.notes && <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{lead.notes}</div>}
+                          </TableCell>
+                        )}
+                        {isVisible("contact") && (
+                          <TableCell className="max-w-[180px]">
+                            {lead.email ? (
+                              <a onClick={(e) => e.stopPropagation()} className="block max-w-full truncate text-xs text-primary hover:underline" href={`mailto:${lead.email}`} title={lead.email}>{lead.email}</a>
                             ) : (
-                              <span className="text-xs text-muted-foreground">none</span>
+                              <span className="text-xs text-muted-foreground">{prettyEnrichStatus(lead.enrich_status) || "no email"}</span>
                             )}
-                            <StatusPill lead={lead} />
-                            <ChatbotBadge lead={lead} />
-                          </div>
-                          <div className="mt-1"><Socials lead={lead} /></div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            <Score label="D" value={lead.desktop_performance} />
-                            <Score label="M" value={lead.mobile_performance} />
-                            <Score label="SEO" value={lead.desktop_seo || lead.mobile_seo} />
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {lead.city || "-"}
-                          {lead.country ? <div>{lead.country}</div> : null}
-                        </TableCell>
+                            <div className="mt-0.5 flex items-center gap-1.5 text-xs">
+                              {lead.phone ? <WaPhone lead={lead} /> : <span>-</span>}
+                              <WaIcon lead={lead} />
+                              <WhatsappCheckAction lead={lead} busy={busy[`${lead.id}:whatsapp`]} onWhatsapp={checkWhatsapp} />
+                            </div>
+                            {!lead.email && (
+                              <div className="mt-1">
+                                <EmailRevealAction lead={lead} busy={busy[`${lead.id}:enrich`]} onEnrich={enrichOne} />
+                              </div>
+                            )}
+                          </TableCell>
+                        )}
+                        {isVisible("rating") && (
+                          <TableCell className="text-xs">
+                            {showRating(lead) ? (
+                              <span className="flex items-center gap-1"><Star size={12} className="text-amber-500" fill="currentColor" />{lead.rating}</span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                        )}
+                        {isVisible("reviews") && (
+                          <TableCell className="text-xs tabular-nums">{reviewCount(lead).toLocaleString()}</TableCell>
+                        )}
+                        {isVisible("ownerReply") && (
+                          <TableCell className="text-xs">
+                            {ownerReplied === 1 ? (
+                              <span className="text-emerald-600">Yes {lead.owner_reply_count != null ? `(${lead.owner_reply_count})` : ""}</span>
+                            ) : ownerReplied === 0 ? (
+                              <span className="text-muted-foreground">No</span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                        )}
+                        {isVisible("status") && (
+                          <TableCell>
+                            <div className="flex flex-wrap items-center gap-1">
+                              <WorkflowBadge lead={lead} />
+                              {lead.watchlist ? <Pill tone="watch"><Star size={12} fill="currentColor" /> Favorite</Pill> : null}
+                              {lead.contact_list ? <Pill tone="contact"><Users size={12} /> List</Pill> : null}
+                              {lead.has_report ? <Pill tone="sent"><FileText size={12} /> Report</Pill> : null}
+                            </div>
+                          </TableCell>
+                        )}
+                        {isVisible("emailStatus") && (
+                          <TableCell><EmailBadge status={lead.email_status} /></TableCell>
+                        )}
+                        {isVisible("website") && (
+                          <TableCell onClick={(e) => e.stopPropagation()} className="max-w-[160px]">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {lead.website ? (
+                                <a className="max-w-[120px] truncate text-primary hover:underline" href={lead.website} target="_blank" rel="noreferrer" title={lead.website}>{lead.domain || lead.website}</a>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">none</span>
+                              )}
+                              <StatusPill lead={lead} />
+                              <ChatbotBadge lead={lead} />
+                            </div>
+                            <div className="mt-1"><Socials lead={lead} /></div>
+                          </TableCell>
+                        )}
+                        {isVisible("health") && (
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              <Score label="D" value={lead.desktop_performance} />
+                              <Score label="M" value={lead.mobile_performance} />
+                              <Score label="SEO" value={lead.desktop_seo || lead.mobile_seo} />
+                            </div>
+                          </TableCell>
+                        )}
+                        {isVisible("location") && (
+                          <TableCell className="text-xs text-muted-foreground">
+                            {lead.city || "-"}
+                            {lead.country ? <div>{lead.country}</div> : null}
+                          </TableCell>
+                        )}
+                        {isVisible("address") && (
+                          <TableCell className="max-w-[200px] text-xs text-muted-foreground">
+                            {lead.address ? <span className="line-clamp-2" title={lead.address}>{lead.address}</span> : <span>—</span>}
+                          </TableCell>
+                        )}
+                        {isVisible("category") && (
+                          <TableCell className="max-w-[140px] text-xs text-muted-foreground">
+                            {lead.category ? <span className="block truncate" title={lead.category}>{lead.category}</span> : <span>—</span>}
+                          </TableCell>
+                        )}
                         <TableCell>
                           <QuickLeadActions lead={lead} onPatch={patchLead} onLists={(l) => setListDialog({ lead: l })} compact />
                           <RowActions
