@@ -53,23 +53,38 @@ const REPORT_COST = 10; // credits per website report (mirrors billing.REPORT_CO
 const AUDIT_COST = 3; // credits per quick audit (mirrors billing.AUDIT_COST)
 const CHATBOT_COST = 5; // credits per website chatbot scan (mirrors billing.CHATBOT_COST)
 
-// Desktop table column definitions. id is used for visibility toggling; label is
-// shown in the column picker. Non-toggleable columns (checkbox, actions) are omitted.
+// Desktop table column definitions. `id` drives visibility toggling, `label` is
+// shown in the column picker, and `export` lists the DB columns to include in
+// the CSV export when this column is visible. Columns without `export` (index,
+// status, actions) never affect the export.
 const COLUMNS = [
   { id: "index", label: "#", defaultVisible: true },
-  { id: "lead", label: "Lead", defaultVisible: true },
-  { id: "contact", label: "Contact", defaultVisible: true },
-  { id: "rating", label: "Rating", defaultVisible: true },
-  { id: "reviews", label: "Reviews", defaultVisible: true },
-  { id: "ownerReply", label: "Owner reply", defaultVisible: true },
-  { id: "status", label: "Status", defaultVisible: true },
+  { id: "lead", label: "Lead", defaultVisible: true, export: ["name"] },
+  { id: "contact", label: "Contact", defaultVisible: true, export: ["email", "all_emails", "phone", "whatsapp", "whatsapp_status"] },
+  { id: "rating", label: "Rating", defaultVisible: true, export: ["rating"] },
+  { id: "reviews", label: "Reviews", defaultVisible: true, export: ["reviews"] },
+  { id: "ownerReply", label: "Owner reply", defaultVisible: true, export: ["owner_replied", "owner_reply_count"] },
+  { id: "status", label: "Status", defaultVisible: true, export: ["watchlist", "contact_list", "outreach_status", "email_status", "notes"] },
   { id: "emailStatus", label: "Email status", defaultVisible: true },
-  { id: "website", label: "Website", defaultVisible: true },
-  { id: "health", label: "Health", defaultVisible: true },
-  { id: "location", label: "Location", defaultVisible: true },
-  { id: "address", label: "Address", defaultVisible: false },
-  { id: "category", label: "Category", defaultVisible: false },
+  { id: "website", label: "Website", defaultVisible: true, export: ["website", "domain", "facebook", "instagram", "linkedin", "twitter", "youtube", "tiktok", "pinterest", "telegram"] },
+  { id: "health", label: "Health", defaultVisible: true, export: ["desktop_performance", "desktop_seo", "desktop_accessibility", "mobile_performance", "mobile_seo", "mobile_accessibility"] },
+  { id: "location", label: "Location", defaultVisible: true, export: ["city", "country", "plus_code"] },
+  { id: "address", label: "Address", defaultVisible: false, export: ["address"] },
+  { id: "category", label: "Category", defaultVisible: false, export: ["category", "hours", "maps_url"] },
 ];
+
+// DB columns that are always included in the export regardless of column
+// visibility — they identify the row and its provenance.
+const ALWAYS_EXPORT = ["dedup_key", "first_seen", "last_updated"];
+
+// Resolve the visible columns' DB column list for the export endpoint.
+function visibleExportColumns(isVisible) {
+  const cols = new Set(ALWAYS_EXPORT);
+  for (const col of COLUMNS) {
+    if (col.export && isVisible(col.id)) col.export.forEach((c) => cols.add(c));
+  }
+  return [...cols];
+}
 
 // Explanations surfaced behind (i) icons in the table headers.
 const HEALTH_INFO = (
@@ -1063,8 +1078,12 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
   ) : null;
 
   // Export honors the active filters; if rows are selected, export just those.
+  // Column visibility is respected — only the DB columns mapped to visible table
+  // columns (plus always-included identity fields) are included in the CSV.
   const exportParams = buildLeadParams();
   if (selected.size > 0) exportParams.set("ids", [...selected].join(","));
+  const visibleCols = visibleExportColumns(isVisible);
+  exportParams.set("columns", visibleCols.join(","));
   const exportHref = `${BASE_PATH}/api/leads/export?${exportParams.toString()}`;
   const exportLabel = selected.size > 0 ? `Export ${selected.size}` : "Export CSV";
 

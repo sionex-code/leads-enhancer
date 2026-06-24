@@ -1022,9 +1022,15 @@ const EXPORT_COLUMNS = ["dedup_key", ...LEAD_COLUMNS, ...WORKFLOW_COLUMNS, "firs
 async function exportCsv(userId, filters = {}) {
   const { clause, params } = buildLeadWhere(userId, filters);
   const { rows } = await q(`SELECT * FROM leads ${clause} ORDER BY last_updated DESC LIMIT 100000`, params);
+  // If the caller specifies which columns to include (from the user's visible
+  // table columns), filter down; otherwise fall back to the full EXPORT_COLUMNS.
+  const { columns: colFilter } = filters;
+  const cols = colFilter && colFilter.length
+    ? colFilter.filter((c) => EXPORT_COLUMNS.includes(c))
+    : EXPORT_COLUMNS;
   const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const lines = [String.fromCharCode(0xfeff) + EXPORT_COLUMNS.join(",") + "\r\n"];
-  for (const r of rows) lines.push(EXPORT_COLUMNS.map((c) => esc(r[c])).join(",") + "\r\n");
+  const lines = [String.fromCharCode(0xfeff) + cols.join(",") + "\r\n"];
+  for (const r of rows) lines.push(cols.map((c) => esc(r[c])).join(",") + "\r\n");
   return lines.join("");
 }
 

@@ -16,6 +16,11 @@ export async function GET(request) {
     ? idsParam.split(",").map((s) => Number(s.trim())).filter(Number.isFinite)
     : null;
 
+  const columnsParam = searchParams.get("columns") || "";
+  const columns = columnsParam
+    ? columnsParam.split(",").map((s) => s.trim()).filter(Boolean)
+    : null; // null = export all (legacy default)
+
   const csv = await db.exportCsv(userId, {
     search: searchParams.get("search") || "",
     hasEmail: searchParams.get("hasEmail") || "",
@@ -33,6 +38,7 @@ export async function GET(request) {
     contactList: searchParams.get("contactList") === "1",
     list: searchParams.get("list") || "",
     ids,
+    columns,
   });
 
   const filename = ids && ids.length ? "leads-selected.csv" : "leads-filtered.csv";
