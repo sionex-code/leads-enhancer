@@ -606,11 +606,7 @@ function buildLeadWhere(
   }
   if (city) {
     const p = add(city);
-    where.push(`(
-      lower(trim(city)) = lower(trim(${p}))
-      OR lower(trim(city)) LIKE '%' || lower(trim(${p})) || '%'
-      OR lower(trim(${p})) LIKE '%' || lower(trim(city)) || '%'
-    )`);
+    where.push(`lower(trim(city)) = lower(trim(${p}))`);
   }
   if (minScore > 0) {
     const p = add(Number(minScore));

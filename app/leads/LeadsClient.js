@@ -1114,6 +1114,18 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
               <Select value={workflow} onChange={(e) => setWorkflow(e.target.value)} className="w-full sm:w-auto sm:min-w-[150px]" title="Lead view" data-tour="leads-tabs">
                 {WORKFLOWS.map((item) => <option key={item.key || "all"} value={item.key}>{item.label}</option>)}
               </Select>
+              <Button
+                type="button"
+                variant={workflow === "watchlist" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setWorkflow(workflow === "watchlist" ? "" : "watchlist")}
+                className={cn("h-9 shrink-0 gap-1.5", workflow === "watchlist" && "bg-amber-500 text-white hover:bg-amber-600 border-amber-500")}
+                title="Filter favorites only"
+              >
+                <Star size={15} fill={workflow === "watchlist" ? "currentColor" : "none"} />
+                <span>Favorites</span>
+                {stats?.watchlist ? <span className={cn("ml-0.5 rounded px-1 text-[11px] font-semibold", workflow === "watchlist" ? "bg-white/20" : "bg-muted")}>{stats.watchlist}</span> : null}
+              </Button>
               <Select value={project} onChange={(e) => setProject(e.target.value)} className="w-full sm:w-auto sm:min-w-[140px]">
                 <option value="">All projects</option>
                 {projects.map((name) => <option key={name} value={name}>{name}</option>)}
