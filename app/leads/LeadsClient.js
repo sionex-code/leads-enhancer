@@ -559,10 +559,6 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
   const [active, setActive] = useState(null);
   const [reportLead, setReportLead] = useState(null);
   const [busy, setBusy] = useState({});
-  const [manualSite, setManualSite] = useState("");
-  const [manualName, setManualName] = useState("");
-  const [manualNotes, setManualNotes] = useState("");
-  const [adding, setAdding] = useState("");
   // Bulk selection + the user's live credit balance (for the cost warning).
   const [selected, setSelected] = useState(() => new Set());
   const [credits, setCredits] = useState(null);
@@ -976,34 +972,6 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
     setListFilter(initialList);
   }, [initialList]);
 
-  async function addManualLead(target) {
-    const website = manualSite.trim();
-    if (!website || adding) return;
-    setAdding(target);
-    try {
-      const data = await jsonFetch("/api/leads", {
-        method: "POST",
-        body: JSON.stringify({
-          website,
-          name: manualName.trim(),
-          notes: manualNotes.trim(),
-          watchlist: target === "watchlist",
-          contact_list: target === "contact_list",
-        }),
-      });
-      setManualSite("");
-      setManualName("");
-      setManualNotes("");
-      if (data.lead) setActive(data.lead);
-      setPage(0);
-      await load();
-    } catch (err) {
-      alert(err.message);
-    } finally {
-      setAdding("");
-    }
-  }
-
   useEffect(() => {
     const id = setTimeout(load, 250);
     return () => clearTimeout(id);
@@ -1095,17 +1063,6 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
         {/* Toolbar */}
         <Card>
           <CardContent className="space-y-3 p-4">
-            <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-              <div className="relative flex-1">
-                <Globe2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input placeholder="Add single site or domain..." value={manualSite} onChange={(e) => setManualSite(e.target.value)} className="pl-9" />
-              </div>
-              <Input className="lg:w-40" placeholder="Lead name" value={manualName} onChange={(e) => setManualName(e.target.value)} />
-              <Input className="lg:w-40" placeholder="Notes" value={manualNotes} onChange={(e) => setManualNotes(e.target.value)} />
-              <Button variant="outline" disabled={!manualSite.trim() || !!adding} onClick={() => addManualLead("watchlist")}><Star size={15} /> Favorite</Button>
-              <Button disabled={!manualSite.trim() || !!adding} onClick={() => addManualLead("contact_list")}><ListPlus size={15} /> List</Button>
-            </div>
-
             <div className="flex flex-wrap items-center gap-2" data-tour="leads-filters">
               <div className="relative w-full min-w-0 flex-1 sm:w-auto sm:min-w-[220px]" data-tour="leads-search">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
