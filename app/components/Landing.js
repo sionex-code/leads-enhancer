@@ -701,7 +701,7 @@ export default function Landing() {
             Turn Google Maps into a{" "}
             <span className="relative text-primary sm:whitespace-nowrap">
               pipeline of leads
-              <span className="absolute -bottom-1 left-0 h-3 w-full rounded-full bg-[#a2e435]/50" />
+              <span className="hidden sm:block absolute -bottom-1.5 left-0 h-[6px] w-full rounded-full bg-gradient-to-r from-primary/25 via-[#a2e435]/40 to-[#a2e435]/15" />
             </span>
           </h1>
           <p className="mt-7 max-w-xl text-lg text-muted-foreground">
