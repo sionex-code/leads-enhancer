@@ -1285,9 +1285,17 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
             <div className="ml-auto flex flex-wrap items-center gap-2">
               <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>Clear</Button>
               <Button variant="outline" size="sm" onClick={() => setListDialog({ ids: [...selected] })}><ListPlus size={15} /> Add to list</Button>
+              <Button variant="outline" size="sm" disabled={!!batchBusy || !!batch || !reportableCount} onClick={bulkReport} title={reportCost > 0 ? `Generate website reports (${REPORT_COST} credits each = ${reportCost} credits)` : "Select leads with a website first"}>
+                {batchBusy === "report" ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
+                Report {reportableCount ? `(${reportCost})` : ""}
+              </Button>
               <Button variant="outline" size="sm" disabled={!!bulkBusy} onClick={bulkDomainRating} title="Fetch Ahrefs Domain Rating (free) for the selected leads">
                 {bulkBusy === "dr" ? <Loader2 size={15} className="animate-spin" /> : <BarChart3 size={15} />}
                 Domain rating
+              </Button>
+              <Button variant="outline" size="sm" disabled={!!batchBusy || !!batch || !reportableCount} onClick={bulkAudit} title={auditCost > 0 ? `Run quick audits (${AUDIT_COST} credits each = ${auditCost} credits)` : "Select leads with a website first"}>
+                {batchBusy === "audit" ? <Loader2 size={15} className="animate-spin" /> : <BarChart3 size={15} />}
+                Audit {reportableCount ? `(${auditCost})` : ""}
               </Button>
               <Button variant="destructive" size="sm" disabled={!!bulkBusy} onClick={bulkDelete} title={workflow === "watchlist" || workflow === "contacts" ? "Remove selected from this list" : "Delete selected permanently"}>
                 {bulkBusy === "delete" ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
