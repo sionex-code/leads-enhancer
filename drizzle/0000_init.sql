@@ -145,6 +145,8 @@ CREATE TABLE "leads" (
 	"chatbot_vendors" text,
 	"chatbot_method" text,
 	"chatbot_checked_at" text,
+	"domain_rating" double precision,
+	"domain_rating_checked_at" text,
 	"project" text,
 	"query" text,
 	"watchlist" integer DEFAULT 0 NOT NULL,

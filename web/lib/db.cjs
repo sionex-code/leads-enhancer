@@ -134,16 +134,17 @@ const LEAD_COLUMNS = [
   "mobile_performance", "mobile_seo", "mobile_accessibility", "mobile_best_practices",
   "project", "query",
   "lat", "lng", "owner_replied", "owner_reply_count",
+  "domain_rating", "domain_rating_checked_at",
 ];
 const INT_COLUMNS = new Set([
   "desktop_performance", "desktop_seo", "desktop_accessibility", "desktop_best_practices",
   "mobile_performance", "mobile_seo", "mobile_accessibility", "mobile_best_practices",
   "owner_replied", "owner_reply_count",
 ]);
-// All numeric columns (integer + double precision). lat/lng are double precision,
-// so they must merge with a plain COALESCE, not NULLIF(EXCLUDED.col, '') which
-// would cast '' to the numeric type and error.
-const NUMERIC_COLUMNS = new Set([...INT_COLUMNS, "lat", "lng"]);
+// All numeric columns (integer + double precision). lat/lng/domain_rating are
+// double precision, so they must merge with a plain COALESCE, not
+// NULLIF(EXCLUDED.col, '') which would cast '' to the numeric type and error.
+const NUMERIC_COLUMNS = new Set([...INT_COLUMNS, "lat", "lng", "domain_rating"]);
 
 // Map a CSV/lead object (camelCase or snake) onto our snake_case column names.
 function normalizeLead(lead) {
@@ -200,6 +201,8 @@ function normalizeLead(lead) {
     lng: numOrNull(g("lng")),
     owner_replied: numOrNull(g("owner_replied", "ownerReplied")),
     owner_reply_count: numOrNull(g("owner_reply_count", "ownerReplyCount")),
+    domain_rating: numOrNull(g("domain_rating", "domainRating")),
+    domain_rating_checked_at: g("domain_rating_checked_at", "domainRatingCheckedAt"),
   };
 }
 
@@ -942,6 +945,7 @@ async function updateLeadFields(userId, id, fields = {}, { overwrite = false } =
 const SCAN_FIELDS = new Set([
   "http_status", "http_status_text", "http_checked_at",
   "chatbot", "chatbot_vendors", "chatbot_method", "chatbot_checked_at",
+  "domain_rating", "domain_rating_checked_at",
 ]);
 async function updateLeadScan(userId, id, fields = {}) {
   const current = await getLead(userId, id);

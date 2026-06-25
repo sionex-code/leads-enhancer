@@ -101,6 +101,10 @@ const STATEMENTS = [
   // ---- first-run guided tour seen flag ----
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarded integer NOT NULL DEFAULT 0`,
 
+  // ---- Ahrefs Domain Rating cache (free public API, no key) ----
+  `ALTER TABLE leads ADD COLUMN IF NOT EXISTS domain_rating double precision`,
+  `ALTER TABLE leads ADD COLUMN IF NOT EXISTS domain_rating_checked_at text`,
+
   // sensible defaults for the free monthly grant (only inserted if absent)
   `INSERT INTO app_settings (key, value, updated_at)
      VALUES ('free_monthly_credits_enabled', '1', now()::text)

@@ -317,6 +317,8 @@ const leads = pgTable(
     chatbotVendors: text("chatbot_vendors"),
     chatbotMethod: text("chatbot_method"),
     chatbotCheckedAt: text("chatbot_checked_at"),
+    domainRating: doublePrecision("domain_rating"),
+    domainRatingCheckedAt: text("domain_rating_checked_at"),
     project: text("project"),
     query: text("query"),
     lat: doublePrecision("lat"),

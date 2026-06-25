@@ -64,6 +64,7 @@ const COLUMNS = [
   { id: "rating", label: "Rating", defaultVisible: true, export: ["rating"] },
   { id: "reviews", label: "Reviews", defaultVisible: true, export: ["reviews"] },
   { id: "ownerReply", label: "Owner reply", defaultVisible: true, export: ["owner_replied", "owner_reply_count"] },
+  { id: "domainRating", label: "Domain rating", defaultVisible: false, export: ["domain_rating", "domain_rating_checked_at"] },
   { id: "status", label: "Status", defaultVisible: true, export: ["watchlist", "contact_list", "outreach_status", "email_status", "notes"] },
   { id: "emailStatus", label: "Email status", defaultVisible: true },
   { id: "website", label: "Website", defaultVisible: true, export: ["website", "domain", "facebook", "instagram", "linkedin", "twitter", "youtube", "tiktok", "pinterest", "telegram"] },
@@ -98,6 +99,13 @@ const HEALTH_INFO = (
   </>
 );
 const OWNER_REPLY_INFO = "Being updated soon — this feature will be available shortly. If you upgraded today, you'll get bonus credits when we release it to existing users.";
+const DOMAIN_RATING_INFO = (
+  <>
+    Ahrefs Domain Rating (0-100) — strength of the site&apos;s backlink profile on a logarithmic scale. Higher = more authority.
+    <span className="mt-2 block text-muted-foreground">Sourced from the free Ahrefs DR endpoint. Data is cached per lead; re-run &quot;Domain rating&quot; to refresh.</span>
+    <span className="mt-1 block text-[10px] text-muted-foreground">Domain Rating by Ahrefs (ahrefs.com)</span>
+  </>
+);
 
 // Rendering rule: a rating only means something with reviews. Show the review
 // count (0 when empty), and only show the star rating when there is at least 1 review.
@@ -183,6 +191,21 @@ function scoreClass(value) {
   if (n >= 90) return "good";
   if (n >= 50) return "avg";
   return "bad";
+}
+
+// Ahrefs DR tone buckets — same 0-100 scale as the Lighthouse health scores, so
+// the column reads the same as Perf/SEO across the table.
+function drClass(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "";
+  if (n >= 70) return "good";
+  if (n >= 30) return "avg";
+  return "bad";
+}
+
+function domainRatingUrl(host) {
+  if (!host) return null;
+  return `https://ahrefs.com/site-explorer/overview/v2/subdomains?target=${encodeURIComponent(host)}`;
 }
 
 function Score({ label, value }) {
@@ -292,7 +315,7 @@ function DrawerCard({ title, children }) {
   );
 }
 
-function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot, onEnrich, onWhatsapp, busy = {}, onCharged }) {
+function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot, onEnrich, onWhatsapp, onDomainRating, busy = {}, onCharged }) {
   const [reports, setReports] = useState([]);
   const [job, setJob] = useState(null);
   const [error, setError] = useState("");
@@ -527,6 +550,20 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot, on
                 <Score label="SEO" value={lead.mobile_seo} />
                 <Score label="A11y" value={lead.mobile_accessibility} />
               </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">Authority</span>
+                {lead.domain_rating != null && lead.domain_rating !== "" ? (
+                  <a href={domainRatingUrl(lead.domain) || "#"} target="_blank" rel="noreferrer" className="inline-flex items-center" title={`Domain Rating by Ahrefs — last checked ${lead.domain_rating_checked_at ? new Date(lead.domain_rating_checked_at).toLocaleString() : ""}`}>
+                    <Pill tone={drClass(lead.domain_rating)}><BarChart3 size={12} /> DR {Number(lead.domain_rating).toFixed(lead.domain_rating % 1 === 0 ? 0 : 1)}</Pill>
+                  </a>
+                ) : (
+                  <span className="text-xs text-muted-foreground">not checked</span>
+                )}
+                <Button size="sm" variant="outline" disabled={!lead.website || busy.domainRating} onClick={() => onDomainRating && onDomainRating(lead)}>
+                  {busy.domainRating ? <Loader2 size={15} className="animate-spin" /> : <BarChart3 size={15} />} Check DR
+                </Button>
+              </div>
+              <div className="text-[10px] text-muted-foreground">Domain Rating by Ahrefs (ahrefs.com)</div>
             </div>
           </DrawerCard>
 
@@ -700,6 +737,20 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
     }
   }, [mergeLead, setBusyKey]);
 
+  // Single-row Ahrefs Domain Rating fetch (free public endpoint, no credits).
+  const checkDomainRatingOne = useCallback(async (lead) => {
+    const key = `${lead.id}:dr`;
+    setBusyKey(key, true);
+    try {
+      const data = await jsonFetch(`/api/leads/${lead.id}/domain-rating`, { method: "POST" });
+      if (data.lead) mergeLead(data.lead);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setBusyKey(key, false);
+    }
+  }, [mergeLead, setBusyKey]);
+
   const [batchBusy, setBatchBusy] = useState("");
   const batchScan = useCallback(async (action) => {
     const ids = rows.filter((r) => r.website).map((r) => r.id);
@@ -831,6 +882,31 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
   const bulkAudit = useCallback(() => {
     runBatch("audit", rows.filter((r) => r.website && selected.has(r.id)).map((r) => r.id));
   }, [runBatch, rows, selected]);
+
+  // Bulk Ahrefs Domain Rating fetch (free public endpoint, no credits). Throttled
+  // server-side and capped to website-bearing selected rows; merges the refreshed
+  // leads back into the table so the new DR pills show immediately.
+  const bulkDomainRating = useCallback(async () => {
+    const ids = rows.filter((r) => (r.website || r.domain) && selected.has(r.id)).map((r) => r.id);
+    if (!ids.length) {
+      alert("Select one or more leads that have a website first.");
+      return;
+    }
+    if (!confirm(`Fetch Ahrefs Domain Rating for ${ids.length} lead${ids.length === 1 ? "" : "s"}?\n\nFree public endpoint, no credits used.`)) return;
+    setBulkBusy("dr");
+    try {
+      const data = await jsonFetch(`/api/leads/domain-rating/bulk`, { method: "POST", body: JSON.stringify({ ids }) });
+      for (const lead of data.leads || []) {
+        if (lead && lead.id && lead.domain_rating != null) mergeLead(lead);
+      }
+      const failed = data.failed || 0;
+      showToast(`Domain rating: ${data.succeeded || 0} ok${failed ? `, ${failed} failed` : ""}`);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setBulkBusy("");
+    }
+  }, [rows, selected, mergeLead, showToast]);
 
   // Single-row quick audit: charge AUDIT_COST, run the desktop+mobile scan as a
   // background job, spin the row's audit button while polling it, then merge the
@@ -1209,6 +1285,10 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
             <div className="ml-auto flex flex-wrap items-center gap-2">
               <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>Clear</Button>
               <Button variant="outline" size="sm" onClick={() => setListDialog({ ids: [...selected] })}><ListPlus size={15} /> Add to list</Button>
+              <Button variant="outline" size="sm" disabled={!!bulkBusy} onClick={bulkDomainRating} title="Fetch Ahrefs Domain Rating (free) for the selected leads">
+                {bulkBusy === "dr" ? <Loader2 size={15} className="animate-spin" /> : <BarChart3 size={15} />}
+                Domain rating
+              </Button>
               <Button variant="destructive" size="sm" disabled={!!bulkBusy} onClick={bulkDelete} title={workflow === "watchlist" || workflow === "contacts" ? "Remove selected from this list" : "Delete selected permanently"}>
                 {bulkBusy === "delete" ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
                 {workflow === "watchlist" || workflow === "contacts" ? "Remove" : "Delete"}
@@ -1277,6 +1357,11 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                       {ownerReplied === 0 && (
                         <Pill tone="muted">No reply</Pill>
                       )}
+                      {lead.domain_rating != null && lead.domain_rating !== "" ? (
+                        <a href={domainRatingUrl(lead.domain) || "#"} target="_blank" rel="noreferrer" title={`Domain Rating by Ahrefs — last checked ${lead.domain_rating_checked_at ? new Date(lead.domain_rating_checked_at).toLocaleString() : ""}`}>
+                          <Pill tone={drClass(lead.domain_rating)}><BarChart3 size={11} /> DR {Number(lead.domain_rating).toFixed(lead.domain_rating % 1 === 0 ? 0 : 1)}</Pill>
+                        </a>
+                      ) : null}
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-border/60 pt-2">
                       <QuickLeadActions lead={lead} onPatch={patchLead} onLists={(l) => setListDialog({ lead: l })} compact />
@@ -1315,6 +1400,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                       {isVisible("rating") && <TableHead>Rating</TableHead>}
                       {isVisible("reviews") && <TableHead>Reviews</TableHead>}
                       {isVisible("ownerReply") && <TableHead><span className="inline-flex items-center gap-1">Owner reply <InfoPopover label="About owner reply">{OWNER_REPLY_INFO}</InfoPopover></span></TableHead>}
+                      {isVisible("domainRating") && <TableHead><span className="inline-flex items-center gap-1">Domain rating <InfoPopover label="About Domain Rating">{DOMAIN_RATING_INFO}</InfoPopover></span></TableHead>}
                       {isVisible("status") && <TableHead>Status</TableHead>}
                       {isVisible("emailStatus") && <TableHead>Email status</TableHead>}
                       {isVisible("website") && <TableHead>Website</TableHead>}
@@ -1391,6 +1477,27 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                               <span className="text-muted-foreground">No</span>
                             ) : (
                               <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                        )}
+                        {isVisible("domainRating") && (
+                          <TableCell className="text-xs">
+                            {lead.domain_rating != null && lead.domain_rating !== "" ? (
+                              <a
+                                href={domainRatingUrl(lead.domain) || "#"}
+                                onClick={(e) => e.stopPropagation()}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1"
+                                title={`Domain Rating by Ahrefs — last checked ${lead.domain_rating_checked_at ? new Date(lead.domain_rating_checked_at).toLocaleString() : ""}`}
+                              >
+                                <Pill tone={drClass(lead.domain_rating)}>
+                                  <BarChart3 size={12} />
+                                  DR {Number(lead.domain_rating).toFixed(lead.domain_rating % 1 === 0 ? 0 : 1)}
+                                </Pill>
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground" title="Run Domain rating to fetch from Ahrefs">—</span>
                             )}
                           </TableCell>
                         )}
@@ -1493,9 +1600,11 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
           onChatbot={scanChatbotOne}
           onEnrich={enrichOne}
           onWhatsapp={checkWhatsapp}
+          onDomainRating={checkDomainRatingOne}
           busy={{
             enrich: busy[`${active.id}:enrich`],
             whatsapp: busy[`${active.id}:whatsapp`],
+            domainRating: busy[`${active.id}:dr`],
           }}
           onCharged={(c) => { if (typeof c === "number") setCredits(c); }}
           onDeleted={(id) => {
