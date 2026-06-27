@@ -54,12 +54,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   events: {
     // Apply any Whop grant that arrived before this email had an account
-    // (paid first, signed in later). Best-effort; never blocks sign-in.
+    // (paid first, signed in later). Also backfills users.whop_user_id from
+    // the matched grant, so every subsequent Whop webhook links by the
+    // stable Whop account id (not email) — immune to the buyer later
+    // changing their Whop email or their Google email. Best-effort; never
+    // blocks sign-in.
     async signIn({ user }) {
       try {
         if (user?.id && user?.email) {
           const n = await billing.reconcilePendingGrants(user.id, user.email);
-          if (n) console.log(`[billing] reconciled ${n} pending grant(s) for ${user.email}`);
+          if (n) console.log(`[billing] reconciled ${n} pending grant(s) for ${user.email} (whop_user_id backfilled)`);
         }
       } catch (e) {
         console.error("[billing] pending-grant reconcile failed:", e.message);

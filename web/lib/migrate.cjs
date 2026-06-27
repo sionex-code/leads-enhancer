@@ -101,6 +101,16 @@ const STATEMENTS = [
   // ---- first-run guided tour seen flag ----
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarded integer NOT NULL DEFAULT 0`,
 
+  // ---- Whop account id (stable per-Whop-account, immune to email changes) ----
+  // Stamped on users / memberships / pending_grants on the FIRST successful
+  // Whop grant. After that, all future renewals link by this id rather than
+  // by the buyer email (which the buyer can change in Whop or in Google).
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS whop_user_id text UNIQUE`,
+  `ALTER TABLE memberships ADD COLUMN IF NOT EXISTS whop_user_id text`,
+  `CREATE INDEX IF NOT EXISTS idx_memberships_whop_user_id ON memberships (whop_user_id)`,
+  `ALTER TABLE pending_grants ADD COLUMN IF NOT EXISTS whop_user_id text`,
+  `CREATE INDEX IF NOT EXISTS idx_pending_grants_whop_user_id ON pending_grants (whop_user_id)`,
+
   // ---- Ahrefs Domain Rating cache (free public API, no key) ----
   `ALTER TABLE leads ADD COLUMN IF NOT EXISTS domain_rating double precision`,
   `ALTER TABLE leads ADD COLUMN IF NOT EXISTS domain_rating_checked_at text`,

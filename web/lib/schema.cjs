@@ -32,6 +32,11 @@ const users = pgTable("users", {
   emailVerified: timestamp("email_verified", { mode: "date" }),
   image: text("image"),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  // Stable Whop account id ("user_XXXX"). Set on the FIRST successful Whop
+  // grant (either directly via webhook or on next sign-in when reconciling a
+  // pending_grant). After that, all future renewals link by this id (immune
+  // to the buyer changing their Whop email).
+  whopUserId: text("whop_user_id").unique(),
 });
 
 const accounts = pgTable(
@@ -89,6 +94,10 @@ const memberships = pgTable("memberships", {
     .references(() => users.id, { onDelete: "cascade" }),
   whopMembershipId: text("whop_membership_id"),
   whopPlanId: text("whop_plan_id"),
+  // Mirror of users.whop_user_id, set on the same grant that creates the row.
+  // Indexed so admin lookups by Whop id (or future "switch Whop account"
+  // flows) are cheap.
+  whopUserId: text("whop_user_id"),
   plan: text("plan"), // p19 | p35 | p49
   status: text("status").notNull().default("inactive"), // active | inactive
   leadsQuota: integer("leads_quota"), // null = unlimited
@@ -171,7 +180,10 @@ const whatsappCache = pgTable("whatsapp_cache", {
 // ---- Pending Whop grants (paid before signing in, or unmatched) --------------
 // When a Whop webhook arrives with no user_id metadata and no matching user yet,
 // we stash the grant keyed by the buyer email and reconcile it the next time that
-// email signs in with Google (auth.js events.signIn).
+// email signs in with Google (auth.js events.signIn). The whop_user_id is also
+// stored so the user's leadsfunda row can be backfilled with the stable Whop
+// account id on reconciliation (subsequent webhooks then link by whop_user_id,
+// not email — immune to buyer email changes).
 const pendingGrants = pgTable(
   "pending_grants",
   {
@@ -179,11 +191,15 @@ const pendingGrants = pgTable(
     email: text("email").notNull(),
     whopMembershipId: text("whop_membership_id"),
     whopPlanId: text("whop_plan_id"),
+    whopUserId: text("whop_user_id"),
     currentPeriodStart: text("current_period_start"),
     currentPeriodEnd: text("current_period_end"),
     createdAt: text("created_at").notNull(),
   },
-  (t) => [index("idx_pending_grants_email").on(t.email)]
+  (t) => [
+    index("idx_pending_grants_email").on(t.email),
+    index("idx_pending_grants_whop_user_id").on(t.whopUserId),
+  ]
 );
 
 // ---- Gmail cookie accounts — DEPRECATED ------------------------------------

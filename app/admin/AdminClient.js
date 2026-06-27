@@ -754,6 +754,7 @@ export default function AdminClient() {
                   <TableHead>User</TableHead>
                   <TableHead>Current plan</TableHead>
                   <TableHead>Monthly credits</TableHead>
+                  <TableHead>Whop</TableHead>
                   <TableHead className="w-[220px]">Set plan</TableHead>
                   <TableHead className="w-[200px]">Credits &amp; access</TableHead>
                 </TableRow>
@@ -764,6 +765,7 @@ export default function AdminClient() {
                   // Scale (p49) is the unlimited tier.
                   const unlimited = active && u.plan === "p49";
                   const monthly = monthlyGrant(u);
+                  const whopId = u.whop_user_id || u.m_whop_user_id;
                   return (
                     <TableRow key={u.id}>
                       <TableCell>
@@ -787,6 +789,18 @@ export default function AdminClient() {
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {unlimited ? "Unlimited" : monthly != null ? `${monthly.toLocaleString()} / mo` : "Free grant"}
+                      </TableCell>
+                      <TableCell>
+                        {whopId ? (
+                          <code
+                            title={whopId}
+                            className="inline-block max-w-[10rem] truncate rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
+                          >
+                            {whopId}
+                          </code>
+                        ) : (
+                          <span className="text-xs text-muted-foreground/60">—</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">

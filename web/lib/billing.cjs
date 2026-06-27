@@ -440,50 +440,83 @@ async function consumeLeads(userId, n, meta = {}) {
   await consumeCredits(userId, n * LEAD_COST, { reason: "leads", count: n, project: meta.project });
 }
 
+// Look up a leadsfunda user by their stable Whop account id. The Whop user_id
+// is stamped on the FIRST successful grant — after that, every renewal hits
+// this index instead of falling back to a fuzzy email match.
+async function findUserByWhopUserId(whopUserId) {
+  if (!whopUserId) return null;
+  const { rows } = await pool().query(
+    `SELECT id FROM users WHERE whop_user_id = $1`,
+    [whopUserId]
+  );
+  return rows[0]?.id || null;
+}
+
+// Backfill users.whop_user_id (idempotent). Called by both the direct grant
+// path and the pending-grant reconciliation path. Safe to call with null.
+async function stampWhopUserId(userId, whopUserId) {
+  if (!userId || !whopUserId) return;
+  await pool().query(
+    `UPDATE users SET whop_user_id = $1
+       WHERE id = $2 AND whop_user_id IS NULL`,
+    [whopUserId, userId]
+  );
+}
+
 // Upsert a membership from a Whop webhook event (grant/renew). Resetting
 // credits_renewed_at to NULL makes the next read grant the new plan's monthly
-// credits immediately (handled by ensureCredits).
-async function grantMembership({ userId, whopMembershipId, whopPlanId, periodStart, periodEnd, resetUsage = true }) {
+// credits immediately (handled by ensureCredits). whopUserId is stamped on the
+// users row on first grant (idempotent) and mirrored to memberships for admin
+// lookups + future "switch Whop account" flows.
+async function grantMembership({ userId, whopMembershipId, whopPlanId, whopUserId, periodStart, periodEnd, resetUsage = true }) {
   const plan = planFromWhopId(whopPlanId);
   const quota = quotaForPlan(plan);
   const ts = now();
   await pool().query(
-    `INSERT INTO memberships (user_id, whop_membership_id, whop_plan_id, plan, status, leads_quota, leads_used, current_period_start, current_period_end, updated_at)
-     VALUES ($1, $2, $3, $4, 'active', $5, 0, $6, $7, $8)
+    `INSERT INTO memberships (user_id, whop_membership_id, whop_plan_id, whop_user_id, plan, status, leads_quota, leads_used, current_period_start, current_period_end, updated_at)
+     VALUES ($1, $2, $3, $4, $5, 'active', $6, 0, $7, $8, $9)
      ON CONFLICT (user_id) DO UPDATE SET
        whop_membership_id = EXCLUDED.whop_membership_id,
        whop_plan_id = EXCLUDED.whop_plan_id,
+       whop_user_id = COALESCE(EXCLUDED.whop_user_id, memberships.whop_user_id),
        plan = EXCLUDED.plan,
        status = 'active',
        leads_quota = EXCLUDED.leads_quota,
-       leads_used = CASE WHEN $9 THEN 0 ELSE memberships.leads_used END,
+       leads_used = CASE WHEN $10 THEN 0 ELSE memberships.leads_used END,
        credits_renewed_at = NULL,
        current_period_start = EXCLUDED.current_period_start,
        current_period_end = EXCLUDED.current_period_end,
        updated_at = EXCLUDED.updated_at`,
-    [userId, whopMembershipId, whopPlanId, plan, quota, periodStart || null, periodEnd || null, ts, resetUsage]
+    [userId, whopMembershipId, whopPlanId, whopUserId || null, plan, quota, periodStart || null, periodEnd || null, ts, resetUsage]
   );
+  // Backfill users.whop_user_id on first grant. After this returns, every
+  // future Whop webhook links by id, not by email.
+  if (whopUserId) await stampWhopUserId(userId, whopUserId);
   // Apply the plan's monthly credits right away.
   await ensureCredits(userId);
 }
 
-// Stash a grant we couldn't link yet (no user_id metadata + no matching user),
-// keyed by buyer email. Reconciled on that email's next sign-in.
-async function queuePendingGrant({ email, whopMembershipId, whopPlanId, periodStart, periodEnd }) {
+// Stash a grant we couldn't link yet (no metadata.user_id + no whop_user_id
+// match + no email match). Stored with the whop_user_id so we can backfill
+// it onto the users row at reconciliation time (stable link for future
+// renewals even if the buyer later changes their Google or Whop email).
+async function queuePendingGrant({ email, whopMembershipId, whopPlanId, whopUserId, periodStart, periodEnd }) {
   if (!email) return;
   await pool().query(
-    `INSERT INTO pending_grants (email, whop_membership_id, whop_plan_id, current_period_start, current_period_end, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
-    [email.toLowerCase(), whopMembershipId || null, whopPlanId || null, periodStart || null, periodEnd || null, now()]
+    `INSERT INTO pending_grants (email, whop_membership_id, whop_plan_id, whop_user_id, current_period_start, current_period_end, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [email.toLowerCase(), whopMembershipId || null, whopPlanId || null, whopUserId || null, periodStart || null, periodEnd || null, now()]
   );
 }
 
-// On sign-in, apply any pending grant(s) for this email then clear them. Returns
-// the number of grants applied. Safe to call on every sign-in.
+// On sign-in, apply any pending grant(s) for this email then clear them. Also
+// backfills users.whop_user_id from the matched grant (so future webhooks
+// link by id, not email). Returns the number of grants applied. Safe to call
+// on every sign-in.
 async function reconcilePendingGrants(userId, email) {
   if (!userId || !email) return 0;
   const { rows } = await pool().query(
-    `SELECT id, whop_membership_id, whop_plan_id, current_period_start, current_period_end
+    `SELECT id, whop_membership_id, whop_plan_id, whop_user_id, current_period_start, current_period_end
        FROM pending_grants WHERE email = $1 ORDER BY created_at ASC`,
     [email.toLowerCase()]
   );
@@ -492,6 +525,7 @@ async function reconcilePendingGrants(userId, email) {
       userId,
       whopMembershipId: g.whop_membership_id,
       whopPlanId: g.whop_plan_id,
+      whopUserId: g.whop_user_id || undefined,
       periodStart: g.current_period_start,
       periodEnd: g.current_period_end,
     });
@@ -545,8 +579,10 @@ async function revokeForUser(userId) {
 async function listUsersWithEntitlement(limit = 500) {
   const { rows } = await pool().query(
     `SELECT u.id, u.email, u.name, u.image, u.created_at, u.banned,
+            u.whop_user_id,
             m.plan, m.status, m.leads_quota, m.leads_used,
-            m.credits, m.credits_monthly, m.current_period_end
+            m.credits, m.credits_monthly, m.current_period_end,
+            m.whop_membership_id, m.whop_plan_id, m.whop_user_id AS m_whop_user_id
        FROM users u
        LEFT JOIN memberships m ON m.user_id = u.id
       ORDER BY u.created_at DESC NULLS LAST, u.email ASC
@@ -678,6 +714,8 @@ module.exports = {
   revokeMembershipByWhopId,
   queuePendingGrant,
   reconcilePendingGrants,
+  findUserByWhopUserId,
+  stampWhopUserId,
   setPlanForUser,
   revokeForUser,
   listUsersWithEntitlement,
