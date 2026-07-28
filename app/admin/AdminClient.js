@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Loader2, RefreshCw, Search, ShieldCheck, Users, Crown, LogOut, Network, Plus, Trash2 } from "lucide-react";
+import { Loader2, RefreshCw, Search, ShieldCheck, Users, Crown, LogOut, Network, Plus, Trash2, Database, Globe, MapPin } from "lucide-react";
 import { Card, CardContent } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
@@ -166,6 +166,116 @@ function StatCard({ icon: Icon, value, label }) {
   );
 }
 
+// How much scraped data the warehouse holds, broken down by country and city.
+function WarehouseStats() {
+  const [stats, setStats] = useState(null);
+  const [citySearch, setCitySearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setErr("");
+    try {
+      setStats(await jsonFetch("/api/admin/warehouse-stats"));
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (err) {
+    return (
+      <Card>
+        <CardContent className="p-4 text-sm text-red-600">Couldn't load warehouse stats: {err}</CardContent>
+      </Card>
+    );
+  }
+
+  const countries = stats?.countries || [];
+  const q = citySearch.trim().toLowerCase();
+  const cities = (stats?.cities || []).filter(
+    (c) => !q || c.city.toLowerCase().includes(q) || c.country.toLowerCase().includes(q)
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-3 sm:max-w-xl">
+        <StatCard icon={Database} value={loading ? "…" : Number(stats?.total || 0).toLocaleString()} label="Total leads" />
+        <StatCard icon={Globe} value={loading ? "…" : countries.length} label="Countries" />
+        <StatCard icon={MapPin} value={loading ? "…" : (stats?.cities || []).length} label="Cities" />
+      </div>
+
+      <Card className="overflow-hidden">
+        <CardContent className="p-4 pb-0">
+          <h3 className="text-sm font-semibold">By country</h3>
+        </CardContent>
+        {!countries.length ? (
+          <div className="p-10 text-center text-sm text-muted-foreground">{loading ? "Loading…" : "No data yet."}</div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Country</TableHead>
+                <TableHead>Cities</TableHead>
+                <TableHead>Leads</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {countries.map((c) => (
+                <TableRow key={c.country}>
+                  <TableCell className="font-medium">{c.country}</TableCell>
+                  <TableCell className="text-muted-foreground">{c.cities}</TableCell>
+                  <TableCell>{c.leads.toLocaleString()}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </Card>
+
+      <Card className="overflow-hidden">
+        <CardContent className="space-y-3 p-4 pb-0">
+          <h3 className="text-sm font-semibold">By city</h3>
+          <div className="relative max-w-xs">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input placeholder="Filter by city or country…" value={citySearch} onChange={(e) => setCitySearch(e.target.value)} className="pl-9" />
+          </div>
+        </CardContent>
+        {!cities.length ? (
+          <div className="p-10 text-center text-sm text-muted-foreground">{loading ? "Loading…" : "No matching cities."}</div>
+        ) : (
+          <div className="max-h-96 overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>City</TableHead>
+                  <TableHead>Country</TableHead>
+                  <TableHead>Leads</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {cities.map((c) => (
+                  <TableRow key={`${c.country}-${c.city}`}>
+                    <TableCell className="font-medium">{c.city}</TableCell>
+                    <TableCell className="text-muted-foreground">{c.country}</TableCell>
+                    <TableCell>{c.leads.toLocaleString()}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 export default function AdminClient() {
   const router = useRouter();
   const [users, setUsers] = useState([]);
@@ -242,6 +352,12 @@ export default function AdminClient() {
 
       <main className="mx-auto max-w-6xl space-y-4 p-4 sm:p-6">
         <div>
+          <h1 className="text-xl font-semibold">Warehouse data</h1>
+          <p className="text-sm text-muted-foreground">Scraped leads currently held, by country and city.</p>
+        </div>
+        <WarehouseStats />
+
+        <div className="pt-2">
           <h1 className="text-xl font-semibold">Manage user plans</h1>
           <p className="text-sm text-muted-foreground">Grant, change or revoke a plan for any account. Changes apply immediately.</p>
         </div>
