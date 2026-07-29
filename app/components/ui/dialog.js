@@ -1,5 +1,6 @@
 "use client";
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "../../lib/utils";
 
@@ -28,7 +29,16 @@ function Dialog({ open, onOpenChange, children }) {
 
 const DialogContent = React.forwardRef(({ className, children, showClose = true, ...props }, ref) => {
   const { onOpenChange } = React.useContext(DialogCtx);
-  return (
+  // Rendered inline (no portal) this div's position:fixed would be hijacked by
+  // any ancestor that later picks up a transform/filter/backdrop-filter (the
+  // sidebar/header already use backdrop-blur), landing the dialog in the wrong
+  // spot or off-screen depending on where the trigger happened to live in the
+  // tree. Portaling to <body> makes centering immune to that regardless of caller.
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
+
+  return createPortal(
     <div className="lf fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm animate-in fade-in-0"
@@ -39,7 +49,10 @@ const DialogContent = React.forwardRef(({ className, children, showClose = true,
         role="dialog"
         aria-modal="true"
         className={cn(
-          "relative z-10 flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-2xl",
+          // dvh (not vh) tracks the real visible viewport — on mobile Safari with
+          // the address bar showing, 90vh can exceed what's actually visible and
+          // push the dialog off-screen.
+          "relative z-10 flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-2xl",
           className
         )}
         {...props}
@@ -56,7 +69,8 @@ const DialogContent = React.forwardRef(({ className, children, showClose = true,
         )}
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 });
 DialogContent.displayName = "DialogContent";
