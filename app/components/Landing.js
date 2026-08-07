@@ -225,17 +225,88 @@ function Eyebrow({ icon: Icon = Sparkles, children }) {
 
 function Stars({ className = "h-3.5 w-3.5" }) {
   return (
-    <div className="flex items-center gap-0.5 text-amber-400">
+    <div className="flex items-center gap-0.5 text-gold">
       {[0, 1, 2, 3, 4].map((i) => <Star key={i} className={`${className} fill-current`} />)}
     </div>
   );
 }
 
+// Hand-drawn underline under the last word of the headline.
+//
+// Drawn rather than a straight border because a ruled line under a display
+// heading reads as a text link. The stroke tapers — two curves filled, not one
+// stroked path — so it keeps the marker-pen quality at any width.
+function Swoosh({ className = "" }) {
+  return (
+    <svg
+      viewBox="0 0 120 12"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+      className={className}
+    >
+      <path
+        d="M2.5 8.6c18-4.6 40-6.6 60-6.6s39 2.3 57.2 6.2c-19-2-38-3-57-3s-40.4 1.3-60.2 3.4z"
+        fill="hsl(var(--gold-soft))"
+      />
+    </svg>
+  );
+}
+
+// The soft geometry behind the hero: a warm wash top-right, faint concentric
+// rings bleeding off the left edge, two dot grids and one gold tile.
+//
+// All of it is pointer-events-none and aria-hidden — it is texture, and it must
+// never intercept a click meant for the search box sitting on top of it.
+function HeroDecor() {
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+    >
+      {/* Warm wash, top right. */}
+      <div className="absolute -right-40 -top-56 h-[30rem] w-[30rem] rounded-full bg-gold-tint/45 blur-3xl" />
+      {/* Concentric rings, running off the left edge. */}
+      <svg
+        className="absolute -left-[19rem] top-16 hidden h-[30rem] w-[30rem] text-gold-soft/25 md:block"
+        viewBox="0 0 400 400"
+        fill="none"
+      >
+        {[110, 150, 190, 230].map((r) => (
+          <circle key={r} cx="200" cy="200" r={r} stroke="currentColor" strokeWidth="1" />
+        ))}
+      </svg>
+      {/* Dot grids: one left of the headline, one right. */}
+      <DotGrid className="absolute left-[15%] top-[27%] hidden text-muted-foreground/25 lg:block" cols={3} rows={3} />
+      <DotGrid className="absolute right-[9%] top-[25%] hidden text-gold/45 xl:block" cols={6} rows={4} />
+      {/* Single gold tile. */}
+      <div className="absolute left-[2.5%] top-[27%] hidden h-10 w-10 rotate-[8deg] rounded-xl bg-gold-tint lg:block" />
+      <div className="absolute left-[13.5%] top-[34%] hidden h-4 w-4 rounded-md bg-gold-tint lg:block" />
+    </div>
+  );
+}
+
+function DotGrid({ className = "", cols = 4, rows = 3 }) {
+  return (
+    <svg
+      className={className}
+      width={cols * 20}
+      height={rows * 20}
+      aria-hidden="true"
+    >
+      {Array.from({ length: rows }).map((_, r) =>
+        Array.from({ length: cols }).map((_, c) => (
+          <circle key={`${r}-${c}`} cx={c * 20 + 2} cy={r * 20 + 2} r="2" fill="currentColor" />
+        )),
+      )}
+    </svg>
+  );
+}
+
 function AvatarStack() {
   return (
-    <div className="flex -space-x-2.5">
+    <div className="flex -space-x-3">
       {FACES.slice(0, 3).map((src) => (
-        <Image key={src} src={src} alt="" width={32} height={32} className="h-8 w-8 rounded-full border-2 border-background object-cover shadow-sm" />
+        <Image key={src} src={src} alt="" width={32} height={32} className="h-10 w-10 rounded-full border-2 border-card object-cover shadow-sm" />
       ))}
     </div>
   );
@@ -283,15 +354,15 @@ function FloatCard({ className = "", delay = 0, children }) {
 
 function HeroApp() {
   return (
-    <div className="container relative max-w-5xl pb-8">
+    <div className="container relative max-w-[74.5rem] pb-8">
       {/* lime glow under the window */}
-      <div className="pointer-events-none absolute -inset-x-10 -bottom-10 top-10 -z-10 rounded-[3rem] bg-gradient-to-tr from-primary/20 via-violet-400/15 to-[#a2e435]/30 blur-3xl" />
+      <div className="pointer-events-none absolute -inset-x-10 -bottom-10 top-10 -z-10 rounded-[3rem] bg-gradient-to-tr from-primary/15 via-gold-tint/60 to-gold/25 blur-3xl" />
 
       {/* floating overlap cards */}
-      <FloatCard className="-left-10 top-28 w-60" delay={0}>
+      <FloatCard className="-left-14 top-[58%] w-60" delay={0}>
         <div className="text-xs font-semibold text-muted-foreground">Credits this month</div>
         <div className="mt-3 space-y-3">
-          {[{ l: "Searches", p: "62%", c: "bg-primary" }, { l: "Leads", p: "48%", c: "bg-[#7cc20a]" }].map((b) => (
+          {[{ l: "Searches", p: "62%", c: "bg-primary" }, { l: "Leads", p: "48%", c: "bg-[#e0a412]" }].map((b) => (
             <div key={b.l}>
               <div className="flex justify-between text-[11px] text-muted-foreground"><span>{b.l}</span></div>
               <div className="mt-1 h-1.5 w-full rounded-full bg-muted">
@@ -312,10 +383,10 @@ function HeroApp() {
           </div>
         </div>
         <div className="mt-3 flex items-center gap-1.5 text-xs">
-          <Mail className="h-3.5 w-3.5 text-violet-600" /><span className="truncate text-foreground">hello@capitalroofing.co</span>
+          <Mail className="h-3.5 w-3.5 text-primary" /><span className="truncate text-foreground">hello@capitalroofing.co</span>
         </div>
         <div className="mt-3 flex flex-wrap gap-1.5">
-          {[{ t: "No SSL", c: "bg-rose-500/10 text-rose-600" }, { t: "Slow site", c: "bg-amber-500/10 text-amber-600" }, { t: "No chatbot", c: "bg-violet-500/10 text-violet-600" }].map((tag) => (
+          {[{ t: "No SSL", c: "bg-rose-500/10 text-rose-600" }, { t: "Slow site", c: "bg-amber-500/10 text-amber-600" }, { t: "No chatbot", c: "bg-sky-500/10 text-sky-700" }].map((tag) => (
             <span key={tag.t} className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${tag.c}`}>{tag.t}</span>
           ))}
         </div>
@@ -364,8 +435,8 @@ function HeroApp() {
           <div className="min-w-0 flex-1 p-5">
             <div className="flex items-center justify-between">
               <div className="font-heading text-base font-bold">Find leads</div>
-              <span className="hidden items-center gap-1.5 rounded-full bg-[#a2e435]/20 px-2.5 py-1 text-[11px] font-semibold text-[#3a6b00] sm:inline-flex">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#7cc20a]" /> 6 jobs included
+              <span className="hidden items-center gap-1.5 rounded-full bg-[#fec32a]/20 px-2.5 py-1 text-[11px] font-semibold text-[#7a4a00] sm:inline-flex">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#e0a412]" /> 6 jobs included
               </span>
             </div>
             {/* search bar */}
@@ -378,13 +449,13 @@ function HeroApp() {
             <div className="mt-4 space-y-2">
               {SCRAPE_FEED.map((r) => (
                 <div key={r.n} className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-background px-3 py-2.5 text-xs shadow-sm">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600"><Building2 className="h-3.5 w-3.5" /></span>
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><Building2 className="h-3.5 w-3.5" /></span>
                   <div className="min-w-0">
                     <div className="truncate font-semibold text-foreground">{r.n}</div>
                     <div className="flex items-center gap-1 text-[11px] text-muted-foreground"><Phone className="h-3 w-3" /> {r.m}</div>
                   </div>
                   <div className="ml-auto flex shrink-0 items-center gap-1.5">
-                    <span className="flex items-center gap-0.5 text-amber-500"><Star className="h-3 w-3 fill-current" />{r.r}</span>
+                    <span className="flex items-center gap-0.5 text-gold"><Star className="h-3 w-3 fill-current" />{r.r}</span>
                     {r.bad
                       ? <span className="rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold text-rose-600">No site</span>
                       : <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">Live</span>}
@@ -457,7 +528,7 @@ function EnrichChat() {
 function Sparkline() {
   return (
     <svg viewBox="0 0 120 36" className="h-9 w-28">
-      <path d="M0,30 L14,22 L26,26 L40,12 L54,18 L68,8 L82,16 L96,5 L120,2" fill="none" stroke="#7cc20a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M0,30 L14,22 L26,26 L40,12 L54,18 L68,8 L82,16 L96,5 L120,2" fill="none" stroke="#e0a412" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -478,7 +549,7 @@ function StepMock({ step }) {
         <div className="mt-4 text-xs font-semibold text-foreground">City</div>
         <div className="mt-2 flex flex-wrap gap-2">
           {["Austin, TX", "Miami, FL", "Denver, CO", "Phoenix, AZ"].map((s, i) => (
-            <span key={s} className={`rounded-lg px-3 py-1.5 text-xs font-medium ${i === 0 ? "bg-[#a2e435]/25 text-[#3a6b00]" : "border border-border bg-card text-muted-foreground"}`}>{s}</span>
+            <span key={s} className={`rounded-lg px-3 py-1.5 text-xs font-medium ${i === 0 ? "bg-[#fec32a]/25 text-[#7a4a00]" : "border border-border bg-card text-muted-foreground"}`}>{s}</span>
           ))}
         </div>
         <div className="mt-5 flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 shadow-sm">
@@ -503,12 +574,12 @@ function StepMock({ step }) {
           {[{ l: "Businesses found", p: "100%", v: "1,284" }, { l: "Emails enriched", p: "71%", v: "912" }, { l: "WhatsApp detected", p: "27%", v: "347" }].map((b) => (
             <div key={b.l}>
               <div className="flex justify-between text-xs text-muted-foreground"><span>{b.l}</span><span className="font-semibold text-foreground">{b.v}</span></div>
-              <div className="mt-1 h-2 w-full rounded-full bg-muted"><div className="h-2 rounded-full bg-gradient-to-r from-primary to-violet-500" style={{ width: b.p }} /></div>
+              <div className="mt-1 h-2 w-full rounded-full bg-muted"><div className="h-2 rounded-full bg-gradient-to-r from-primary to-[#0a7a5c]" style={{ width: b.p }} /></div>
             </div>
           ))}
         </div>
         <div className="mt-5 flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs text-muted-foreground shadow-sm">
-          <Mail className="h-3.5 w-3.5 text-violet-600" /> office@hillcountryhvac.com
+          <Mail className="h-3.5 w-3.5 text-primary" /> office@hillcountryhvac.com
           <MessageCircle className="ml-auto h-3.5 w-3.5 text-emerald-600" />
         </div>
       </div>
@@ -518,10 +589,10 @@ function StepMock({ step }) {
     <div className="p-6">
       <div className="flex items-center justify-between">
         <div className="font-heading text-sm font-bold">Pipeline</div>
-        <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#a2e435]/25 px-2.5 py-1 text-xs font-semibold text-[#3a6b00]"><FileSpreadsheet className="h-3.5 w-3.5" /> Export CSV</span>
+        <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#fec32a]/25 px-2.5 py-1 text-xs font-semibold text-[#7a4a00]"><FileSpreadsheet className="h-3.5 w-3.5" /> Export CSV</span>
       </div>
       <div className="mt-4 space-y-2">
-        {[{ n: "Hill Country HVAC", s: "Contacted", c: "bg-sky-500/10 text-sky-600" }, { n: "Barton Electric", s: "Replied", c: "bg-emerald-500/10 text-emerald-600" }, { n: "Capital Roofing", s: "To call", c: "bg-amber-500/10 text-amber-600" }, { n: "Lone Star Plumbing", s: "Won", c: "bg-[#a2e435]/30 text-[#3a6b00]" }].map((r) => (
+        {[{ n: "Hill Country HVAC", s: "Contacted", c: "bg-sky-500/10 text-sky-600" }, { n: "Barton Electric", s: "Replied", c: "bg-emerald-500/10 text-emerald-600" }, { n: "Capital Roofing", s: "To call", c: "bg-amber-500/10 text-amber-600" }, { n: "Lone Star Plumbing", s: "Won", c: "bg-[#fec32a]/30 text-[#7a4a00]" }].map((r) => (
           <div key={r.n} className="flex items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2 text-xs shadow-sm">
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
             <span className="truncate font-medium text-foreground">{r.n}</span>
@@ -541,7 +612,7 @@ function PriceCard({ plan, signedIn }) {
   const dark = plan.style === "dark";
 
   const shell = blue
-    ? "border-transparent bg-gradient-to-b from-primary to-violet-700 text-white shadow-2xl shadow-primary/30"
+    ? "border-transparent bg-gradient-to-b from-[#05604a] to-primary text-white shadow-2xl shadow-primary/30"
     : dark
       ? "border-transparent bg-[#0a0e1a] text-white"
       : "border-border bg-card";
@@ -549,7 +620,7 @@ function PriceCard({ plan, signedIn }) {
   const tile = blue ? "bg-white/15 text-white" : dark ? "bg-white/10 text-white" : "bg-primary/10 text-primary";
   const per = blue ? "text-white/75" : dark ? "text-white/60" : "text-muted-foreground";
   const rule = blue || dark ? "bg-white/15" : "bg-border";
-  const checkWrap = blue ? "bg-white/20 text-white" : dark ? "bg-white/10 text-[#a2e435]" : "bg-[#a2e435]/30 text-[#3a6b00]";
+  const checkWrap = blue ? "bg-white/20 text-white" : dark ? "bg-white/10 text-[#fec32a]" : "bg-[#fec32a]/30 text-[#7a4a00]";
   const perkText = blue ? "text-white/90" : dark ? "text-white/70" : "text-muted-foreground";
 
   const btnClass = blue ? "lf-cta bg-white text-primary hover:bg-white/90"
@@ -559,7 +630,7 @@ function PriceCard({ plan, signedIn }) {
   return (
     <div className={`relative flex h-full flex-col rounded-3xl border p-6 transition-all duration-300 hover:-translate-y-1.5 ${shell} ${blue ? "lg:-mt-4 lg:mb-4" : ""}`}>
       {plan.popular && (
-        <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[#a2e435] px-3 py-1 text-xs font-semibold text-[#23420a] shadow-lg">Most popular</span>
+        <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[#fec32a] px-3 py-1 text-xs font-semibold text-[#4a2f00] shadow-lg">Most popular</span>
       )}
       <div className={`mb-4 flex h-10 w-10 items-center justify-center rounded-xl ${tile}`}><Icon className="h-5 w-5" /></div>
       <div className="font-heading text-lg font-bold">{plan.name}</div>
@@ -682,26 +753,26 @@ export default function Landing({ recent = [], total = 0 }) {
   const { signedIn, label: me } = useSignedIn();
 
   return (
-    <div className={`lf relative min-h-screen overflow-x-clip bg-background text-foreground ${HATCH}`}>
+    <div className="lf relative min-h-screen overflow-x-clip bg-background text-foreground">
       {/* ambient colourful blobs */}
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-        <div className="absolute -left-40 -top-40 h-[34rem] w-[34rem] rounded-full bg-primary/12 blur-3xl" />
-        <div className="absolute -right-48 top-40 h-[30rem] w-[30rem] rounded-full bg-violet-400/12 blur-3xl" />
-        <div className="absolute left-1/3 top-[48rem] h-[26rem] w-[26rem] rounded-full bg-[#a2e435]/12 blur-3xl" />
+        <div className="absolute -left-40 -top-40 h-[34rem] w-[34rem] rounded-full bg-primary/[0.07] blur-3xl" />
+        <div className="absolute -right-48 top-40 h-[30rem] w-[30rem] rounded-full bg-gold-tint/60 blur-3xl" />
+        <div className="absolute left-1/3 top-[48rem] h-[26rem] w-[26rem] rounded-full bg-[#fec32a]/12 blur-3xl" />
       </div>
 
       {/* ---- nav ---- */}
       <header className="sticky top-3 z-40 px-4">
         <div className="container relative">
-          <div className="flex h-14 items-center justify-between rounded-full border border-border/70 bg-background/80 px-3 pl-5 shadow-sm backdrop-blur-xl">
+          <div className="flex h-16 items-center justify-between rounded-[1.75rem] border border-border/50 bg-card/95 px-3 pl-6 shadow-[0_4px_24px_-8px_rgba(1,59,47,0.14)] backdrop-blur-xl sm:h-[4.5rem]">
             <Logo />
-            <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 text-sm font-medium md:flex">
+            <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 text-[0.95rem] font-medium md:flex">
               {NAV.map((n) => (
-                <a key={n.href} href={n.href} className="rounded-full px-3 py-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">{n.label}</a>
+                <a key={n.href} href={n.href} className="rounded-full px-3.5 py-1.5 text-foreground/70 transition-colors hover:bg-muted hover:text-foreground">{n.label}</a>
               ))}
             </nav>
             <div className="flex items-center gap-2">
-              <Cta signedIn={signedIn} size="sm" className="lf-cta rounded-xl hidden sm:inline-flex" signedInLabel="Dashboard">Get started</Cta>
+              <Cta signedIn={signedIn} className="hidden h-11 rounded-xl px-5 text-[0.95rem] font-semibold sm:inline-flex" signedInLabel="Dashboard">Get started</Cta>
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground md:hidden hover:bg-muted transition-colors"
@@ -745,33 +816,37 @@ export default function Landing({ recent = [], total = 0 }) {
         but they are sized to keep the search box above the fold.
       */}
       <section className="relative px-4">
-        <div className="container flex flex-col items-center pb-10 pt-14 text-center sm:pt-20">
-          <span className="lf-shine mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-1.5 text-sm font-medium text-foreground/80 shadow-sm">
+        <HeroDecor />
+        <div className="container relative z-10 flex flex-col items-center pb-10 pt-10 text-center sm:pt-14">
+          <span className="mb-5 inline-flex max-w-full items-center gap-2 rounded-full bg-muted px-4 py-2 text-center text-sm font-medium text-foreground/75">
             <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#a2e435] opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-[#7cc20a]" />
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-70" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-600" />
             </span>
             Live local search — no account needed
           </span>
-          <h1 className="font-heading max-w-3xl text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl xl:text-6xl">
-            Find your next customers in{" "}
-            <span className="relative text-primary sm:whitespace-nowrap">
-              any city
-              <span className="hidden sm:block absolute -bottom-1.5 left-0 h-[6px] w-full rounded-full bg-gradient-to-r from-primary/25 via-[#a2e435]/40 to-[#a2e435]/15" />
+          {/* Two lines, always: the break is authored rather than left to the
+              container, because "in any city" is the half that carries the
+              colour and the underline and it has to stay whole. */}
+          <h1 className="font-heading max-w-[19ch] text-[2.4rem] font-bold leading-[1.08] tracking-[-0.022em] sm:text-[3.2rem] xl:text-[3.85rem]">
+            Find your next customers{" "}
+            <span className="relative inline-block whitespace-nowrap text-primary">
+              in any city
+              <Swoosh className="absolute -bottom-2.5 right-0 h-[0.7rem] w-[41%]" />
             </span>
           </h1>
-          <p className="mt-5 max-w-xl text-lg text-muted-foreground">
-            Pick a niche and a city below. You get the businesses, their ratings and
-            their contact details — emails, socials and WhatsApp — as one list you can export.
+          <p className="mt-6 max-w-[34.5rem] text-[1.075rem] leading-[1.7] text-muted-foreground">
+            Pick a niche and a city. You get the businesses, their ratings and
+            contact details — emails, socials and WhatsApp — as one list you can export.
           </p>
 
           <PublicSearch signedIn={signedIn} />
 
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-5 gap-y-3">
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
             <AvatarStack />
             <span className="text-sm text-muted-foreground">Trusted by <span className="font-semibold text-foreground">2,400+</span> marketers</span>
-            <span className="flex items-center gap-1.5"><Stars /> <span className="text-sm font-semibold text-foreground">5.0</span></span>
-            <a href="#how" className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground underline decoration-dotted underline-offset-4 transition-colors hover:text-foreground">
+            <span className="flex items-center gap-2"><Stars className="h-4 w-4" /> <span className="text-sm font-semibold text-foreground">5.0</span></span>
+            <a href="#how" className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground underline underline-offset-[6px] decoration-border transition-colors hover:decoration-foreground">
               See how it works <ArrowRight className="h-3.5 w-3.5" />
             </a>
           </div>
@@ -783,10 +858,10 @@ export default function Landing({ recent = [], total = 0 }) {
       {/* ---- trust strip ---- */}
       <section className="border-y border-border/60 bg-card/40 backdrop-blur">
         <div className="container flex flex-wrap items-center justify-center gap-x-10 gap-y-3 py-6 text-sm text-muted-foreground">
-          <span className="flex items-center gap-2"><Globe2 className="h-4 w-4 text-blue-600" /> Real-Chrome website audits</span>
-          <span className="flex items-center gap-2"><MessageCircle className="h-4 w-4 text-emerald-600" /> WhatsApp detection</span>
-          <span className="flex items-center gap-2"><Mail className="h-4 w-4 text-violet-600" /> Email + social enrichment</span>
-          <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-rose-600" /> Private &amp; isolated data</span>
+          <span className="flex items-center gap-2"><Globe2 className="h-4 w-4 text-primary" /> Real-Chrome website audits</span>
+          <span className="flex items-center gap-2"><MessageCircle className="h-4 w-4 text-primary" /> WhatsApp detection</span>
+          <span className="flex items-center gap-2"><Mail className="h-4 w-4 text-[#b8860b]" /> Email + social enrichment</span>
+          <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-primary" /> Private &amp; isolated data</span>
         </div>
       </section>
 
@@ -872,7 +947,7 @@ export default function Landing({ recent = [], total = 0 }) {
             <div className="space-y-2">
               {SCRAPE_FEED.slice(0, 3).map((r) => (
                 <div key={r.n} className="flex items-center gap-2 rounded-xl border border-border bg-background px-2.5 py-1.5 text-[11px] shadow-sm">
-                  <Building2 className="h-3.5 w-3.5 text-blue-600" /><span className="truncate font-medium text-foreground">{r.n}</span>
+                  <Building2 className="h-3.5 w-3.5 text-primary" /><span className="truncate font-medium text-foreground">{r.n}</span>
                   <span className="ml-auto text-muted-foreground">{r.m}</span>
                 </div>
               ))}
@@ -881,7 +956,7 @@ export default function Landing({ recent = [], total = 0 }) {
 
           <Reveal delay={90} className="lg:col-span-2"><BentoCell icon={Mail} tile="bg-violet-500/10 text-violet-600" title="Enrich every contact" body="Emails, socials and WhatsApp crawled from each business's own website.">
             <div className="flex flex-wrap gap-2">
-              {[{ t: "Email", c: "bg-violet-500/10 text-violet-600" }, { t: "WhatsApp", c: "bg-emerald-500/10 text-emerald-600" }, { t: "Instagram", c: "bg-rose-500/10 text-rose-600" }, { t: "Facebook", c: "bg-blue-500/10 text-blue-600" }, { t: "LinkedIn", c: "bg-sky-500/10 text-sky-600" }].map((s) => (
+              {[{ t: "Email", c: "bg-violet-500/10 text-violet-600" }, { t: "WhatsApp", c: "bg-emerald-500/10 text-emerald-600" }, { t: "Instagram", c: "bg-rose-500/10 text-rose-600" }, { t: "Facebook", c: "bg-primary/10 text-primary" }, { t: "LinkedIn", c: "bg-sky-500/10 text-sky-600" }].map((s) => (
                 <span key={s.t} className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold ${s.c}`}>{s.t}</span>
               ))}
             </div>
@@ -908,7 +983,7 @@ export default function Landing({ recent = [], total = 0 }) {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="flex items-center justify-between rounded-xl border border-border bg-background px-3 py-3">
                 <div><div className="text-[11px] text-muted-foreground">Leads today</div><div className="font-heading text-xl font-bold text-foreground">2,400 <span className="text-xs font-semibold text-emerald-600">+10%</span></div></div>
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#a2e435]/25 text-[#3a6b00]"><TrendingUp className="h-4 w-4" /></span>
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#fec32a]/25 text-[#7a4a00]"><TrendingUp className="h-4 w-4" /></span>
               </div>
               <div className="flex items-center gap-2.5 rounded-xl border border-border bg-background px-3 py-3">
                 <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary"><Bell className="h-4 w-4" /></span>
@@ -941,7 +1016,7 @@ export default function Landing({ recent = [], total = 0 }) {
               const active = step === i;
               return (
                 <button key={s.n} onClick={() => setStep(i)} className={`group relative flex w-full items-start gap-4 rounded-2xl border p-5 text-left transition-all ${active ? "border-border bg-card shadow-xl shadow-primary/5" : "border-transparent hover:bg-card/60"}`}>
-                  {active && <span className="absolute inset-x-5 top-0 h-1 rounded-full bg-gradient-to-r from-primary to-violet-500" />}
+                  {active && <span className="absolute inset-x-5 top-0 h-1 rounded-full bg-gradient-to-r from-primary to-[#0a7a5c]" />}
                   <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}><s.icon className="h-5 w-5" /></span>
                   <span>
                     <span className="font-heading flex items-center gap-2 text-lg font-bold">{s.title}</span>
@@ -1035,9 +1110,9 @@ export default function Landing({ recent = [], total = 0 }) {
 
       {/* ---- cta banner ---- */}
       <section className="container py-20">
-        <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-primary via-violet-600 to-fuchsia-600 px-6 py-16 text-center text-white">
+        <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-primary via-[#04503f] to-[#046a50] px-6 py-16 text-center text-white">
           <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10 blur-2xl" />
-          <div className="pointer-events-none absolute -bottom-20 -left-10 h-56 w-56 rounded-full bg-[#a2e435]/25 blur-2xl" />
+          <div className="pointer-events-none absolute -bottom-20 -left-10 h-56 w-56 rounded-full bg-gold/15 blur-3xl" />
           <h2 className="font-heading mx-auto max-w-xl text-3xl font-bold sm:text-4xl">Ready to build your lead list?</h2>
           <p className="mx-auto mt-3 max-w-lg text-white/80">Sign in with Google and run your first scrape in minutes.</p>
           <div className="mt-7 flex justify-center">

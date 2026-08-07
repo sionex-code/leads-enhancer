@@ -18,7 +18,7 @@ function makeCenterIcon(L) {
     popupAnchor: [0, -36],
     html: `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="38" viewBox="0 0 28 38">
       <path d="M14 0C6.27 0 0 6.27 0 14c0 9.63 14 24 14 24S28 23.63 28 14C28 6.27 21.73 0 14 0z"
-        fill="#7c4dff" stroke="#fff" stroke-width="1.5"/>
+        fill="#0a7a5c" stroke="#fff" stroke-width="1.5"/>
       <circle cx="14" cy="14" r="5" fill="#fff"/>
     </svg>`,
   });
@@ -84,9 +84,9 @@ export default function LeadsMap({
     // Circle
     const circle = L.circle([lat, lng], {
       radius: radiusKm * 1000,
-      color: "#7c4dff",
+      color: "#0a7a5c",
       weight: 2,
-      fillColor: "#7c4dff",
+      fillColor: "#0a7a5c",
       fillOpacity: 0.08,
     }).addTo(map);
     circleRef.current = circle;
@@ -165,9 +165,9 @@ export default function LeadsMap({
 
       const pin = L.circleMarker([lat, lng], {
         radius: 5,
-        color: "#7c4dff",
+        color: "#0a7a5c",
         weight: 1.5,
-        fillColor: "#7c4dff",
+        fillColor: "#0a7a5c",
         fillOpacity: 0.7,
       });
 

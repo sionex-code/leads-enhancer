@@ -9,7 +9,7 @@ export default {
     container: {
       center: true,
       padding: "1.5rem",
-      screens: { "2xl": "1200px" },
+      screens: { "2xl": "1340px" },  // 1340 - 48 padding = the 1292px content column the design uses
     },
     extend: {
       fontFamily: {
@@ -48,6 +48,16 @@ export default {
         popover: {
           DEFAULT: "hsl(var(--popover))",
           foreground: "hsl(var(--popover-foreground))",
+        },
+        // The gold accent, in the three strengths the design actually uses.
+        // Registered as a colour (not just a CSS var) so fill-, stroke- and
+        // from-/via-/to- utilities generate for it — the underline flourish and
+        // the hero wash both need those, and Tailwind won't emit them for a
+        // bare var.
+        gold: {
+          DEFAULT: "hsl(var(--gold))",
+          soft: "hsl(var(--gold-soft))",
+          tint: "hsl(var(--gold-tint))",
         },
       },
       borderRadius: {

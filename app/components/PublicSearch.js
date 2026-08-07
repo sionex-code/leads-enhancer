@@ -1,7 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, MapPin, Loader2, Puzzle, Star, ArrowRight, Square, Download, Check } from "lucide-react";
+import {
+  Search,
+  MapPin,
+  Loader2,
+  Puzzle,
+  Star,
+  ArrowRight,
+  Square,
+  Download,
+  Check,
+  Briefcase,
+  Globe,
+  ChevronDown,
+} from "lucide-react";
 import { detectExtension, scrapeWithExtension } from "../lib/extension-client";
 import { cn } from "../lib/utils";
 
@@ -25,6 +38,12 @@ const RADIUS_KM = 12;
 // the bar so it never restarts at zero.
 const SEARCH_SHARE = 0.7;
 
+// The catalog stores services lowercase ("general contractor"). Sentence case
+// in a control that sits at the top of the page reads as unfinished, so they
+// are cased for display only — the value posted is still the catalog's.
+const titleCase = (s) =>
+  String(s || "").replace(/\b\p{L}/gu, (c) => c.toUpperCase());
+
 function maskEmail(email) {
   const s = String(email || "");
   const at = s.indexOf("@");
@@ -47,17 +66,32 @@ function maskWebsite(site) {
   return s.slice(0, Math.min(4, dot)) + "•••" + s.slice(dot);
 }
 
-function Field({ label, children }) {
+// A labelled select that carries its own icon.
+//
+// The icon sits in the padding, not in the flow, and the native chevron is
+// suppressed for a drawn one — a bare <select> renders three different control
+// shapes across Chrome, Safari and Firefox, and the row has to look like one
+// designed component in all of them. It is still a real <select>, so the
+// keyboard, the mobile wheel picker and screen readers all behave normally.
+function Field({ label, icon: Icon, children, ...selectProps }) {
   return (
-    <label className="flex min-w-0 flex-1 flex-col gap-1.5">
-      <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</span>
-      {children}
+    <label className="flex min-w-0 flex-1 flex-col gap-2">
+      <span className="text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+        {label}
+      </span>
+      <span className="relative block">
+        <Icon className="pointer-events-none absolute left-3.5 top-1/2 h-[1.05rem] w-[1.05rem] -translate-y-1/2 text-muted-foreground" />
+        <select
+          {...selectProps}
+          className="h-[3.25rem] w-full appearance-none rounded-xl border border-border bg-card pl-11 pr-10 text-[0.95rem] font-medium text-foreground outline-none transition hover:border-border/80 focus:border-primary focus:ring-2 focus:ring-primary/15"
+        >
+          {children}
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      </span>
     </label>
   );
 }
-
-const SELECT_CLASS =
-  "h-11 w-full rounded-xl border border-border bg-card px-3 text-sm text-foreground shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20";
 
 export default function PublicSearch({ signedIn = false }) {
   const [catalog, setCatalog] = useState(null);
@@ -174,50 +208,59 @@ export default function PublicSearch({ signedIn = false }) {
   }
 
   return (
-    <div className="mx-auto mt-9 w-full max-w-3xl">
-      <div className="rounded-2xl border border-border bg-card p-4 shadow-xl shadow-primary/5 ring-1 ring-primary/10 sm:p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <Field label="What you sell to">
-            <select className={SELECT_CLASS} value={service} onChange={(e) => setService(e.target.value)}>
-              {(catalog?.services || []).map((s) => (
-                <option key={s.name} value={s.name}>{s.name}</option>
-              ))}
-              {!catalog && <option>Loading</option>}
-            </select>
+    <div className="mx-auto mt-7 w-full max-w-[62.5rem]">
+      <div className="rounded-[1.25rem] border border-border/70 bg-card p-5 text-left shadow-[0_18px_50px_-24px_rgba(1,59,47,0.28)] sm:p-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-3">
+          <Field
+            label="What you sell to"
+            icon={Briefcase}
+            value={service}
+            onChange={(e) => setService(e.target.value)}
+          >
+            {(catalog?.services || []).map((s) => (
+              <option key={s.name} value={s.name}>{titleCase(s.name)}</option>
+            ))}
+            {!catalog && <option>Loading</option>}
           </Field>
-          <Field label="Country">
-            <select className={SELECT_CLASS} value={countryCode} onChange={(e) => setCountryCode(e.target.value)}>
-              {(catalog?.countries || []).map((c) => (
-                <option key={c.code} value={c.code}>{c.name}</option>
-              ))}
-              {!catalog && <option>Loading</option>}
-            </select>
+          <Field
+            label="Country"
+            icon={Globe}
+            value={countryCode}
+            onChange={(e) => setCountryCode(e.target.value)}
+          >
+            {(catalog?.countries || []).map((c) => (
+              <option key={c.code} value={c.code}>{c.name}</option>
+            ))}
+            {!catalog && <option>Loading</option>}
           </Field>
-          <Field label="City">
-            <select className={SELECT_CLASS} value={cityId} onChange={(e) => setCityId(e.target.value)}>
-              {(country?.cities || []).map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}{c.admin ? `, ${c.admin}` : ""}
-                </option>
-              ))}
-              {!country && <option>Loading</option>}
-            </select>
+          <Field
+            label="City"
+            icon={MapPin}
+            value={cityId}
+            onChange={(e) => setCityId(e.target.value)}
+          >
+            {(country?.cities || []).map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}{c.admin ? `, ${c.admin}` : ""}
+              </option>
+            ))}
+            {!country && <option>Loading</option>}
           </Field>
           <button
             type="button"
             onClick={running ? () => abortRef.current?.abort() : run}
             disabled={!ready && !running}
             className={cn(
-              "inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold shadow-sm transition",
+              "inline-flex h-[3.25rem] shrink-0 items-center justify-center gap-2 rounded-xl px-7 text-[0.95rem] font-semibold transition",
               running
                 ? "border border-border bg-card text-foreground hover:bg-accent"
-                : "bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                : "bg-primary text-primary-foreground shadow-[0_6px_16px_-6px_hsl(var(--primary)/0.6)] hover:opacity-90 disabled:opacity-50"
             )}
           >
             {running ? (
               <><Square className="h-3.5 w-3.5 fill-current" /> Stop</>
             ) : (
-              <><Search className="h-4 w-4" /> Search</>
+              <><Search className="h-[1.15rem] w-[1.15rem]" /> Search</>
             )}
           </button>
         </div>
