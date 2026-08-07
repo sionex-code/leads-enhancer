@@ -863,7 +863,19 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
         setCountryCode(best.country.code);
         setCityObj(best.city);
         setCitySearch("");
-        setQuery(buildQuery(service, best.city, best.country));
+
+        // Only the *place* changes. Someone who typed "24 hour emergency
+        // plumber" is asking to move that search, not to have it quietly
+        // swapped back to whatever the Service dropdown happens to hold. The
+        // resolver already isolates the keyword for us; the split is the
+        // fallback for before it has answered.
+        const typed = query.trim();
+        const keyword =
+          (queryIsCustom &&
+            (resolvedArea?.keyword ||
+              typed.split(/(?:^|\s+)in\s+/i)[0].trim())) ||
+          service;
+        setQuery(buildQuery(keyword, best.city, best.country));
 
         // Close enough: search around where they actually are. Far away:
         // centre on the city instead, so the circle and the query agree.
