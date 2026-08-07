@@ -12,8 +12,10 @@ import {
   Menu,
   Plus,
   HelpCircle,
+  Puzzle,
 } from "lucide-react";
 import AccountWidget from "../AccountWidget";
+import useExtension from "../../lib/useExtension";
 import useSidebarCollapse from "../useSidebarCollapse";
 import Tour from "../Tour";
 import { Sheet, SheetContent } from "../ui/sheet";
@@ -37,6 +39,12 @@ const PROJECT_NAV = [
   { key: "lists", label: "Lists", href: "/lists", icon: List },
 ];
 
+// Live search runs in the extension, so "is it installed?" is a standing piece
+// of account state — it needs a permanent home. It used to be reachable only
+// from the dialog raised by a search that needed it, which meant nobody could
+// find it until something had already failed.
+const EXTENSION_NAV = { key: "extension", label: "Extension", href: "/extension", icon: Puzzle };
+
 function Brand({ collapsed, onClick }) {
   return (
     <Link href="/dashboard" title="Find leads" className="flex items-center" onClick={onClick}>
@@ -49,7 +57,7 @@ function Brand({ collapsed, onClick }) {
   );
 }
 
-function NavItem({ item, active, collapsed, onNavigate, prominent }) {
+function NavItem({ item, active, collapsed, onNavigate, prominent, trailing }) {
   const { key, label, href, icon: Icon } = item;
   const isActive = active === key;
   return (
@@ -71,7 +79,36 @@ function NavItem({ item, active, collapsed, onNavigate, prominent }) {
       {isActive && <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-primary" />}
       <Icon className="h-[18px] w-[18px] shrink-0" />
       {!collapsed && <span className="truncate">{label}</span>}
+      {trailing}
     </Link>
+  );
+}
+
+// The sidebar entry carries a status dot, so the answer to "is live search
+// going to work?" is visible from every page instead of only after a search
+// stalls. Collapsed, the dot rides the icon's corner.
+function ExtensionNavItem({ active, collapsed, onNavigate }) {
+  const { checking, installed } = useExtension();
+
+  const dot = checking ? null : (
+    <span
+      title={installed ? "Extension connected" : "Extension not installed"}
+      className={cn(
+        "shrink-0 rounded-full",
+        collapsed ? "absolute right-3 top-1.5 h-2 w-2 ring-2 ring-card" : "ml-auto h-2 w-2",
+        installed ? "bg-emerald-500" : "bg-amber-500"
+      )}
+    />
+  );
+
+  return (
+    <NavItem
+      item={EXTENSION_NAV}
+      active={active}
+      collapsed={collapsed}
+      onNavigate={onNavigate}
+      trailing={dot}
+    />
   );
 }
 
@@ -89,6 +126,14 @@ function NavLinks({ active, collapsed, onNavigate }) {
       {PROJECT_NAV.map((item) => (
         <NavItem key={item.key} item={item} active={active} collapsed={collapsed} onNavigate={onNavigate} />
       ))}
+      {collapsed ? (
+        <div className="mx-auto my-1.5 h-px w-8 bg-border/60" />
+      ) : (
+        <div className="px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+          Setup
+        </div>
+      )}
+      <ExtensionNavItem active={active} collapsed={collapsed} onNavigate={onNavigate} />
     </nav>
   );
 }
