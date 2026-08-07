@@ -1,4 +1,5 @@
 import pub from "../web/lib/public-searches.cjs";
+import seo from "../web/lib/seo.cjs";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,11 @@ const BASE = process.env.NEXT_PUBLIC_MARKETING_URL || "https://leadsfunda.com";
 const MAX_ENTRIES = 20000;
 
 export default async function sitemap() {
+  // An empty sitemap while the site is noindex. Listing URLs we are
+  // simultaneously asking to be dropped is a contradiction, and robots.txt
+  // stops linking to this file for the same reason.
+  if (seo.NOINDEX) return [];
+
   const staticPages = [
     { url: `${BASE}/`, changeFrequency: "weekly", priority: 1 },
     { url: `${BASE}/directory`, changeFrequency: "daily", priority: 0.9 },

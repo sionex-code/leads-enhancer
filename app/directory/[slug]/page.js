@@ -7,6 +7,7 @@ import db from "../../../web/lib/db.cjs";
 import { headers } from "next/headers";
 import { auth } from "../../../auth";
 import billing from "../../../web/lib/billing.cjs";
+import seo from "../../../web/lib/seo.cjs";
 
 export const dynamic = "force-dynamic";
 
@@ -126,10 +127,15 @@ export async function generateMetadata({ params }) {
     // Below the publish threshold a page is real but too thin to deserve
     // indexing. Serving it while keeping it out of the index is the difference
     // between a directory and a doorway farm.
+    // A per-page robots value replaces the root one outright, so the
+    // site-wide switch has to be checked here too or these pages would stay
+    // indexable while everything around them went noindex.
     robots:
-      onAppHost || entry.leadCount < pub.MIN_PUBLIC_LEADS
-        ? { index: false, follow: true }
-        : { index: true, follow: true },
+      seo.NOINDEX
+        ? seo.ROBOTS_META
+        : onAppHost || entry.leadCount < pub.MIN_PUBLIC_LEADS
+          ? { index: false, follow: true }
+          : { index: true, follow: true },
     openGraph: {
       title: `${entry.title}: ${count} businesses`,
       description: `${entry.service} businesses in ${where}, with ratings and contact details.`,

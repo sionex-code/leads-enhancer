@@ -1,6 +1,7 @@
 import "./tailwind.css";
 import { Instrument_Sans } from "next/font/google";
 import Providers from "./providers";
+import seo from "../web/lib/seo.cjs";
 
 // Display face for marketing headings (echoes the landing template). Body text
 // keeps the existing Inter stack from tailwind.css; this only adds a heading font.
@@ -15,6 +16,9 @@ export const metadata = {
   title: "LeadsFunda: local business lead generation",
   description: "Scrape public map listings for business leads, enrich emails & socials, and audit their websites, at scale.",
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "LeadsFunda" },
+  // undefined when SEO_NOINDEX is off, which leaves Next to emit nothing and
+  // the default (indexable) to apply.
+  robots: seo.ROBOTS_META,
 };
 
 export const viewport = {

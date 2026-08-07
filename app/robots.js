@@ -1,6 +1,24 @@
+import seo from "../web/lib/seo.cjs";
+
 const BASE = process.env.NEXT_PUBLIC_MARKETING_URL || "https://leadsfunda.com";
 
 export default function robots() {
+  // While the site is noindex, crawlers are still let in on purpose. Blocking
+  // them here would stop them ever seeing the noindex, and anything already in
+  // the index would stay there — see the note in web/lib/seo.cjs. The sitemap
+  // is withheld because there is nothing we want submitted right now.
+  if (seo.NOINDEX) {
+    return {
+      rules: [
+        {
+          userAgent: "*",
+          allow: "/",
+          disallow: ["/api/"],
+        },
+      ],
+    };
+  }
+
   return {
     rules: [
       {
