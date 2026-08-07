@@ -4,7 +4,7 @@ import InstallGuide from "./InstallGuide";
 export const metadata = {
   title: "Install the LeadsFunda extension",
   description:
-    "Install the LeadsFunda Chrome extension to run live Google Maps lead searches in your own browser.",
+    "Install the LeadsFunda Chrome extension to run live lead searches in your own browser.",
 };
 
 export default function ExtensionPage() {
@@ -18,7 +18,7 @@ export default function ExtensionPage() {
         <p className="max-w-2xl text-muted-foreground">
           Most searches are served instantly from leads we already have. When a
           search covers ground we haven&apos;t collected yet, the extension pulls
-          it straight from Google Maps on your machine — no queue, and no waiting
+          it straight from the map on your machine — no queue, and no waiting
           behind anyone else&apos;s search.
         </p>
 

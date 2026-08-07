@@ -205,7 +205,7 @@ export default async function DirectoryEntry({ params }) {
     },
     {
       q: `Where does this ${entry.cityName} data come from?`,
-      a: `Every listing is built from public Google Maps business profiles and refreshed as new searches run. ` +
+      a: `Every listing is built from public map business profiles and refreshed as new searches run. ` +
          `Nothing here is scraped from private sources.`,
     },
   ];
@@ -503,7 +503,7 @@ export default async function DirectoryEntry({ params }) {
 
       <p className="mt-10 text-xs text-muted-foreground">
         Contact details on this page are shortened. Business information is collected
-        from public Google Maps listings. To have a listing removed,{" "}
+        from public map listings. To have a listing removed,{" "}
         <a href="/contact" className="underline transition-colors hover:text-foreground">
           contact us
         </a>.

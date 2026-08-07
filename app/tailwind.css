@@ -2,10 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
-/* shadcn/ui design tokens — LIGHT theme keyed to the LeadsFunda brand blue
-   (#3147ff). Tokens live on :root so every (Tailwind) page renders light. The
+/* shadcn/ui design tokens — LIGHT theme keyed to the LeadsFunda accent violet
+   (#7c4dff). Tokens live on :root so every (Tailwind) page renders light. The
    legacy dashboard CSS now lives only on the /agent route (app/agent/layout.js),
-   so it can no longer bleed into the new shadcn app. */
+   so it can no longer bleed into the new shadcn app.
+
+   The wordmark stays on the original #3147ff — violet and that blue are close
+   enough on the wheel to read as one family, so the logo did not have to be
+   redrawn when the accent moved. Anything that should follow the accent reads
+   --primary; nothing new should hard-code a hex. */
 :root {
   --background: 220 33% 98%;
   --foreground: 230 30% 12%;
@@ -13,7 +18,7 @@
   --card-foreground: 230 30% 12%;
   --popover: 0 0% 100%;
   --popover-foreground: 230 30% 12%;
-  --primary: 234 100% 60%;
+  --primary: 258 90% 61%;
   --primary-foreground: 0 0% 100%;
   --secondary: 220 24% 94%;
   --secondary-foreground: 230 25% 22%;
@@ -25,7 +30,7 @@
   --destructive-foreground: 0 0% 100%;
   --border: 220 18% 88%;
   --input: 220 18% 86%;
-  --ring: 234 100% 60%;
+  --ring: 258 90% 61%;
   --radius: 0.65rem;
 }
 

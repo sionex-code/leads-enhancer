@@ -69,7 +69,7 @@ export default async function DirectoryIndex() {
           Lead directory
         </h1>
         <p className="mt-3 max-w-2xl text-muted-foreground">
-          Business lists by city and service, built from public Google Maps listings.
+          Business lists by city and service, built from public map listings.
           Every list shows ratings, review counts and areas. Sign in to see full contact
           details and export to CSV.
         </p>

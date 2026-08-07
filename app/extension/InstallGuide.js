@@ -277,7 +277,7 @@ function ReadyPanel({ version }) {
           <p className="mt-1.5 text-sm text-muted-foreground">
             Extension v{version} is connected. Live searches now run in this
             browser, so a search that covers new ground comes back straight from
-            Google Maps instead of turning up empty.
+            the map instead of turning up empty.
           </p>
           <a
             href={href}
@@ -360,7 +360,7 @@ const FAQ = [
   },
   {
     q: "Why does it need access to every site?",
-    a: "It reads Google Maps results, then visits each business's own website to find an email and social links — the same enrichment LeadsFunda has always done, just from your browser instead of our server.",
+    a: "It reads map search results, then visits each business's own website to find an email and social links — the same enrichment LeadsFunda has always done, just from your browser instead of our server.",
   },
   {
     q: "Do I have to keep the tab open?",

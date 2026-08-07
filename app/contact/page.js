@@ -246,7 +246,7 @@ export default function ContactPage() {
           <div className="grid grid-cols-2 gap-8 p-6 md:p-10 md:grid-cols-5">
             <div className="col-span-2 md:col-span-2">
               <Logo />
-              <p className="mt-4 max-w-xs text-sm text-muted-foreground">Turn Google Maps into a pipeline of enriched, ready-to-pitch B2B leads with 99% email data accuracy.</p>
+              <p className="mt-4 max-w-xs text-sm text-muted-foreground">Turn public map listings into a pipeline of enriched, ready-to-pitch B2B leads with 99% email data accuracy.</p>
               <div className="mt-6"><GoogleSignInButton size="sm" className="lf-cta rounded-xl">Start free with Google</GoogleSignInButton></div>
             </div>
             <div>

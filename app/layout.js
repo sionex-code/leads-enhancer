@@ -12,8 +12,8 @@ const display = Instrument_Sans({
 });
 
 export const metadata = {
-  title: "LeadsFunda: Google Maps lead generation",
-  description: "Scrape Google Maps business leads, enrich emails & socials, and audit their websites, at scale.",
+  title: "LeadsFunda: local business lead generation",
+  description: "Scrape public map listings for business leads, enrich emails & socials, and audit their websites, at scale.",
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "LeadsFunda" },
 };
 

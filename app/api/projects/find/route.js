@@ -321,7 +321,7 @@ export async function POST(request) {
       queued: false,
       activePid: null,
       publicId,
-      message: "Searching Google Maps in your browser…",
+      message: "Searching the map in your browser…",
     });
 
     // `area` was resolved above, before the project was named. Google answers
@@ -460,7 +460,7 @@ export async function POST(request) {
         queued: false,
         activePid: null,
         publicId,
-        message: "Searching Google Maps in your browser…",
+        message: "Searching the map in your browser…",
       });
     }
   }

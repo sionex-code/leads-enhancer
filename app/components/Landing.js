@@ -63,7 +63,7 @@ const PILLS = [
   { label: "Owner contacts", desc: "Pinpoint owner and decision-maker details directly.", icon: Users },
   { label: "Social profiles", desc: "Gather Facebook, Instagram, and LinkedIn links.", icon: Globe2 },
   { label: "Ratings & reviews", desc: "Track ratings and reviews to find the best niches.", icon: Star },
-  { label: "Phone numbers", desc: "Pull formatted phone numbers from Maps and sites.", icon: Phone },
+  { label: "Phone numbers", desc: "Pull formatted phone numbers from listings and sites.", icon: Phone },
   { label: "Clean CSV export", desc: "Export structured leads ready for your CRM.", icon: FileSpreadsheet },
 ];
 
@@ -84,7 +84,7 @@ const STATS = [
 ];
 
 const STEPS = [
-  { n: "01", icon: Search, title: "Pick a niche & city", body: "Choose a service and location, or paste your own Maps query, then set how many leads you want." },
+  { n: "01", icon: Search, title: "Pick a niche & city", body: "Choose a service and location, or paste your own search query, then set how many leads you want." },
   { n: "02", icon: Zap, title: "We scrape & enrich", body: "We pull every business, then crawl their sites for emails, socials and WhatsApp, automatically." },
   { n: "03", icon: ListChecks, title: "Work the pipeline", body: "Filter, audit websites, mark outreach status and export a clean CSV ready for your campaigns." },
 ];
@@ -126,7 +126,7 @@ const PLAN_ICONS = { free: Rocket, p19: Sparkles, p35: Star, p49: Briefcase };
 
 const FAQ = [
   { q: "Do I need to install anything?", a: "No. LeadsFunda runs entirely in the cloud. Sign in with Google, start a scrape, and your leads appear in the dashboard, even if you close the tab." },
-  { q: "Where do the leads come from?", a: "Public Google Maps business listings for the niche and location you choose. We then visit each business's own website to enrich emails and social profiles." },
+  { q: "Where do the leads come from?", a: "Public business listings on the major map services, for the niche and location you choose. We then visit each business's own website to enrich emails and social profiles." },
   { q: "Can I cancel anytime?", a: "Yes. Plans are monthly and managed through Whop. Upgrade, downgrade or cancel whenever you like, with no contracts." },
   { q: "What counts as a credit?", a: "Finding a lead costs 1 credit; a quick audit 3, a chatbot scan 5, and a full website report 10. Re-checking a lead you already own costs nothing." },
   { q: "Is my data safe?", a: "Every account's leads and projects are fully isolated and protected. We never share or resell your data." },
@@ -541,7 +541,7 @@ function PriceCard({ plan, signedIn }) {
   const dark = plan.style === "dark";
 
   const shell = blue
-    ? "border-transparent bg-gradient-to-b from-primary to-blue-600 text-white shadow-2xl shadow-primary/30"
+    ? "border-transparent bg-gradient-to-b from-primary to-violet-700 text-white shadow-2xl shadow-primary/30"
     : dark
       ? "border-transparent bg-[#0a0e1a] text-white"
       : "border-border bg-card";
@@ -738,7 +738,7 @@ export default function Landing({ recent = [], total = 0 }) {
       {/* ---- hero ---- */}
       {/*
         The search box IS the hero. A visitor can run a real search here, on real
-        Google Maps data, before they have an account — so the fastest way to
+        listing data, before they have an account — so the fastest way to
         explain the product is to let them use it, not to describe it above a
         pair of buttons that only lead to a sign-in screen. The headline and sub
         stay because a page still needs to say what it is (and be indexable),
@@ -751,12 +751,12 @@ export default function Landing({ recent = [], total = 0 }) {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#a2e435] opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-[#7cc20a]" />
             </span>
-            Live Google Maps search — no account needed
+            Live local search — no account needed
           </span>
           <h1 className="font-heading max-w-3xl text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl xl:text-6xl">
-            Search leads on{" "}
+            Find your next customers in{" "}
             <span className="relative text-primary sm:whitespace-nowrap">
-              Google Maps
+              any city
               <span className="hidden sm:block absolute -bottom-1.5 left-0 h-[6px] w-full rounded-full bg-gradient-to-r from-primary/25 via-[#a2e435]/40 to-[#a2e435]/15" />
             </span>
           </h1>
@@ -826,7 +826,7 @@ export default function Landing({ recent = [], total = 0 }) {
       {/* ---- smarter research: two widget cards ---- */}
       <section className="container pb-8">
         <Reveal>
-          <SectionHead icon={Sparkles} eyebrow="See it work" title="From raw Maps listing to ready-to-pitch lead"
+          <SectionHead icon={Sparkles} eyebrow="See it work" title="From raw listing to ready-to-pitch lead"
             sub="Let LeadsFunda do the heavy lifting. It gathers every business, then enriches and scores it for you." className="mb-12" />
         </Reveal>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -868,7 +868,7 @@ export default function Landing({ recent = [], total = 0 }) {
           sub="Scrape, enrich, audit and organize. The whole outreach workflow, with no stitching tools together." className="mb-12" /></Reveal>
         <div className="grid grid-cols-1 auto-rows-fr gap-5 lg:grid-cols-6">
           {/* row 1: three equal cells */}
-          <Reveal className="lg:col-span-2"><BentoCell icon={MapPin} tile="bg-blue-500/10 text-blue-600" title="Scrape Google Maps" body="Name, phone, website, rating, reviews and hours for any niche + city.">
+          <Reveal className="lg:col-span-2"><BentoCell icon={MapPin} tile="bg-violet-500/10 text-violet-600" title="Scrape the map" body="Name, phone, website, rating, reviews and hours for any niche + city.">
             <div className="space-y-2">
               {SCRAPE_FEED.slice(0, 3).map((r) => (
                 <div key={r.n} className="flex items-center gap-2 rounded-xl border border-border bg-background px-2.5 py-1.5 text-[11px] shadow-sm">
@@ -1035,7 +1035,7 @@ export default function Landing({ recent = [], total = 0 }) {
 
       {/* ---- cta banner ---- */}
       <section className="container py-20">
-        <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-primary via-blue-600 to-violet-600 px-6 py-16 text-center text-white">
+        <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-primary via-violet-600 to-fuchsia-600 px-6 py-16 text-center text-white">
           <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10 blur-2xl" />
           <div className="pointer-events-none absolute -bottom-20 -left-10 h-56 w-56 rounded-full bg-[#a2e435]/25 blur-2xl" />
           <h2 className="font-heading mx-auto max-w-xl text-3xl font-bold sm:text-4xl">Ready to build your lead list?</h2>
@@ -1051,7 +1051,7 @@ export default function Landing({ recent = [], total = 0 }) {
           <div className="grid grid-cols-2 gap-8 p-6 md:p-10 md:grid-cols-5">
             <div className="col-span-2 md:col-span-2">
               <Logo />
-              <p className="mt-4 max-w-xs text-sm text-muted-foreground">Turn Google Maps into a pipeline of enriched, ready-to-pitch B2B leads with 99% email data accuracy.</p>
+              <p className="mt-4 max-w-xs text-sm text-muted-foreground">Turn public map listings into a pipeline of enriched, ready-to-pitch B2B leads with 99% email data accuracy.</p>
               <div className="mt-6"><Cta signedIn={signedIn} size="sm" className="lf-cta rounded-xl" signedInLabel="Open dashboard">Continue with Google</Cta></div>
             </div>
             <div>

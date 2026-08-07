@@ -203,7 +203,7 @@ export default function LiveSearchOverlay({ state, onClose, onStop }) {
           ? "Stopping"
           : phase === "save"
             ? "Saving leads"
-            : "Searching Google Maps"
+            : "Searching the map"
         : stopped
           ? "Search stopped"
           : timedOut

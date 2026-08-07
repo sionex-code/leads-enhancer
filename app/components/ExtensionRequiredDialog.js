@@ -39,7 +39,7 @@ export default function ExtensionRequiredDialog({ open, onClose }) {
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           We didn&apos;t have these leads stored yet, so they need to be pulled from
-          Google Maps live. That runs in your own browser through our free Chrome
+          the map live. That runs in your own browser through our free Chrome
           extension — it takes about a minute to set up, once.
         </p>
 

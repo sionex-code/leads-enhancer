@@ -218,7 +218,7 @@ function CapturedActions({ lead, busy = {}, onEnrich, onWhatsapp, onAudit, onRep
           target="_blank"
           rel="noreferrer"
           onClick={(e) => e.stopPropagation()}
-          title="Open in Google Maps"
+          title="Open on the map"
           className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
         >
           <MapPin size={14} />
@@ -434,7 +434,7 @@ function projectNameFromQuery(query) {
   const clean = String(query || "").trim().replace(/\s+/g, " ");
   const titled = clean.replace(/\b\w/g, (c) => c.toUpperCase());
   const id = Date.now().toString(36).slice(-4);
-  return `${titled || "Maps"} Leads #${id}`.slice(0, 80);
+  return `${titled || "Local"} Leads #${id}`.slice(0, 80);
 }
 
 function Chip({ active, children, ...props }) {
@@ -585,7 +585,7 @@ function SourcePicker({ source, setSource, ext, lockedLive }) {
       key: "live",
       icon: Zap,
       title: "Live via extension",
-      desc: "Scrapes Google Maps right now, in this browser.",
+      desc: "Scrapes the map right now, in this browser.",
     },
   ];
 
@@ -1143,7 +1143,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
         </button>
       </div>
       <div className="flex flex-col items-center text-center">
-        <Badge variant="outline" className="mb-4 gap-1.5"><Zap className="h-3 w-3 text-primary" /> Google Maps lead engine</Badge>
+        <Badge variant="outline" className="mb-4 gap-1.5"><Zap className="h-3 w-3 text-primary" /> Local lead engine</Badge>
         <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">What leads do you want to find?</h1>
         <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
           Pick a service and city, or type your own query, and we'll pull matching leads instantly.
@@ -1748,7 +1748,7 @@ export default function Dashboard({ view = "" }) {
       ? Math.min(wantMax * RATING_OVERFETCH, RATING_OVERFETCH_CAP)
       : liveParams.max;
 
-    setBusy("Searching Google Maps in your browser");
+    setBusy("Searching the map in your browser");
     const startedAt = Date.now();
     const controller = new AbortController();
     scrapeAbortRef.current = controller;
@@ -1785,7 +1785,7 @@ export default function Dashboard({ view = "" }) {
         {
           signal: controller.signal,
           onProgress: ({ done, total, scanned, scanTotal, found }) => {
-            setBusy(total ? `Searching Google Maps (${done}/${total})` : "Searching Google Maps");
+            setBusy(total ? `Searching the map (${done}/${total})` : "Searching the map");
             setScrapeProgress((prev) => ({
               ...(prev || {}),
               status: "running",
@@ -2560,7 +2560,7 @@ export default function Dashboard({ view = "" }) {
 
   if (simpleMode) {
     return (
-      <AppShell active="new" title="Find leads" subtitle="Start a Google Maps lead project" tourKey="find" tourSteps={FIND_TOUR}>
+      <AppShell active="new" title="Find leads" subtitle="Start a new lead project" tourKey="find" tourSteps={FIND_TOUR}>
         <div className={cn(
           "transition-all duration-300 ease-out transform origin-center",
           isTransitioningOut ? "opacity-0 scale-95 -translate-y-4" : "opacity-100 scale-100 translate-y-0"
@@ -2725,7 +2725,7 @@ export default function Dashboard({ view = "" }) {
                 <Input value={form.name} readOnly className="cursor-default bg-muted/40" title={form.name} />
               </label>
               <label className="space-y-1">
-                <span className="text-xs font-medium text-muted-foreground">Maps query</span>
+                <span className="text-xs font-medium text-muted-foreground">Search query</span>
                 <Input value={getProjectDisplayQuery(status) || form.query} readOnly className="cursor-default bg-muted/40" title={getProjectDisplayQuery(status) || form.query} />
               </label>
               <label className="space-y-1">

@@ -109,7 +109,7 @@ export default function TermsPage() {
               Acceptance of Terms
             </h2>
             <p className="text-sm leading-relaxed text-muted-foreground">
-              By accessing or using LeadsFunda, you agree to comply with and be bound by these Terms of Service. These terms govern your use of our Google Maps scraping, enrichment, and verification services. If you do not agree to these terms, please do not use the platform.
+              By accessing or using LeadsFunda, you agree to comply with and be bound by these Terms of Service. These terms govern your use of our map-listing scraping, enrichment, and verification services. If you do not agree to these terms, please do not use the platform.
             </p>
           </section>
 
@@ -149,7 +149,7 @@ export default function TermsPage() {
               Worldwide Database Access
             </h2>
             <p className="text-sm leading-relaxed text-muted-foreground">
-              Our scraper operates on a <strong>Worldwide</strong> basis. You can generate lists of leads across any location globally where Google Maps listings are publicly available. However, you are solely responsible for compliance with regional data protection rules (such as GDPR in Europe) governing direct outreach to contacts within specific countries.
+              Our scraper operates on a <strong>Worldwide</strong> basis. You can generate lists of leads across any location globally where public map listings are available. However, you are solely responsible for compliance with regional data protection rules (such as GDPR in Europe) governing direct outreach to contacts within specific countries.
             </p>
           </section>
 
@@ -181,7 +181,7 @@ export default function TermsPage() {
           <div className="grid grid-cols-2 gap-8 p-6 md:p-10 md:grid-cols-5">
             <div className="col-span-2 md:col-span-2">
               <Logo />
-              <p className="mt-4 max-w-xs text-sm text-muted-foreground">Turn Google Maps into a pipeline of enriched, ready-to-pitch B2B leads with 99% email data accuracy.</p>
+              <p className="mt-4 max-w-xs text-sm text-muted-foreground">Turn public map listings into a pipeline of enriched, ready-to-pitch B2B leads with 99% email data accuracy.</p>
               <div className="mt-6"><GoogleSignInButton size="sm" className="lf-cta rounded-xl">Start free with Google</GoogleSignInButton></div>
             </div>
             <div>

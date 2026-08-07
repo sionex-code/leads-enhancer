@@ -230,7 +230,7 @@ const TOOLS = {
     },
   },
   capture_leads: {
-    description: "Scrape a NEW batch of Google Maps leads and WAIT for it to finish, then return the leads directly. Scrape ONLY by default (no email enrichment). This is autonomous — by default it blocks until done and hands back the leads, so you can show them immediately in the same turn. Use has_phone/has_email to return only matching leads.",
+    description: "Scrape a NEW batch of map-listing leads and WAIT for it to finish, then return the leads directly. Scrape ONLY by default (no email enrichment). This is autonomous — by default it blocks until done and hands back the leads, so you can show them immediately in the same turn. Use has_phone/has_email to return only matching leads.",
     args: {
       project: "project name (new or existing — auto-named from the query if omitted)",
       query: "Maps search, e.g. 'dentists in Miami FL'",
@@ -388,7 +388,7 @@ function toolDocs() {
 }
 
 function systemPrompt(session) {
-  return `You are Lead Ops Agent, an autonomous assistant inside a Google Maps lead-generation dashboard. You manage scraping projects, a global leads database, and website analysis reports.
+  return `You are Lead Ops Agent, an autonomous assistant inside a local lead-generation dashboard. You manage scraping projects, a global leads database, and website analysis reports.
 
 ${session.project ? `The user has selected project: "${session.project}". Default to it when a tool needs a project.` : "No project selected — use list_projects if you need one."}
 

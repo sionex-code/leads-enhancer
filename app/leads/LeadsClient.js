@@ -503,7 +503,7 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot, on
                   />
                 </div>
               )}
-              {lead.maps_url && <div className="mt-1.5"><a className="text-primary hover:underline" href={lead.maps_url} target="_blank" rel="noreferrer">Open on Google Maps</a></div>}
+              {lead.maps_url && <div className="mt-1.5"><a className="text-primary hover:underline" href={lead.maps_url} target="_blank" rel="noreferrer">Open on the map</a></div>}
             </div>
           </DrawerCard>
 
