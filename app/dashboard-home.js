@@ -349,6 +349,17 @@ function EnrichProgress({ progress, stage }) {
   );
 }
 
+// A live search can only filter by rating *after* the engine returns, so asking
+// for exactly `max` businesses and then discarding most of them is how "below
+// 4.0" comes back empty. Maps results skew high — in the warehouse's Adelaide
+// data only ~8% of general contractors sit under 4.0 — so 30 scraped can easily
+// contain none at all. Over-fetch, then trim to what was actually asked for.
+//
+// The engine caps `max` at 1000 and stops on its own wall clock, so a large
+// ceiling here costs time on a selective band rather than hanging.
+const RATING_OVERFETCH = 8;
+const RATING_OVERFETCH_CAP = 500;
+
 // The rating band, applied to what the extension handed back.
 //
 // The warehouse does this in SQL; the extension knows nothing about it and
@@ -1728,6 +1739,15 @@ export default function Dashboard({ view = "" }) {
   // server to store. Progress is surfaced through the same `busy` label the
   // rest of the page uses, so this doesn't need its own UI.
   async function runExtensionScrape(slug, liveParams) {
+    const wantMax = Math.max(1, Number(liveParams.max) || 30);
+    const hasRatingFilter =
+      liveParams.minRating != null || liveParams.maxRating != null;
+    // Scan deeper when a band is set, because most of what comes back will be
+    // thrown away. Without a band this stays exactly as it was.
+    const scrapeMax = hasRatingFilter
+      ? Math.min(wantMax * RATING_OVERFETCH, RATING_OVERFETCH_CAP)
+      : liveParams.max;
+
     setBusy("Searching Google Maps in your browser");
     const startedAt = Date.now();
     const controller = new AbortController();
@@ -1756,7 +1776,7 @@ export default function Dashboard({ view = "" }) {
           centerLat: liveParams.centerLat,
           centerLng: liveParams.centerLng,
           radiusKm: liveParams.radiusKm,
-          max: liveParams.max,
+          max: scrapeMax,
           // Search only. Crawling each site for emails and socials now runs on
           // the server after /ingest, so the user isn't kept waiting behind the
           // slowest business website in the area with the tab pinned open.
@@ -1789,8 +1809,14 @@ export default function Dashboard({ view = "" }) {
 
       // Drop the ones outside the chosen rating band before anything counts,
       // saves or displays them, so the numbers on screen are the numbers stored.
-      const rows = filterByRating(scraped, liveParams.minRating, liveParams.maxRating);
-      const droppedByRating = scraped.length - rows.length;
+      // Then trim the over-fetch back to the size the user actually asked for.
+      const matched = filterByRating(
+        scraped,
+        liveParams.minRating,
+        liveParams.maxRating
+      );
+      const rows = hasRatingFilter ? matched.slice(0, wantMax) : matched;
+      const droppedByRating = scraped.length - matched.length;
 
       setBusy(`Saving ${rows.length} leads`);
       setScrapeProgress((prev) => ({
@@ -1825,7 +1851,11 @@ export default function Dashboard({ view = "" }) {
         enrich: saved.enrich || null,
         fromCache: saved.fromCache || 0,
         message: stored
-          ? `${stored} leads saved to this project.`
+          ? // Coming back with fewer than asked for is normal on a tight band,
+            // and looks like a bug unless the numbers behind it are shown.
+            hasRatingFilter && stored < wantMax
+            ? `${stored} leads saved. ${scraped.length} businesses were scanned and ${matched.length} matched the rating filter.`
+            : `${stored} leads saved to this project.`
           : // Blaming the keyword when the rating filter is what emptied the
             // results sends the user off widening an area that was never the
             // problem. Say which one it was.
