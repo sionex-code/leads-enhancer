@@ -10,6 +10,10 @@ import ReportModal from "./components/ReportModal";
 import ListsDialog from "./components/leads/ListsDialog";
 import { useMe } from "./components/AccountWidget";
 import { QUICK_COUNTRIES, QUICK_SERVICES } from "./lib/quickSearchData";
+import { detectExtension, scrapeWithExtension } from "./lib/extension-client";
+import useExtension from "./lib/useExtension";
+import ExtensionRequiredDialog from "./components/ExtensionRequiredDialog";
+import LiveSearchOverlay from "./components/LiveSearchOverlay";
 import {
   BarChart3,
   CheckCircle2,
@@ -19,6 +23,9 @@ import {
   Globe2,
   ListPlus,
   Loader2,
+  AlertTriangle,
+  Puzzle,
+  Download,
   Mail,
   MailCheck,
   MessageCircle,
@@ -31,6 +38,7 @@ import {
   Star,
   Trash2,
   Zap,
+  Database,
   ChevronDown,
   CreditCard,
   Crown,
@@ -377,6 +385,27 @@ function Chip({ active, children, ...props }) {
 
 // Live remaining-credits pill (reuses the /api/me poll behind useMe). Shown on the
 // find-leads home and in the workspace header so the balance is always visible.
+// Contact details behind the plan gate for free accounts.
+//
+// This is a *visual* gate: the value is still in the page for the account that
+// scraped it, because a hard server-side gate would also have to cut CSV export
+// and enrichment, which is a much larger change. It exists to prompt an upgrade,
+// not to defend the data from its own owner.
+function LockedContact({ value, className }) {
+  return (
+    <span className="inline-flex items-center gap-1.5" title="Upgrade your plan to reveal contact details">
+      <span className={cn("select-none blur-[4px]", className)} aria-hidden="true">{value}</span>
+      <Link
+        href="/billing"
+        onClick={(e) => e.stopPropagation()}
+        className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary transition hover:bg-primary/20"
+      >
+        Unlock
+      </Link>
+    </span>
+  );
+}
+
 function CreditsPill() {
   const me = useMe();
   const ent = me?.entitlement;
@@ -469,6 +498,127 @@ function buildFallbackCatalog() {
   };
 }
 
+// Where this search gets its leads. Live search runs in the user's browser, so
+// whether the extension is connected decides whether that option can work at
+// all — the status is shown on the card itself rather than discovered after a
+// search fails.
+function SourcePicker({ source, setSource, ext, lockedLive }) {
+  const OPTIONS = [
+    {
+      key: "warehouse",
+      icon: Database,
+      title: "Our database",
+      desc: "Instant. Leads we've already collected and enriched.",
+    },
+    {
+      key: "live",
+      icon: Zap,
+      title: "Live via extension",
+      desc: "Scrapes Google Maps right now, in this browser.",
+    },
+  ];
+
+  return (
+    <div className="mt-6" data-tour="find-source">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <span className="text-xs font-medium text-muted-foreground">Lead source</span>
+        <ExtensionPill ext={ext} />
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {OPTIONS.map(({ key, icon: Icon, title, desc }) => {
+          const active = source === key;
+          const disabled = lockedLive && key === "warehouse";
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => !disabled && setSource(key)}
+              aria-pressed={active}
+              disabled={disabled}
+              title={disabled ? "This keyword isn't in our database — it has to be searched live" : undefined}
+              className={cn(
+                "flex items-start gap-3 rounded-xl border p-3 text-left transition-colors",
+                disabled && "cursor-not-allowed opacity-50",
+                active
+                  ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                  : "border-border bg-card/40 hover:border-primary/40 hover:bg-accent/40"
+              )}
+            >
+              <span
+                className={cn(
+                  "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                  active ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
+                )}
+              >
+                <Icon className="h-4 w-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-foreground">{title}</span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{desc}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {lockedLive && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Custom keyword.</span> Our
+          database only covers the services in the dropdown, so this one is searched
+          live in your browser.
+        </p>
+      )}
+      {source === "live" && !ext.checking && !ext.installed && (
+        // This is a hard block, not advice: a live search cannot start without
+        // the extension, so it gets stated plainly rather than as small print
+        // under the cards.
+        <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/5 p-4">
+          <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Puzzle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            No extension installed
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Live search runs inside your own browser, so it needs the LeadsFunda
+            extension. Nothing here will run until it is installed.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Link
+              href="/extension"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition hover:opacity-90"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Install the extension
+            </Link>
+            <button
+              type="button"
+              onClick={() => setSource("warehouse")}
+              className="rounded-lg border border-border bg-card px-3.5 py-2 text-xs font-medium text-foreground transition hover:bg-accent"
+            >
+              Use our database instead
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Compact "is the extension connected?" indicator. Deliberately readable in both
+// themes: a solid-coloured dot plus foreground-weight text, rather than tinted
+// text on a tinted background.
+function ExtensionPill({ ext }) {
+  if (ext.checking) {
+    return <span className="text-xs text-muted-foreground">Checking extension…</span>;
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-xs">
+      <span className={cn("h-1.5 w-1.5 rounded-full", ext.installed ? "bg-emerald-500" : "bg-amber-500")} />
+      <span className="font-medium text-foreground">
+        {ext.installed ? `Extension connected` : "Extension not connected"}
+      </span>
+    </span>
+  );
+}
+
 function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   // ── Catalog state ─────────────────────────────────────────────────────────
   const [catalog, setCatalog] = useState(null); // null = loading
@@ -500,20 +650,6 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   const catalogCountries = resolved.countries || [];
   const catalogServices = resolved.services || [];
 
-  // Pick a random element from an array
-  const randomPick = (arr) => arr?.length ? arr[Math.floor(Math.random() * arr.length)] : undefined;
-
-  const [isShuffling, setIsShuffling] = useState(false);
-  const shuffleIntervalRef = useRef(null);
-
-  const stopShuffle = () => {
-    if (shuffleIntervalRef.current) {
-      clearInterval(shuffleIntervalRef.current);
-      shuffleIntervalRef.current = null;
-    }
-    setIsShuffling(false);
-  };
-
   // ── Form state ─────────────────────────────────────────────────────────────
   // Start with stable static defaults to prevent double-switching on reload
   const [countryCode, setCountryCode] = useState(() => QUICK_COUNTRIES[0].code);
@@ -537,6 +673,28 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   const [rating, setRating] = useState("");
   const [allCities, setAllCities] = useState(false);
   const [radiusKm, setRadiusKm] = useState(10);
+  // "warehouse" = serve what we already have (instant). "live" = scrape Google
+  // Maps right now in this browser through the extension. Kept as an explicit
+  // choice because a warehouse hit isn't necessarily the freshest answer.
+  const [source, setSource] = useState("warehouse");
+  // Whether the choice below is still ours to make. Once the user clicks either
+  // card we stop moving it under them.
+  const sourceTouched = useRef(false);
+  const ext = useExtension();
+
+  // With the extension installed, live search is the better default: it returns
+  // what Google Maps holds right now rather than what we happen to have stored.
+  // Detection is asynchronous, so this cannot be the initial state; it flips
+  // once, only if the user has not already chosen.
+  useEffect(() => {
+    if (ext.checking || sourceTouched.current) return;
+    if (ext.installed) setSource("live");
+  }, [ext.checking, ext.installed]);
+
+  function chooseSource(next) {
+    sourceTouched.current = true;
+    setSource(next);
+  }
   // center for the area picker map — kept in sync with selected city
   const [center, setCenter] = useState(() =>
     cityObj?.lat != null && cityObj?.lng != null
@@ -552,44 +710,51 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   };
   const [query, setQuery] = useState(() => buildQuery(service, cityObj, country));
 
-  // When catalog loads, trigger a smooth slot-machine/shuffle animation settling on random selections
+  // What the dropdowns alone would search for. Anything the user types that
+  // differs from this is a custom search.
+  const autoQuery = useMemo(
+    () => buildQuery(service, allCities ? null : cityObj, country),
+    [service, allCities, cityObj, country]
+  );
+
+  // Recomputed as the user types. The warehouse resolves a search purely from the
+  // dropdowns — service name, city id, country — and never reads this text. So
+  // "Gujrat Plumber" with the city dropdown on Uppsala returns Uppsala plumbers:
+  // a non-empty, confidently wrong answer that also stops the live fallback from
+  // ever firing. Any custom text therefore has to go live, not just an unknown
+  // service keyword — the *location* is ignored exactly the same way.
+  const queryIsCustom = useMemo(() => {
+    const q = query.trim();
+    return q !== "" && q !== autoQuery;
+  }, [query, autoQuery]);
+  const activeSource = queryIsCustom ? "live" : source;
+
+  // Settle the form on the catalog's biggest country, city and service once it
+  // loads. This used to be a 12-tick slot-machine animation that flung random
+  // countries and cities through the inputs for almost a second before landing
+  // somewhere arbitrary. It looked busy, it made the form unusable while it ran,
+  // and it left people searching a city they never chose.
+  const settled = useRef(false);
   useEffect(() => {
-    if (!catalog) return;
+    if (!catalog || settled.current) return;
     const countries = catalog.countries || [];
     const services = catalog.services || [];
     if (!countries.length || !services.length) return;
+    settled.current = true;
 
-    setIsShuffling(true);
-    let ticks = 0;
-    const maxTicks = 12;
+    // The catalog is ordered by coverage, so the first entry is the one most
+    // likely to return a full list.
+    const topCountry = countries[0];
+    const topCity = (topCountry.cities || [])[0] || null;
+    const topService = services[0]?.name || service;
 
-    shuffleIntervalRef.current = setInterval(() => {
-      const randCountry = randomPick(countries);
-      const randService = randomPick(services)?.name;
-      if (randCountry) {
-        setCountryCode(randCountry.code);
-        const randCity = randomPick(randCountry.cities) || null;
-        setCityObj(randCity);
-        if (randCity?.lat != null) setCenter({ lat: randCity.lat, lng: randCity.lng });
-        if (randService) {
-          setService(randService);
-          setQuery(buildQuery(randService, randCity, randCountry));
-        } else {
-          setQuery(buildQuery(service, randCity, randCountry));
-        }
-      }
-      
-      ticks++;
-      if (ticks >= maxTicks) {
-        stopShuffle();
-      }
-    }, 70);
-
-    return () => {
-      if (shuffleIntervalRef.current) {
-        clearInterval(shuffleIntervalRef.current);
-      }
-    };
+    setCountryCode(topCountry.code);
+    if (topCity) {
+      setCityObj(topCity);
+      if (topCity.lat != null) setCenter({ lat: topCity.lat, lng: topCity.lng });
+    }
+    setService(topService);
+    setQuery(buildQuery(topService, topCity, topCountry));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [catalog]);
 
@@ -601,7 +766,6 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   }, [citySearch, country]);
 
   function changeCountry(nextCode) {
-    stopShuffle();
     const nextCountry = catalogCountries.find((c) => c.code === nextCode) || catalogCountries[0];
     if (!nextCountry) return;
     const nextCity = nextCountry.cities?.[0] || null;
@@ -613,13 +777,11 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   }
 
   function selectService(nextService) {
-    stopShuffle();
     setService(nextService);
     setQuery(buildQuery(nextService, allCities ? null : cityObj, country));
   }
 
   function selectCity(nextCityObj) {
-    stopShuffle();
     setAllCities(false);
     setCityObj(nextCityObj);
     if (nextCityObj?.lat != null && nextCityObj?.lng != null) {
@@ -630,19 +792,77 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
 
   // "All cities" searches the whole country (no city/radius filter).
   function selectAllCities() {
-    stopShuffle();
     setAllCities(true);
     setQuery(buildQuery(service, null, country));
   }
+
+  // ── Where a typed search actually goes ────────────────────────────────────
+  // The map used to follow the city dropdown and nothing else, so typing
+  // "plumbers in islamabad" left the pin on whichever city the select happened
+  // to hold. The map then showed one place while the search ran in another,
+  // which is what made a custom keyword look like it landed on a random city.
+  //
+  // The same resolver the server uses is asked here, so the preview and the
+  // search cannot disagree. The pin moves to the resolved place and the radius
+  // slider keeps working, because the search is sent as resolved-centre plus
+  // the user's radius rather than as the geocoder's own bounding box.
+  const [resolvedArea, setResolvedArea] = useState(null);
+  const [resolving, setResolving] = useState(false);
+
+  useEffect(() => {
+    if (!queryIsCustom) {
+      setResolvedArea(null);
+      setResolving(false);
+      return undefined;
+    }
+    const text = query.trim();
+    if (text.length < 3) return undefined;
+
+    let alive = true;
+    setResolving(true);
+    // Debounced: this hits Nominatim, and firing per keystroke would be both
+    // useless and a good way to get the app rate limited.
+    const timer = setTimeout(() => {
+      fetch(`${BASE_PATH}/api/geo/resolve?q=${encodeURIComponent(text)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (!alive) return;
+          setResolvedArea(d?.resolved ? d : null);
+          setResolving(false);
+        })
+        .catch(() => {
+          if (alive) setResolving(false);
+        });
+    }, 700);
+
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+      setResolving(false);
+    };
+  }, [queryIsCustom, query]);
+
+  // Move the pin onto the resolved place. Deliberately not the other way round:
+  // dragging the pin afterwards still works, because this only fires when the
+  // geocoder returns somewhere new.
+  useEffect(() => {
+    if (resolvedArea?.lat != null && resolvedArea?.lng != null) {
+      setCenter({ lat: resolvedArea.lat, lng: resolvedArea.lng });
+    }
+  }, [resolvedArea]);
 
   function submit(e) {
     e.preventDefault();
     const effectiveCity = allCities ? null : cityObj;
     const cleanQuery = query.trim() || buildQuery(service, effectiveCity, country);
     const isCustom = cleanQuery !== buildQuery(service, effectiveCity, country);
-    const isUnknownKeyword = !catalogServices.some(s => 
+    const isUnknownKeyword = !catalogServices.some(s =>
       cleanQuery.toLowerCase().includes(s.name.toLowerCase())
     );
+    // Anything typed that differs from the dropdowns can't come from the
+    // warehouse — it resolves service *and* city from the selects and ignores
+    // this text entirely. Send it live so the search matches what was typed.
+    const effectiveSource = isCustom || isUnknownKeyword ? "live" : source;
     const cityLabel = allCities ? (country.name || "All cities") : cityObj?.name || "";
     
     let name;
@@ -665,12 +885,34 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
       countryName: country.name || "",
       service,
       isUnknownKeyword,
+      isCustomQuery: isCustom,
       minRating: rating.startsWith("gte:") ? Number(rating.slice(4)) : undefined,
       maxRating: rating.startsWith("lt:") ? Number(rating.slice(3)) : undefined,
-      centerLat: allCities ? undefined : center.lat,
-      centerLng: allCities ? undefined : center.lng,
-      radiusKm: allCities ? undefined : Number(radiusKm) || 10,
+      // A live scrape grids a bounding box, so it always needs a centre — "All
+      // cities" would otherwise hand the extension undefined coords and produce
+      // nothing. The warehouse path keeps its country-wide behaviour.
+      centerLat: allCities && effectiveSource !== "live" ? undefined : center.lat,
+      centerLng: allCities && effectiveSource !== "live" ? undefined : center.lng,
+      radiusKm: allCities && effectiveSource !== "live" ? undefined : Number(radiusKm) || 10,
+      // A typed search that resolved to a real place searches THAT place, at the
+      // radius on the slider. Without this the server geocodes the text again
+      // and grids the geocoder's own bounding box, which ignores the radius
+      // entirely: a 5 km search of "restaurants in London" would quietly cover
+      // all of Greater London.
+      resolvedArea:
+        queryIsCustom && resolvedArea?.lat != null
+          ? {
+              place: resolvedArea.place,
+              display: resolvedArea.display,
+              countryCode: resolvedArea.countryCode,
+              countryName: resolvedArea.countryName,
+              keyword: resolvedArea.keyword,
+              lat: resolvedArea.lat,
+              lng: resolvedArea.lng,
+            }
+          : undefined,
       max: String(Math.min(10000, Math.max(1, Math.trunc(Number(max) || 30)))),
+      source: effectiveSource,
     });
   }
 
@@ -716,24 +958,16 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
         </div>
       )}
 
-      <form className="mt-8 flex flex-col gap-2 sm:flex-row" onSubmit={(e) => { stopShuffle(); submit(e); }}>
+      <form className="mt-8 flex flex-col gap-2 sm:flex-row" onSubmit={submit}>
         <div className="relative flex-1">
-          {isShuffling ? (
-            <Loader2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-primary animate-spin" />
-          ) : (
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          )}
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
             onChange={(e) => {
-              stopShuffle();
-              setQuery(e.target.value);
+                        setQuery(e.target.value);
             }}
             placeholder="plumber in Austin TX"
-            className={cn(
-              "h-12 pl-10 text-base transition-all duration-200",
-              isShuffling && "border-primary/50 text-primary/80 ring-2 ring-primary/20 bg-primary/5 font-mono"
-            )}
+            className="h-12 pl-10 text-base"
             autoFocus
           />
         </div>
@@ -742,6 +976,18 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
         </Button>
       </form>
 
+      <SourcePicker
+        source={activeSource}
+        setSource={chooseSource}
+        ext={ext}
+        lockedLive={queryIsCustom}
+      />
+
+      {/* Service, Country and City resolve a warehouse lookup. A live search
+          does not use any of them: the extension geocodes whatever is in the
+          search box and grids that area, so leaving them on screen showed three
+          controls that had no effect on the search about to run. */}
+      {activeSource !== "live" && (
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
         <label className="space-y-1" data-tour="find-service">
           <span className="text-xs text-muted-foreground">Service</span>
@@ -776,6 +1022,11 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
             ))}
           </Select>
         </label>
+      </div>
+      )}
+
+      {/* Always relevant, whichever source is running. */}
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
         <label className="space-y-1" data-tour="find-max">
           <span className="text-xs text-muted-foreground">Leads (max 10,000)</span>
           <Input type="number" min={1} max={10000} value={max} onChange={(e) => setMax(e.target.value)} />
@@ -793,28 +1044,91 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
             <option value="lt:3">Below 3.0</option>
           </Select>
         </label>
-        <label className="space-y-1 sm:col-span-2" data-tour="find-radius">
-          <span className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>Radius</span>
-            <span className="font-medium text-foreground">{allCities ? "country-wide" : `${radiusKm} km`}</span>
+      </div>
+
+      {/* Radius used to be a bare slider squeezed into a quarter of a four
+          column grid, with its value tucked into the label. It decides how much
+          ground a search covers, so it gets its own row, a readable value and
+          presets for the distances people actually pick. */}
+      <div className="mt-3 rounded-xl border border-border bg-card/40 p-3" data-tour="find-radius">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <MapPin className="h-3.5 w-3.5" />
+            Search radius
           </span>
-          <input
-            type="range"
-            min={1}
-            max={200}
-            value={radiusKm}
-            disabled={allCities}
-            onChange={(e) => setRadiusKm(Number(e.target.value) || 1)}
-            style={{
-              "--slider-percentage": `${((radiusKm - 1) / 199) * 100}%`
-            }}
-            className="h-9 w-full cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-40"
-          />
-        </label>
+          <span className="rounded-lg bg-muted px-2.5 py-1 text-sm font-semibold tabular-nums text-foreground">
+            {allCities ? "Country-wide" : `${radiusKm} km`}
+          </span>
+        </div>
+        <input
+          type="range"
+          min={1}
+          max={200}
+          value={radiusKm}
+          disabled={allCities}
+          onChange={(e) => setRadiusKm(Number(e.target.value) || 1)}
+          style={{ "--slider-percentage": `${((radiusKm - 1) / 199) * 100}%` }}
+          className="mt-2.5 h-6 w-full cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-40"
+        />
+        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          {[5, 10, 25, 50, 100].map((km) => (
+            <button
+              key={km}
+              type="button"
+              disabled={allCities}
+              onClick={() => setRadiusKm(km)}
+              className={cn(
+                "rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+                Number(radiusKm) === km
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground"
+              )}
+            >
+              {km} km
+            </button>
+          ))}
+          <span className="ml-auto text-[11px] text-muted-foreground">
+            {allCities
+              ? "Every city in the country"
+              : `Covers about ${Math.round(Math.PI * radiusKm * radiusKm).toLocaleString()} km²`}
+          </span>
+        </div>
       </div>
 
       {/* Area picker map */}
       <div className="mt-4" data-tour="find-map">
+        {/* What a typed search resolved to. Without this the map silently
+            disagrees with the search box and the user has no way to tell
+            which one the search will follow. */}
+        {queryIsCustom && (
+          <div className="mb-2 rounded-lg border border-border bg-card/60 px-3 py-2 text-xs">
+            {resolving ? (
+              <span className="flex items-center gap-1.5 text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Working out where to search
+              </span>
+            ) : resolvedArea ? (
+              <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-muted-foreground">
+                <MapPin className="h-3.5 w-3.5 shrink-0 text-primary" />
+                Searching
+                <span className="font-semibold text-foreground">
+                  {resolvedArea.keyword || service}
+                </span>
+                within {radiusKm} km of
+                <span className="font-semibold text-foreground">
+                  {resolvedArea.place}
+                </span>
+                {resolvedArea.countryName ? `, ${resolvedArea.countryName}` : ""}
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                No place recognised in what you typed, so the search will use{" "}
+                <span className="font-semibold">{cityObj?.name || country?.name}</span>
+              </span>
+            )}
+          </div>
+        )}
         <div className="mb-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
           <MapPin className="h-3.5 w-3.5" />
           <span>Drag the pin to refine the search center</span>
@@ -892,9 +1206,9 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
 function StatCard({ value, label, className }) {
   return (
     <Card className={className}>
-      <CardContent className="p-3 sm:p-4">
-        <div className="text-xl sm:text-2xl font-bold"><AnimatedNumber value={value} /></div>
-        <div className="text-[10px] sm:text-xs text-muted-foreground whitespace-nowrap">{label}</div>
+      <CardContent className="p-2.5 sm:p-3">
+        <div className="text-lg sm:text-xl font-bold leading-tight"><AnimatedNumber value={value} /></div>
+        <div className="text-[10px] sm:text-[11px] text-muted-foreground whitespace-nowrap">{label}</div>
       </CardContent>
     </Card>
   );
@@ -903,22 +1217,27 @@ function StatCard({ value, label, className }) {
 export default function Dashboard({ view = "" }) {
   const router = useRouter();
 
+  // A label built from the dropdowns is only trustworthy when the search itself
+  // came from the dropdowns. For a typed query it described somewhere the
+  // search never went — a project of Islamabad businesses titled "Copenhagen,
+  // Denmark Leads". Prefer the stored name, which the server now derives from
+  // the place it actually resolved and searched.
   const getProjectDisplayName = (p) => {
     if (!p) return "";
-    if (p.isUnknownKeyword) {
-      const cityPart = p.cityName ? `${p.cityName}, ` : "";
-      return `${cityPart}${p.countryName || ""} Leads`;
-    }
-    return p.name;
+    if (p.name) return p.name;
+    const cityPart = p.cityName ? `${p.cityName}, ` : "";
+    return `${cityPart}${p.countryName || ""} Leads`;
   };
 
+  // This field is labelled "Maps query", so it has to be the query. Showing a
+  // dropdown-derived stand-in instead is how a search for "islamabad" came to
+  // read "Copenhagen, Denmark Leads". Fall back to the stand-in only when
+  // there is genuinely no query to show.
   const getProjectDisplayQuery = (p) => {
     if (!p) return "";
-    if (p.isUnknownKeyword) {
-      const cityPart = p.cityName ? `${p.cityName}, ` : "";
-      return `${cityPart}${p.countryName || ""} Leads`;
-    }
-    return p.query || "";
+    if (p.query) return p.query;
+    const cityPart = p.cityName ? `${p.cityName}, ` : "";
+    return cityPart || p.countryName ? `${cityPart}${p.countryName || ""} Leads` : "";
   };
 
   // The find-leads home vs. the projects workspace is driven by the URL (?view=projects),
@@ -933,6 +1252,22 @@ export default function Dashboard({ view = "" }) {
   const [needPlan, setNeedPlan] = useState(false);
   const [isTransitioningOut, setIsTransitioningOut] = useState(false);
   const [findResult, setFindResult] = useState(null); // dismissible "grabbed N leads" alert
+  // Live search runs in the browser extension; this drives the "install it"
+  // prompt and the in-progress readout while it scrapes.
+  const [needExtension, setNeedExtension] = useState(false);
+  // Progress of a live scrape running in the extension (null = no overlay).
+  const [scrapeProgress, setScrapeProgress] = useState(null);
+  // Lets the Stop button reach into a run that's already in flight. Held in a ref
+  // rather than state because aborting must not depend on a re-render landing.
+  const scrapeAbortRef = useRef(null);
+
+  // Clear the toast once a scrape finishes cleanly. Errors stay up until
+  // dismissed — a failed browser-side scrape leaves no server job to go and read.
+  useEffect(() => {
+    if (scrapeProgress?.status !== "done") return;
+    const t = setTimeout(() => setScrapeProgress(null), 6000);
+    return () => clearTimeout(t);
+  }, [scrapeProgress]);
   const [hideSyncBanner, setHideSyncBanner] = useState(false); // dismiss the dbSync banner
   const [tablePage, setTablePage] = useState(0); // captured-leads table pagination
   // Per-row state for the captured-leads table actions (enrich / whatsapp / report
@@ -961,6 +1296,9 @@ export default function Dashboard({ view = "" }) {
   // Full plan entitlement ({ active, remaining, plan, credits }) used to pre-check
   // searches before hitting the server. remaining === null means unlimited.
   const [entitlement, setEntitlement] = useState(null);
+  // Free = loaded entitlement with no active plan. Null means "not answered
+  // yet", and locking on that would flash the paywall at paying customers.
+  const contactLocked = entitlement != null && !entitlement.active;
   // Per-day usage ({ searches, leads, resetAt, tz }) to pre-check the daily caps.
   const [daily, setDaily] = useState(null);
   // Captured rows being added to a list in bulk — saved to the DB first so they
@@ -1165,9 +1503,147 @@ export default function Dashboard({ view = "" }) {
     }
   }
 
+  // Drive the extension through a live scrape, then hand the rows to the
+  // server to store. Progress is surfaced through the same `busy` label the
+  // rest of the page uses, so this doesn't need its own UI.
+  async function runExtensionScrape(slug, liveParams) {
+    setBusy("Searching Google Maps in your browser");
+    const startedAt = Date.now();
+    const controller = new AbortController();
+    scrapeAbortRef.current = controller;
+    setScrapeProgress({
+      status: "running",
+      phase: "search",
+      done: 0,
+      total: 0,
+      startedAt,
+      found: null,
+      foundSeq: 0,
+      message: "Starting…",
+    });
+
+    try {
+      const { rows, cancelled, timedOut } = await scrapeWithExtension(
+        {
+          query: liveParams.query,
+          service: liveParams.service,
+          // A geocoded bbox (from typed text) takes priority in the engine over
+          // centre+radius; both are forwarded so the fallback still works.
+          bbox: liveParams.bbox,
+          latStep: liveParams.latStep,
+          lngStep: liveParams.lngStep,
+          centerLat: liveParams.centerLat,
+          centerLng: liveParams.centerLng,
+          radiusKm: liveParams.radiusKm,
+          max: liveParams.max,
+          // Search only. Crawling each site for emails and socials now runs on
+          // the server after /ingest, so the user isn't kept waiting behind the
+          // slowest business website in the area with the tab pinned open.
+          enrich: false,
+        },
+        {
+          signal: controller.signal,
+          onProgress: ({ done, total, scanned, scanTotal, found }) => {
+            setBusy(total ? `Searching Google Maps (${done}/${total})` : "Searching Google Maps");
+            setScrapeProgress((prev) => ({
+              ...(prev || {}),
+              status: "running",
+              phase: "search",
+              done: done || 0,
+              total: total || 0,
+              scanned: scanned || 0,
+              scanTotal: scanTotal || 0,
+              startedAt,
+              // Businesses arrive in bursts of ~20 — one map tile resolving —
+              // so only the newest burst is handed over, tagged with a counter.
+              // The overlay owns the queue and the pacing, which is what lets it
+              // reveal them one at a time instead of flashing twenty at once.
+              found: found?.length ? found : null,
+              foundSeq: (prev?.foundSeq || 0) + (found?.length ? 1 : 0),
+              message: `${done} business${done === 1 ? "" : "es"} found`,
+            }));
+          },
+        }
+      );
+
+      setBusy(`Saving ${rows.length} leads`);
+      setScrapeProgress((prev) => ({
+        ...(prev || {}),
+        status: "running",
+        phase: "save",
+        done: rows.length,
+        total: rows.length,
+        stopped: !!cancelled,
+        timedOut: !!timedOut,
+        message: `Saving ${rows.length} leads…`,
+      }));
+
+      const saved = await jsonFetch(`/api/projects/${encodeURIComponent(slug)}/ingest`, {
+        method: "POST",
+        body: JSON.stringify({ rows }),
+      });
+
+      const stored = saved.stored ?? rows.length;
+      setScrapeProgress({
+        // A clean run that found nothing is not a success to flash for 6
+        // seconds — it's the case the user most needs to read, so it stays up
+        // and says what to change.
+        status: stored ? "done" : "empty",
+        phase: "save",
+        done: stored,
+        total: stored,
+        stopped: !!cancelled,
+        timedOut: !!timedOut,
+        // How the server picked up the second half of the job, so the overlay
+        // can say emails are still coming rather than implying the run is over.
+        enrich: saved.enrich || null,
+        fromCache: saved.fromCache || 0,
+        message: stored
+          ? `${stored} leads saved to this project.`
+          : `Nothing found for "${liveParams.query}"${
+              liveParams.areaLabel ? ` around ${liveParams.areaLabel.split(",")[0]}` : ""
+            }. Try a broader keyword or a wider area.`,
+      });
+
+      return {
+        total: stored,
+        inserted: saved.inserted ?? 0,
+        updated: saved.updated ?? 0,
+      };
+    } catch (err) {
+      // Leave the overlay up on failure — this is the only place the user finds
+      // out a browser-side scrape died, since there's no server job to inspect.
+      setScrapeProgress((prev) => ({
+        ...(prev || {}),
+        status: "error",
+        phase: "search",
+        message: err?.message || "The extension stopped responding.",
+      }));
+      throw err;
+    } finally {
+      scrapeAbortRef.current = null;
+    }
+  }
+
+  // Ask the extension to stop. The run still resolves normally, with whatever it
+  // had found — a stopped search keeps its leads, it doesn't discard them.
+  function stopExtensionScrape() {
+    scrapeAbortRef.current?.abort();
+    setScrapeProgress((prev) =>
+      prev ? { ...prev, stopping: true, message: "Stopping — saving what we found…" } : prev
+    );
+  }
+
   // POST to /api/projects/find (warehouse-backed instant delivery).
   // Same plan/quota error handling as run(); same navigation on success.
   async function startFindLeads(findParams) {
+    // Check for the extension BEFORE calling /find: that endpoint counts the
+    // search against the daily cap up front, so bouncing off a missing
+    // extension afterwards would silently burn one for nothing.
+    if (findParams.source === "live" && !(await detectExtension())) {
+      setNeedExtension(true);
+      return;
+    }
     if (!ensureCanSearch()) return;
     setBusy("Finding leads");
     setError("");
@@ -1184,21 +1660,48 @@ export default function Dashboard({ view = "" }) {
           countryName: findParams.countryName,
           service: findParams.service,
           isUnknownKeyword: findParams.isUnknownKeyword,
+          isCustomQuery: findParams.isCustomQuery,
           minRating: findParams.minRating,
           maxRating: findParams.maxRating,
           centerLat: findParams.centerLat,
           centerLng: findParams.centerLng,
           radiusKm: findParams.radiusKm,
           max: findParams.max,
+          source: findParams.source,
+          // Where the form resolved a typed search to. Lets the server search
+          // that place at the chosen radius instead of re-geocoding the text
+          // and gridding the whole administrative area.
+          resolvedArea: findParams.resolvedArea,
         }),
       });
       setSelected(data.slug);
       setHideSyncBanner(false);
-      setFindResult({ total: data.total ?? 0, inserted: data.inserted ?? 0, updated: data.updated ?? 0 });
+
+      // The warehouse had nothing for this area, so the leads have to be
+      // scraped live — which happens in the user's browser via the extension,
+      // not on our server.
+      let result = { total: data.total ?? 0, inserted: data.inserted ?? 0, updated: data.updated ?? 0 };
+      const wentLive = !!data.needsLive;
+      if (wentLive) {
+        const version = await detectExtension();
+        if (!version) {
+          setNeedExtension(true);
+          setBusy("");
+          return;
+        }
+        result = await runExtensionScrape(data.slug, data.liveParams || findParams);
+      }
+
+      // Two panels used to stack up here: the live-search overlay finishes on
+      // "N leads saved to this project" and then this alert opened on top of it
+      // saying much the same thing, so the redirect landed on two popups. The
+      // overlay is the report for an extension run; this alert is the report
+      // for a warehouse run. Only ever one of them.
+      if (!wentLive) setFindResult(result);
       refreshCredits();
       await loadProjects();
       await loadStatus(data.slug);
-      
+
       // Smooth page transition out
       setIsTransitioningOut(true);
       setTimeout(() => {
@@ -1812,6 +2315,8 @@ export default function Dashboard({ view = "" }) {
             needPlan={needPlan}
           />
         </div>
+        <ExtensionRequiredDialog open={needExtension} onClose={() => setNeedExtension(false)} />
+        <LiveSearchOverlay state={scrapeProgress} onClose={() => setScrapeProgress(null)} onStop={stopExtensionScrape} />
       </AppShell>
     );
   }
@@ -1851,11 +2356,11 @@ export default function Dashboard({ view = "" }) {
           {toast}
         </div>
       )}
-      <FindResultAlert result={findResult} onClose={() => setFindResult(null)} />
-      <div className="animate-page-in motion-reduce:animate-none space-y-5 overflow-x-clip p-4 sm:p-6">
+      <FindResultAlert result={scrapeProgress ? null : findResult} onClose={() => setFindResult(null)} />
+      <div className="animate-page-in motion-reduce:animate-none space-y-3 overflow-x-clip p-3 sm:p-4">
         {/* Mobile project switcher */}
         {projects.length > 0 && (
-          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:hidden">
+          <div className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 md:hidden">
             {projects.slice(0, visibleChipCount).map((p) => (
               <button
                 key={p.slug}
@@ -1882,7 +2387,7 @@ export default function Dashboard({ view = "" }) {
         )}
 
         {/* Stats — at the top of the workspace */}
-        <div className="flex gap-2 overflow-x-auto pb-1.5 -mx-4 px-4 md:mx-0 md:px-0 md:grid md:grid-cols-5 md:gap-3 scrollbar-none">
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-3 px-3 md:mx-0 md:px-0 md:grid md:grid-cols-5 md:gap-2 scrollbar-none">
           <StatCard className="w-[110px] shrink-0 md:w-auto md:shrink" value={status?.counts?.raw || 0} label="Scraped leads" />
           <StatCard className="w-[110px] shrink-0 md:w-auto md:shrink" value={status?.counts?.websites || 0} label="Websites" />
           <StatCard className="w-[110px] shrink-0 md:w-auto md:shrink" value={status?.counts?.enriched || 0} label="Enriched rows" />
@@ -1892,9 +2397,9 @@ export default function Dashboard({ view = "" }) {
 
         {/* Project details (read-only on an existing project) */}
         <Card>
-          <CardContent className="space-y-4 p-4">
+          <CardContent className="space-y-3 p-3">
             {/* Action buttons (placed at the top on mobile, bottom on desktop) */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border/40 pb-4 sm:border-0 sm:pb-0">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-border/40 pb-3 sm:border-0 sm:pb-0">
               <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" data-tour="ws-enrich" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("enrich")} title="Grab email + socials for captured leads not enriched yet (realtime, no queue; shared with all users)">
                   {bulkBusy === "enrich" ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />} Enrich{realtimeBatch?.kind === "enrich" ? ` (${realtimeBatch.done}/${realtimeBatch.total})` : ""}
@@ -2108,7 +2613,9 @@ export default function Dashboard({ view = "" }) {
                       <WaIcon lead={lead} />
                       {lead.website && <a className="max-w-[160px] truncate text-primary hover:underline" href={lead.website} target="_blank" rel="noreferrer" title={lead.website} onClick={(e) => e.stopPropagation()}>{lead.domain || "site"}</a>}
                     </div>
-                    {lead.email && <div className="mt-1 text-sm"><a className="max-w-[200px] truncate text-primary hover:underline" href={`mailto:${lead.email}`} title={lead.email} onClick={(e) => e.stopPropagation()}>{lead.email}</a></div>}
+                    {lead.email && <div className="mt-1 text-sm">{contactLocked
+                      ? <LockedContact value={lead.email} className="block max-w-[200px] truncate" />
+                      : <a className="max-w-[200px] truncate text-primary hover:underline" href={`mailto:${lead.email}`} title={lead.email} onClick={(e) => e.stopPropagation()}>{lead.email}</a>}</div>}
                     {/* #11 rating / reviews / owner reply chips */}
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                       {showRating(lead) && <span className="inline-flex items-center gap-0.5 rounded-md bg-amber-500/10 px-1.5 py-0.5 font-medium text-amber-700"><Star size={10} fill="currentColor" /> {lead.rating}</span>}
@@ -2182,7 +2689,9 @@ export default function Dashboard({ view = "" }) {
                           </div>
                           {/* #12 email truncated with tooltip */}
                           {lead.email
-                            ? <a className="block max-w-[160px] truncate text-xs text-primary hover:underline" href={`mailto:${lead.email}`} title={lead.email} onClick={(e) => e.stopPropagation()}>{lead.email}</a>
+                            ? (contactLocked
+                                ? <LockedContact value={lead.email} className="block max-w-[160px] truncate text-xs" />
+                                : <a className="block max-w-[160px] truncate text-xs text-primary hover:underline" href={`mailto:${lead.email}`} title={lead.email} onClick={(e) => e.stopPropagation()}>{lead.email}</a>)
                             : <span className="text-xs text-muted-foreground">{prettyEnrichStatus(lead.enrichStatus) || "-"}</span>
                           }
                         </TableCell>
@@ -2299,6 +2808,8 @@ export default function Dashboard({ view = "" }) {
         </div>
         );
       })()}
+      <ExtensionRequiredDialog open={needExtension} onClose={() => setNeedExtension(false)} />
+        <LiveSearchOverlay state={scrapeProgress} onClose={() => setScrapeProgress(null)} onStop={stopExtensionScrape} />
     </AppShell>
   );
 }
