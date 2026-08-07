@@ -647,6 +647,13 @@ function spawnRunner(payload) {
     "--auditConcurrency",
     String(payload.auditConcurrency || 2),
   ];
+  // Background enrichment for leads the browser extension just handed us. It has
+  // to be cheap: it runs unattended right after every live search, on the same
+  // box as the warehouse workers, so it stays on the plain-HTTP pass and skips
+  // both the Playwright scroll fallback and the owner-reply pass (which drives a
+  // real Chrome through every lead's Maps page — minutes of browser time nobody
+  // asked for).
+  if (payload.enrichFast) args.push("--noBrowser", "--no-owner-reply");
   if (payload.headless) args.push("--headless");
   if (payload.blockCanvas) args.push("--blockCanvas");
   if (payload.blockImages === false) args.push("--allowImages");

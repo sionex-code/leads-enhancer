@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { signOut } from "next-auth/react";
 import Link from "next/link";
-import { LogOut, Crown, CreditCard, ChevronsUpDown, Sparkles, ShieldCheck } from "lucide-react";
+import { LogOut, LogIn, Crown, CreditCard, ChevronsUpDown, Sparkles, ShieldCheck } from "lucide-react";
 import { Avatar } from "./ui/avatar";
 import { Progress } from "./ui/progress";
 import {
@@ -24,14 +24,29 @@ const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || "";
 const PLAN_LABEL = { p19: "Starter", p35: "Growth", p49: "Scale" };
 const PLAN_RANK = { p19: 1, p35: 2, p49: 3 };
 
+// `me` is the session payload, or SIGNED_OUT once the server has told us there
+// is no session. Callers that only read fields can keep treating it as an
+// object; `me.signedOut` is what distinguishes "no session" from "not answered
+// yet", which is null.
+export const SIGNED_OUT = { signedOut: true };
+
 export function useMe(pollMs = 10000) {
   const [me, setMe] = useState(null);
   useEffect(() => {
     let alive = true;
     const load = () =>
       fetch(`${BASE_PATH}/api/me`)
-        .then((r) => (r.ok ? r.json() : null))
-        .then((d) => alive && d && setMe(d))
+        .then(async (r) => {
+          if (!alive) return;
+          // A 401 is an answer, not silence. Swallowing it left `me` null
+          // forever, so the sidebar sat on "Loading…" for anyone whose session
+          // had expired — indistinguishable from a hung request, and with no
+          // way back to sign-in.
+          if (r.status === 401 || r.status === 403) return setMe(SIGNED_OUT);
+          if (!r.ok) return;
+          const d = await r.json();
+          if (alive && d) setMe(d);
+        })
         .catch(() => {});
     load();
     const t = setInterval(load, pollMs);
@@ -47,6 +62,30 @@ export function useMe(pollMs = 10000) {
 // renders just the avatar (icon-rail mode).
 export default function AccountWidget({ collapsed = false }) {
   const me = useMe();
+
+  // Session gone (expired cookie, signed out in another tab). Offer the way
+  // back in rather than a spinner that never resolves.
+  if (me?.signedOut) {
+    return (
+      <div className={cn("p-2", collapsed && "flex justify-center")}>
+        {/* Not /login: if the session cookie is present but dead, /login just
+            re-runs OAuth and the stale cookie survives to break it again.
+            auth-reset expires every variant first, then hands off to /login. */}
+        <a
+          href="/api/auth-reset"
+          className={cn(
+            "inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card text-sm font-medium text-foreground transition hover:bg-accent",
+            collapsed ? "h-9 w-9" : "w-full px-3 py-2"
+          )}
+          title="Your session has ended — sign in again"
+        >
+          <LogIn className="h-4 w-4 shrink-0" />
+          {!collapsed && <span>Sign in again</span>}
+        </a>
+      </div>
+    );
+  }
+
   const ent = me?.entitlement;
   const planKey = ent?.plan;
   const plan = planKey ? PLAN_LABEL[planKey] || planKey : null;

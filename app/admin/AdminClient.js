@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Loader2, RefreshCw, Search, ShieldCheck, Users, Crown, LogOut, Network, Plus, Trash2, Ban, CreditCard, Activity, Tag, Check, CircleDot, Database } from "lucide-react";
+import { Loader2, RefreshCw, Search, ShieldCheck, Users, Crown, LogOut, Network, Plus, Trash2, Database, Globe, MapPin } from "lucide-react";
 import { Card, CardContent } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
@@ -12,7 +12,6 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Avatar } from "../components/ui/avatar";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { cn } from "../lib/utils";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
@@ -20,90 +19,12 @@ const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 // p49→Growth / p99→Scale mapping was wrong and made "Scale" fail with an Invalid
 // plan error (p99 doesn't exist) while silently mislabelling p49.
 const PLAN_LABEL = { p19: "Starter", p35: "Growth", p49: "Scale" };
-// Monthly credit grant per plan (null = unlimited) — mirrors billing.cjs PLAN_CREDITS.
-const PLAN_CREDITS = { p19: 5000, p35: 50000, p49: null };
 const PLAN_OPTIONS = [
   { value: "", label: "Free (no plan)" },
   { value: "p19", label: "Starter ($19)" },
   { value: "p35", label: "Growth ($35)" },
   { value: "p49", label: "Scale ($49)" },
 ];
-
-// The user's effective monthly credit grant: a per-user override wins, else the
-// plan's allotment. null = unlimited (p49).
-function monthlyGrant(u) {
-  if (u.credits_monthly != null) return Number(u.credits_monthly);
-  if (isActive(u)) return PLAN_CREDITS[u.plan];
-  return null;
-}
-
-const TXN_LABEL = { leads: "Find leads", audit: "Audit", report: "Report", chatbot: "Chatbot scan", refund: "Refund", topup: "Top-up", adjust: "Adjustment", grant: "Monthly credits", admin: "Admin adjustment", spend: "Spend" };
-
-// Admin-only credit ledger for a single user (the billing-page history was removed
-// for end users; admins can still inspect it here).
-function CreditHistoryModal({ user, onClose }) {
-  const [page, setPage] = useState(1);
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    jsonFetch(`/api/admin/users?history=${encodeURIComponent(user.id)}&page=${page}`)
-      .then((d) => { if (!cancelled) setData(d); })
-      .catch(() => { if (!cancelled) setData({ rows: [], total: 0, pages: 1 }); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [user.id, page]);
-
-  const rows = data?.rows || [];
-  const pages = data?.pages || 1;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" onClick={onClose}>
-      <Card className="w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
-        <CardContent className="p-5">
-          <div className="mb-3 flex items-center justify-between">
-            <div className="min-w-0">
-              <div className="text-sm font-semibold">Credit history</div>
-              <div className="truncate text-xs text-muted-foreground">{user.email || user.id}</div>
-            </div>
-            <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>
-          </div>
-          {loading && !data ? (
-            <div className="flex items-center justify-center py-10 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /></div>
-          ) : rows.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">No credit activity yet.</p>
-          ) : (
-            <div className="divide-y divide-border/60">
-              {rows.map((t) => (
-                <div key={t.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">{TXN_LABEL[t.reason] || t.reason}{t.count > 1 ? ` · ${t.count}×` : ""}{t.project ? <span className="font-normal text-muted-foreground"> · {t.project}</span> : null}</div>
-                    <div className="text-xs text-muted-foreground">{new Date(t.created_at).toLocaleString()}</div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <div className={cn("font-semibold tabular-nums", t.delta < 0 ? "text-foreground" : "text-emerald-600")}>{t.delta < 0 ? "" : "+"}{t.delta}</div>
-                    {t.balance_after != null && <div className="text-xs text-muted-foreground tabular-nums">bal {t.balance_after}</div>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          {pages > 1 && (
-            <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-3 text-xs text-muted-foreground">
-              <span>Page {page} of {pages}</span>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</Button>
-                <Button variant="outline" size="sm" disabled={page >= pages || loading} onClick={() => setPage((p) => Math.min(pages, p + 1))}>Next</Button>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
 
 async function jsonFetch(url, options = {}) {
   const res = await fetch(`${BASE_PATH}${url}`, {
@@ -231,362 +152,6 @@ function ProxyManager() {
   );
 }
 
-function relTime(iso) {
-  if (!iso) return "";
-  const ms = Date.now() - new Date(iso).getTime();
-  if (Number.isNaN(ms)) return "";
-  const s = Math.max(0, Math.floor(ms / 1000));
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ${s % 60}s`;
-  const h = Math.floor(m / 60);
-  return `${h}h ${m % 60}m`;
-}
-
-// Live view of every queued/running scrape across all users. Auto-refreshes.
-function OperationsMonitor() {
-  const [ops, setOps] = useState([]);
-  const [max, setMax] = useState(0);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    try {
-      const d = await jsonFetch("/api/admin/operations");
-      setOps(d.operations || []);
-      setMax(d.maxConcurrent || 0);
-    } catch {} finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 4000);
-    return () => clearInterval(t);
-  }, [load]);
-
-  const running = ops.filter((o) => o.status === "running").length;
-  const queued = ops.filter((o) => o.status === "queued").length;
-
-  return (
-    <Card>
-      <CardContent className="space-y-3 p-4">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary"><Activity className="h-5 w-5" /></div>
-          <div className="flex-1">
-            <h3 className="text-sm font-semibold">Running operations</h3>
-            <p className="text-xs text-muted-foreground">{running} running{max ? ` / ${max} slots` : ""} · {queued} queued</p>
-          </div>
-          <Button variant="ghost" size="sm" onClick={load}><RefreshCw size={15} /></Button>
-        </div>
-        {loading && !ops.length ? (
-          <div className="py-6 text-center text-sm text-muted-foreground"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>
-        ) : ops.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">Nothing running right now.</p>
-        ) : (
-          <div className="divide-y divide-border/60">
-            {ops.map((o) => (
-              <div key={o.id} className="flex items-center gap-3 py-2">
-                <CircleDot className={cn("h-4 w-4 shrink-0", o.status === "running" ? "animate-pulse text-emerald-500" : "text-amber-500")} />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium">{o.project || "(project)"} <span className="font-normal text-muted-foreground">· {o.type}</span></div>
-                  <div className="truncate text-xs text-muted-foreground">{o.email || o.userId}</div>
-                </div>
-                <Badge variant={o.status === "running" ? "success" : "secondary"} className="shrink-0">{o.status}</Badge>
-                <span className="w-16 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{relTime(o.startedAt || o.createdAt)}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// Edit the displayed monthly price + credit grant for each package.
-function PackagePricing() {
-  const [pkgs, setPkgs] = useState([]);
-  const [draft, setDraft] = useState({});
-  const [busy, setBusy] = useState("");
-  const [saved, setSaved] = useState("");
-
-  const load = useCallback(async () => {
-    try {
-      const d = await jsonFetch("/api/admin/packages");
-      setPkgs(d.packages || []);
-      setDraft(Object.fromEntries((d.packages || []).map((p) => [p.id, { price: p.price, credits: p.credits, dailySearches: p.dailySearches, dailyLeads: p.dailyLeads }])));
-    } catch {}
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  async function save(id) {
-    setBusy(id);
-    setSaved("");
-    try {
-      const d = await jsonFetch("/api/admin/packages", { method: "POST", body: JSON.stringify({ id, price: draft[id]?.price, credits: draft[id]?.credits, dailySearches: draft[id]?.dailySearches, dailyLeads: draft[id]?.dailyLeads }) });
-      setPkgs((list) => list.map((p) => (p.id === id ? d.package : p)));
-      setDraft((dr) => ({ ...dr, [id]: { price: d.package.price, credits: d.package.credits, dailySearches: d.package.dailySearches, dailyLeads: d.package.dailyLeads } }));
-      setSaved(id);
-      setTimeout(() => setSaved(""), 2000);
-    } catch (e) {
-      alert(e.message);
-    } finally {
-      setBusy("");
-    }
-  }
-
-  return (
-    <Card>
-      <CardContent className="space-y-3 p-4">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary"><Tag className="h-5 w-5" /></div>
-          <div>
-            <h3 className="text-sm font-semibold">Package pricing &amp; limits</h3>
-            <p className="text-xs text-muted-foreground">Monthly price, credit grant &amp; per-day search/lead caps per plan. Charges are processed by Whop. Set a daily cap to 0 for unlimited.</p>
-          </div>
-        </div>
-        <div className="space-y-2">
-          {pkgs.map((p) => (
-            <div key={p.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 p-2.5">
-              <div className="w-24 text-sm font-medium">{p.label} <span className="text-xs text-muted-foreground">{p.id}</span></div>
-              <label className="flex items-center gap-1 text-xs text-muted-foreground">$
-                <Input type="number" className="h-8 w-20" value={draft[p.id]?.price ?? ""} onChange={(e) => setDraft((d) => ({ ...d, [p.id]: { ...d[p.id], price: e.target.value } }))} />
-                /mo
-              </label>
-              <label className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Input type="number" className="h-8 w-24" value={draft[p.id]?.credits ?? ""} onChange={(e) => setDraft((d) => ({ ...d, [p.id]: { ...d[p.id], credits: e.target.value } }))} />
-                credits
-              </label>
-              <label className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Input type="number" className="h-8 w-20" value={draft[p.id]?.dailySearches ?? ""} onChange={(e) => setDraft((d) => ({ ...d, [p.id]: { ...d[p.id], dailySearches: e.target.value } }))} />
-                searches/day
-              </label>
-              <label className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Input type="number" className="h-8 w-20" value={draft[p.id]?.dailyLeads ?? ""} onChange={(e) => setDraft((d) => ({ ...d, [p.id]: { ...d[p.id], dailyLeads: e.target.value } }))} />
-                leads/day
-              </label>
-              <Button size="sm" variant="outline" disabled={busy === p.id} onClick={() => save(p.id)} className="ml-auto">
-                {busy === p.id ? <Loader2 size={15} className="animate-spin" /> : saved === p.id ? <Check size={15} className="text-emerald-600" /> : null} Save
-              </Button>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// Controls whether lead queries are served from the warehouse only, or fall back
-// to a real-time scrape when the warehouse has no results.
-const SOURCE_OPTIONS = [
-  { value: "warehouse", label: "Database only", desc: "Serve leads from the pre-built lead database. Never triggers a live scrape." },
-  { value: "warehouse_fallback", label: "Database + live fallback", desc: "Try the database first; fall back to a live Google Maps scrape when empty." },
-];
-
-function LeadSourceSettings() {
-  const [mode, setMode] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [err, setErr] = useState("");
-
-  const load = useCallback(async () => {
-    try {
-      const d = await jsonFetch("/api/admin/settings");
-      setMode(d.lead_source_mode || "warehouse");
-    } catch (e) {
-      setErr(e.message);
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  async function save(value) {
-    setBusy(true);
-    setSaved(false);
-    setErr("");
-    try {
-      await jsonFetch("/api/admin/settings", {
-        method: "POST",
-        body: JSON.stringify({ lead_source_mode: value }),
-      });
-      setMode(value);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (e) {
-      setErr(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Card>
-      <CardContent className="space-y-3 p-4">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary"><Database className="h-5 w-5" /></div>
-          <div className="flex-1">
-            <h3 className="text-sm font-semibold">Lead source mode</h3>
-            <p className="text-xs text-muted-foreground">Controls how search results are served to users.</p>
-          </div>
-          {saved && (
-            <span className="flex items-center gap-1 text-xs font-medium text-emerald-600">
-              <Check size={14} /> Saved
-            </span>
-          )}
-          {busy && <Loader2 size={16} className="animate-spin text-muted-foreground" />}
-        </div>
-
-        {mode === null && !err ? (
-          <div className="py-2 text-center text-sm text-muted-foreground"><Loader2 className="mx-auto h-4 w-4 animate-spin" /></div>
-        ) : (
-          <div className="space-y-2">
-            {SOURCE_OPTIONS.map((opt) => (
-              <label
-                key={opt.value}
-                className={cn(
-                  "flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors",
-                  mode === opt.value ? "border-primary/50 bg-primary/5" : "border-border hover:bg-accent/40"
-                )}
-              >
-                <input
-                  type="radio"
-                  name="lead_source_mode"
-                  value={opt.value}
-                  checked={mode === opt.value}
-                  disabled={busy}
-                  onChange={() => save(opt.value)}
-                  className="mt-0.5 accent-[hsl(var(--primary))]"
-                />
-                <div>
-                  <div className="text-sm font-medium">{opt.label}</div>
-                  <div className="text-xs text-muted-foreground">{opt.desc}</div>
-                </div>
-              </label>
-            ))}
-          </div>
-        )}
-
-        {err && <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-red-600">{err}</div>}
-      </CardContent>
-    </Card>
-  );
-}
-
-// The timezone the per-day search/lead counters reset at (local midnight).
-function DailyResetSettings() {
-  const [tz, setTz] = useState("");
-  const [draft, setDraft] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [err, setErr] = useState("");
-
-  const load = useCallback(async () => {
-    try {
-      const d = await jsonFetch("/api/admin/settings");
-      setTz(d.daily_reset_tz || "UTC");
-      setDraft(d.daily_reset_tz || "UTC");
-    } catch (e) { setErr(e.message); }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  async function save() {
-    setBusy(true); setSaved(false); setErr("");
-    try {
-      const d = await jsonFetch("/api/admin/settings", { method: "POST", body: JSON.stringify({ daily_reset_tz: draft.trim() }) });
-      setTz(d.daily_reset_tz);
-      setDraft(d.daily_reset_tz);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
-  }
-
-  return (
-    <Card>
-      <CardContent className="space-y-3 p-4">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary"><Activity className="h-5 w-5" /></div>
-          <div className="flex-1">
-            <h3 className="text-sm font-semibold">Daily reset timezone</h3>
-            <p className="text-xs text-muted-foreground">Per-day search &amp; lead limits reset at local midnight in this timezone. Current: <span className="font-medium text-foreground">{tz || "…"}</span></p>
-          </div>
-          {saved && <span className="flex items-center gap-1 text-xs font-medium text-emerald-600"><Check size={14} /> Saved</span>}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Input className="h-9 w-56" placeholder="UTC or Asia/Karachi" value={draft} onChange={(e) => setDraft(e.target.value)} />
-          <Button size="sm" variant="outline" disabled={busy || !draft.trim() || draft.trim() === tz} onClick={save}>
-            {busy ? <Loader2 size={15} className="animate-spin" /> : null} Save
-          </Button>
-          <span className="text-xs text-muted-foreground">IANA timezone name (e.g. UTC, America/New_York, Asia/Karachi).</span>
-        </div>
-        {err && <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-red-600">{err}</div>}
-      </CardContent>
-    </Card>
-  );
-}
-
-// Who's logged in right now — every user holding a non-expired Auth.js session.
-function ActiveSessions() {
-  const [sessions, setSessions] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    try {
-      const d = await jsonFetch("/api/admin/sessions");
-      setSessions(d.sessions || []);
-    } catch {} finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 15000);
-    return () => clearInterval(t);
-  }, [load]);
-
-  return (
-    <Card>
-      <CardContent className="space-y-3 p-4">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary"><Users className="h-5 w-5" /></div>
-          <div className="flex-1">
-            <h3 className="text-sm font-semibold">Who&apos;s logged in</h3>
-            <p className="text-xs text-muted-foreground">{sessions.length} {sessions.length === 1 ? "user" : "users"} with a live session</p>
-          </div>
-          <Button variant="ghost" size="sm" onClick={load}>{loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}</Button>
-        </div>
-        {loading && !sessions.length ? (
-          <div className="py-6 text-center text-sm text-muted-foreground"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>
-        ) : sessions.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">No one is logged in right now.</p>
-        ) : (
-          <div className="divide-y divide-border/60">
-            {sessions.map((s) => (
-              <div key={s.id} className="flex items-center gap-3 py-2">
-                <Avatar src={s.image} alt={s.email} fallback={(s.email || "?").slice(0, 1).toUpperCase()} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="truncate text-sm font-medium">{s.email || "(no email)"}</span>
-                    {s.banned ? <Badge variant="destructive" className="gap-1 px-1.5 py-0 text-[10px]"><Ban className="h-2.5 w-2.5" /> Suspended</Badge> : null}
-                  </div>
-                  {s.name ? <div className="truncate text-xs text-muted-foreground">{s.name}</div> : null}
-                </div>
-                {s.plan && s.status === "active"
-                  ? <Badge variant="success" className="shrink-0 gap-1"><Crown className="h-3 w-3" /> {PLAN_LABEL[s.plan] || s.plan}</Badge>
-                  : <Badge variant="secondary" className="shrink-0">Free</Badge>}
-                {s.sessions > 1 ? <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">{s.sessions} sessions</span> : null}
-                <span className="hidden w-32 shrink-0 text-right text-xs tabular-nums text-muted-foreground sm:block" title={`Session expires ${new Date(s.expires).toLocaleString()}`}>expires {new Date(s.expires).toLocaleDateString()}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 function StatCard({ icon: Icon, value, label }) {
   return (
     <Card>
@@ -601,6 +166,116 @@ function StatCard({ icon: Icon, value, label }) {
   );
 }
 
+// How much scraped data the warehouse holds, broken down by country and city.
+function WarehouseStats() {
+  const [stats, setStats] = useState(null);
+  const [citySearch, setCitySearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setErr("");
+    try {
+      setStats(await jsonFetch("/api/admin/warehouse-stats"));
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (err) {
+    return (
+      <Card>
+        <CardContent className="p-4 text-sm text-red-600">Couldn't load warehouse stats: {err}</CardContent>
+      </Card>
+    );
+  }
+
+  const countries = stats?.countries || [];
+  const q = citySearch.trim().toLowerCase();
+  const cities = (stats?.cities || []).filter(
+    (c) => !q || c.city.toLowerCase().includes(q) || c.country.toLowerCase().includes(q)
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-3 sm:max-w-xl">
+        <StatCard icon={Database} value={loading ? "…" : Number(stats?.total || 0).toLocaleString()} label="Total leads" />
+        <StatCard icon={Globe} value={loading ? "…" : countries.length} label="Countries" />
+        <StatCard icon={MapPin} value={loading ? "…" : (stats?.cities || []).length} label="Cities" />
+      </div>
+
+      <Card className="overflow-hidden">
+        <CardContent className="p-4 pb-0">
+          <h3 className="text-sm font-semibold">By country</h3>
+        </CardContent>
+        {!countries.length ? (
+          <div className="p-10 text-center text-sm text-muted-foreground">{loading ? "Loading…" : "No data yet."}</div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Country</TableHead>
+                <TableHead>Cities</TableHead>
+                <TableHead>Leads</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {countries.map((c) => (
+                <TableRow key={c.country}>
+                  <TableCell className="font-medium">{c.country}</TableCell>
+                  <TableCell className="text-muted-foreground">{c.cities}</TableCell>
+                  <TableCell>{c.leads.toLocaleString()}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </Card>
+
+      <Card className="overflow-hidden">
+        <CardContent className="space-y-3 p-4 pb-0">
+          <h3 className="text-sm font-semibold">By city</h3>
+          <div className="relative max-w-xs">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input placeholder="Filter by city or country…" value={citySearch} onChange={(e) => setCitySearch(e.target.value)} className="pl-9" />
+          </div>
+        </CardContent>
+        {!cities.length ? (
+          <div className="p-10 text-center text-sm text-muted-foreground">{loading ? "Loading…" : "No matching cities."}</div>
+        ) : (
+          <div className="max-h-96 overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>City</TableHead>
+                  <TableHead>Country</TableHead>
+                  <TableHead>Leads</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {cities.map((c) => (
+                  <TableRow key={`${c.country}-${c.city}`}>
+                    <TableCell className="font-medium">{c.city}</TableCell>
+                    <TableCell className="text-muted-foreground">{c.country}</TableCell>
+                    <TableCell>{c.leads.toLocaleString()}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 export default function AdminClient() {
   const router = useRouter();
   const [users, setUsers] = useState([]);
@@ -608,8 +283,6 @@ export default function AdminClient() {
   const [search, setSearch] = useState("");
   const [busyId, setBusyId] = useState("");
   const [error, setError] = useState("");
-  const [historyUser, setHistoryUser] = useState(null);
-  const [tab, setTab] = useState("users");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -640,42 +313,10 @@ export default function AdminClient() {
       setUsers((list) =>
         list.map((u) =>
           u.id === userId
-            ? { ...u, plan: ent.plan, status: ent.active ? "active" : "inactive", credits: ent.credits, credits_monthly: ent.creditsMonthly, current_period_end: null }
+            ? { ...u, plan: ent.plan, status: ent.active ? "active" : "inactive", leads_quota: ent.quota, leads_used: ent.used, current_period_end: null }
             : u
         )
       );
-    } catch (e) {
-      alert(e.message);
-    } finally {
-      setBusyId("");
-    }
-  }
-
-  // Add or remove credits (prompt for a signed delta, e.g. 500 or -200).
-  async function adjustCredits(u) {
-    const raw = prompt(`Adjust credits for ${u.email || u.id}\nCurrent balance: ${u.credits || 0}\n\nEnter an amount to add (negative to remove):`, "");
-    if (raw == null) return;
-    const amount = Math.trunc(Number(raw));
-    if (!amount || Number.isNaN(amount)) return;
-    setBusyId(u.id);
-    try {
-      const d = await jsonFetch("/api/admin/users", { method: "POST", body: JSON.stringify({ userId: u.id, action: "credits", mode: "add", amount }) });
-      setUsers((list) => list.map((x) => (x.id === u.id ? { ...x, credits: d.credits } : x)));
-    } catch (e) {
-      alert(e.message);
-    } finally {
-      setBusyId("");
-    }
-  }
-
-  // Ban / unban an account (blocks every protected route for that user).
-  async function toggleBan(u) {
-    const banned = !u.banned;
-    if (banned && !confirm(`Suspend ${u.email || u.id}? They won't be able to use the app until unbanned.`)) return;
-    setBusyId(u.id);
-    try {
-      const d = await jsonFetch("/api/admin/users", { method: "POST", body: JSON.stringify({ userId: u.id, action: "ban", banned }) });
-      setUsers((list) => list.map((x) => (x.id === u.id ? { ...x, banned: d.banned ? 1 : 0 } : x)));
     } catch (e) {
       alert(e.message);
     } finally {
@@ -698,7 +339,6 @@ export default function AdminClient() {
 
   return (
     <div className="lf min-h-screen bg-background text-foreground">
-      {historyUser && <CreditHistoryModal user={historyUser} onClose={() => setHistoryUser(null)} />}
       <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur sm:px-6">
         <Image src="/brand/leadsfunda-white.svg" alt="LeadsFunda" width={128} height={25} priority />
         <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Admin</span>
@@ -711,19 +351,13 @@ export default function AdminClient() {
       </header>
 
       <main className="mx-auto max-w-6xl space-y-4 p-4 sm:p-6">
-        <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="flex-wrap">
-            <TabsTrigger value="users">Users</TabsTrigger>
-            <TabsTrigger value="sessions">Who&apos;s logged in</TabsTrigger>
-            <TabsTrigger value="billing">Billing</TabsTrigger>
-            <TabsTrigger value="operations">Operations</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
-          </TabsList>
-        </Tabs>
-
-        {tab === "users" && (
-        <div className="space-y-4">
         <div>
+          <h1 className="text-xl font-semibold">Warehouse data</h1>
+          <p className="text-sm text-muted-foreground">Scraped leads currently held, by country and city.</p>
+        </div>
+        <WarehouseStats />
+
+        <div className="pt-2">
           <h1 className="text-xl font-semibold">Manage user plans</h1>
           <p className="text-sm text-muted-foreground">Grant, change or revoke a plan for any account. Changes apply immediately.</p>
         </div>
@@ -753,29 +387,22 @@ export default function AdminClient() {
                 <TableRow>
                   <TableHead>User</TableHead>
                   <TableHead>Current plan</TableHead>
-                  <TableHead>Monthly credits</TableHead>
-                  <TableHead>Whop</TableHead>
+                  <TableHead>Usage</TableHead>
                   <TableHead className="w-[220px]">Set plan</TableHead>
-                  <TableHead className="w-[200px]">Credits &amp; access</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map((u) => {
                   const active = isActive(u);
-                  // Scale (p49) is the unlimited tier.
-                  const unlimited = active && u.plan === "p49";
-                  const monthly = monthlyGrant(u);
-                  const whopId = u.whop_user_id || u.m_whop_user_id;
+                  // Scale (p49) is the unlimited tier — its quota is stored as null.
+                  const unlimited = active && (u.leads_quota === null || u.plan === "p49");
                   return (
                     <TableRow key={u.id}>
                       <TableCell>
                         <div className="flex items-center gap-2.5">
                           <Avatar src={u.image} alt={u.email} fallback={(u.email || "?").slice(0, 1).toUpperCase()} />
                           <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className="truncate text-sm font-medium">{u.email || "(no email)"}</span>
-                              {u.banned ? <Badge variant="destructive" className="gap-1 px-1.5 py-0 text-[10px]"><Ban className="h-2.5 w-2.5" /> Suspended</Badge> : null}
-                            </div>
+                            <div className="truncate text-sm font-medium">{u.email || "(no email)"}</div>
                             {u.name ? <div className="truncate text-xs text-muted-foreground">{u.name}</div> : null}
                           </div>
                         </div>
@@ -788,19 +415,7 @@ export default function AdminClient() {
                         )}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {unlimited ? "Unlimited" : monthly != null ? `${monthly.toLocaleString()} / mo` : "Free grant"}
-                      </TableCell>
-                      <TableCell>
-                        {whopId ? (
-                          <code
-                            title={whopId}
-                            className="inline-block max-w-[10rem] truncate rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
-                          >
-                            {whopId}
-                          </code>
-                        ) : (
-                          <span className="text-xs text-muted-foreground/60">—</span>
-                        )}
+                        {!active ? "no plan" : unlimited ? "Unlimited" : `${Number(u.leads_used || 0).toLocaleString()} / ${Number(u.leads_quota || 0).toLocaleString()}`}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -816,25 +431,6 @@ export default function AdminClient() {
                           {busyId === u.id && <Loader2 size={16} className="shrink-0 animate-spin text-muted-foreground" />}
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-1.5">
-                          <div className="flex items-center gap-1.5 text-sm">
-                            <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
-                            <span className="font-medium tabular-nums">{Number(u.credits || 0).toLocaleString()}</span>
-                            <Button variant="ghost" size="sm" className="h-6 px-1.5 text-xs" disabled={busyId === u.id} onClick={() => adjustCredits(u)}>Adjust</Button>
-                            <Button variant="ghost" size="sm" className="h-6 px-1.5 text-xs" onClick={() => setHistoryUser(u)}>History</Button>
-                          </div>
-                          <Button
-                            variant={u.banned ? "secondary" : "ghost"}
-                            size="sm"
-                            className={cn("h-6 w-fit px-1.5 text-xs", u.banned ? "text-foreground" : "text-red-600 hover:text-red-600")}
-                            disabled={busyId === u.id}
-                            onClick={() => toggleBan(u)}
-                          >
-                            <Ban size={13} /> {u.banned ? "Unban" : "Ban"}
-                          </Button>
-                        </div>
-                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -846,29 +442,11 @@ export default function AdminClient() {
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <ShieldCheck className="h-3.5 w-3.5" /> Admin-granted plans never expire and reset the user's usage to zero.
         </p>
+
+        <div className="pt-2">
+          <h2 className="mb-3 text-lg font-semibold">Scraper proxies</h2>
+          <ProxyManager />
         </div>
-        )}
-
-        {tab === "sessions" && <ActiveSessions />}
-
-        {tab === "billing" && (
-          <div className="space-y-4">
-            <PackagePricing />
-          </div>
-        )}
-
-        {tab === "operations" && <OperationsMonitor />}
-
-        {tab === "settings" && (
-          <div className="space-y-4">
-            <LeadSourceSettings />
-            <DailyResetSettings />
-            <div className="pt-2">
-              <h2 className="mb-3 text-lg font-semibold">Scraper proxies</h2>
-              <ProxyManager />
-            </div>
-          </div>
-        )}
       </main>
     </div>
   );

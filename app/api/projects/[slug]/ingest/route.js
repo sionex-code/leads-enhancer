@@ -1,0 +1,299 @@
+import path from "path";
+import fs from "fs";
+import store from "../../../../../web/lib/store.cjs";
+import db from "../../../../../web/lib/db.cjs";
+import billing from "../../../../../web/lib/billing.cjs";
+import queue from "../../../../../web/lib/queue.cjs";
+import warehousePublish from "../../../../../web/lib/warehouse-publish.cjs";
+import publicSearches from "../../../../../web/lib/public-searches.cjs";
+import { requireUser } from "../../../../../web/lib/session.js";
+
+export const dynamic = "force-dynamic";
+
+// Hard ceiling per ingest call, independent of what the client claims to have
+// scraped. The extension runs on the user's machine, so its output is
+// untrusted input — every limit that guards /api/projects/find has to be
+// re-applied here or the extension path would be a way around them.
+const MAX_ROWS_PER_INGEST = 1000;
+
+const SOCIAL_KEYS = [
+  "facebook", "instagram", "linkedin", "twitter",
+  "youtube", "tiktok", "pinterest", "whatsapp", "telegram",
+];
+
+const CSV_HEADERS = [
+  "name", "category", "rating", "reviews", "website", "phone", "address",
+  "plus_code", "hours", "maps_url", "lat", "lng",
+  "email", "all_emails", "contact_page",
+  ...SOCIAL_KEYS,
+  "owner_replied", "owner_reply_count",
+  "whatsapp_status", "whatsapp_id", "enrich_status",
+];
+
+function csvField(v) {
+  const s = v == null ? "" : String(v);
+  if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+function buildCsv(rows) {
+  const lines = [CSV_HEADERS.join(",")];
+  for (const r of rows) lines.push(CSV_HEADERS.map((h) => csvField(r[h])).join(","));
+  return lines.join("\n");
+}
+
+const str = (v) => (v == null ? "" : String(v));
+const numOrNull = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+// Map one extension row onto the lead shape db.upsertLeads expects — the same
+// shape warehouse.toLeadRow produces, so an extension-sourced lead is
+// indistinguishable downstream from a warehouse-sourced one.
+function toLeadRow(x, ctx) {
+  const row = {
+    name: str(x.name),
+    category: str(x.category),
+    rating: x.rating != null ? String(x.rating) : "",
+    reviews: x.reviews != null ? String(x.reviews) : "",
+    website: str(x.website),
+    phone: str(x.phone),
+    address: str(x.address),
+    // The extension doesn't read the place detail panel, so these stay blank
+    // rather than being invented; the warehouse fills them when it has them.
+    plus_code: "",
+    hours: "",
+    maps_url: str(x.maps_url || x.mapsUrl),
+    lat: numOrNull(x.lat),
+    lng: numOrNull(x.lng),
+    email: str(x.email),
+    all_emails: str(x.all_emails || x.emails_all || x.allEmails),
+    contact_page: str(x.contact_page || x.contactPage),
+    owner_replied: numOrNull(x.owner_replied),
+    owner_reply_count: numOrNull(x.owner_reply_count),
+    project: ctx.project,
+    query: ctx.query,
+  };
+  for (const k of SOCIAL_KEYS) row[k] = str(x[k]);
+  return row;
+}
+
+// POST /api/projects/:slug/ingest
+// Accepts leads scraped by the browser extension and stores them exactly as a
+// warehouse-backed find would.
+export async function POST(request, { params }) {
+  const { userId, response } = await requireUser();
+  if (response) return response;
+
+  const { slug } = await params;
+  if (!slug) return Response.json({ error: "Missing project" }, { status: 400 });
+
+  const body = await request.json().catch(() => ({}));
+  const incoming = Array.isArray(body?.rows) ? body.rows : null;
+  if (!incoming) return Response.json({ error: "rows[] is required" }, { status: 400 });
+
+  // The project must already exist and belong to this user — safeProjectDir
+  // scopes to the tenant, so a foreign slug can't be written into.
+  const dir = store.safeProjectDir(slug, userId);
+  if (!fs.existsSync(dir)) {
+    return Response.json({ error: "Project not found" }, { status: 404 });
+  }
+
+  // Re-apply the credit + daily-lead ceilings. The daily *search* was already
+  // charged by /find, so only the lead side is metered here.
+  const entitlement = await billing.getEntitlement(userId);
+  const avail = entitlement.unlimited ? Infinity : (entitlement.credits || 0);
+  if (!entitlement.unlimited && avail <= 0) {
+    return Response.json(
+      { error: "You're out of credits. Choose a plan or top up to save more leads.", code: "no_credits" },
+      { status: 402 }
+    );
+  }
+  const daily = await billing.getDailyUsage(userId);
+  const dailyLeadsLeft = daily.leads.unlimited ? Infinity : daily.leads.remaining;
+  if (dailyLeadsLeft <= 0) {
+    return Response.json(
+      {
+        error: `You've reached today's ${daily.leads.limit.toLocaleString()} lead limit. It resets in ${billing.formatResetIn(daily.resetInSeconds)} (at midnight ${daily.tz}).`,
+        code: "daily_lead_limit",
+      },
+      { status: 429 }
+    );
+  }
+
+  const meta = store.readMeta(dir) || {};
+  const limit = Math.min(MAX_ROWS_PER_INGEST, avail, dailyLeadsLeft, Number(meta.max) || MAX_ROWS_PER_INGEST);
+  const ctx = { project: meta.name || slug, query: meta.query || "" };
+
+  // Drop anything without a name — a row we can't identify is not a lead.
+  const rows = incoming
+    .filter((r) => r && String(r.name || "").trim())
+    .slice(0, limit)
+    .map((r) => toLeadRow(r, ctx));
+
+  if (!rows.length) {
+    store.writeState(dir, {
+      running: false, queued: false, activePid: null,
+      message: "No leads found for this search.",
+      finishedAt: new Date().toISOString(),
+      stages: { scrape: { status: "done" } },
+    });
+    return Response.json({ ok: true, inserted: 0, updated: 0, received: incoming.length });
+  }
+
+  // Fill in contact details anyone has already found for these domains, BEFORE
+  // the CSV is written. upsertLeads applies the shared cache to the database on
+  // its own, but the CSV is what the background enrichment stage reads, so
+  // without this the two disagree about what is already known.
+  const fromCache = await applyEnrichmentCache(rows);
+
+  const res = await db.upsertLeads(userId, rows);
+  await billing.addDailyLeads(userId, res.inserted).catch(() => {});
+
+  // Write the raw CSV so the workspace renders these leads like any other run.
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${slug}.csv`), buildCsv(rows), "utf8");
+  } catch {
+    // The DB is the source of truth; a CSV write failure must not lose leads.
+  }
+
+  store.writeState(dir, {
+    running: false,
+    queued: false,
+    activePid: null,
+    message: "Leads loaded",
+    finishedAt: new Date().toISOString(),
+    stages: { scrape: { status: "done" } },
+    source: "extension",
+    dbSync: { inserted: res.inserted, updated: res.updated, at: new Date().toISOString() },
+  });
+
+  // Hand the slow half of the job to the server.
+  //
+  // The extension used to crawl every lead's website for emails and socials
+  // before handing anything over, which meant the leads the user had already
+  // paid for sat invisible behind a phase that runs at the speed of their home
+  // connection — and that stalls on sites which accept a connection and then
+  // never answer. Leads are saved and visible the moment the search ends; the
+  // crawl continues here, on the VPS, whether or not the tab stays open.
+  const enrich = await queueEnrichment({ userId, dir, slug, meta, rows });
+
+  // Grow the public side of the product from the same scrape.
+  const published = await publishToDirectory({ userId, meta, rows });
+
+  return Response.json({
+    ok: true,
+    inserted: res.inserted,
+    updated: res.updated,
+    received: incoming.length,
+    stored: rows.length,
+    fromCache,
+    enrich,
+    published,
+    status: store.loadStatus(meta.name || slug, userId),
+  });
+}
+
+// A live search covers an area the warehouse had nothing for. Those rows go
+// into the shared warehouse as well as the searcher's own project, which is
+// what turns "nobody has scraped Sialkot plumbers" into a directory page that
+// exists from then on. The searcher keeps their private copy either way.
+//
+// Only aggregates reach the public record: city, service, country and a count.
+// No user id and no free-typed query text, and attribution is anonymised to a
+// first name and last initial inside the lib.
+async function publishToDirectory({ userId, meta, rows }) {
+  const cityName = String(meta.cityName || "").trim();
+  const service = String(meta.service || "").trim();
+  const countryCode = String(meta.countryCode || "").trim().toUpperCase();
+  if (!cityName || !service || !countryCode) {
+    return { published: false, reason: "not_enough_context" };
+  }
+
+  try {
+    const wh = await warehousePublish.publish({
+      rows,
+      cityName,
+      countryCode,
+      countryName: meta.countryName || "",
+      service,
+      query: meta.query || "",
+      lat: meta.areaLat || null,
+      lng: meta.areaLng || null,
+    });
+    if (!wh.published) return wh;
+
+    // Only list it once the warehouse actually holds the rows. Recording first
+    // would publish a directory URL whose page renders from the warehouse and
+    // would therefore be empty, which is exactly the thin content Google drops.
+    const searcher = (await publicSearches.labelForUser(userId)) || null;
+    await publicSearches.record({
+      cityId: wh.cityId ?? null,
+      cityName,
+      countryCode,
+      countryName: meta.countryName || "",
+      service,
+      leadCount: wh.total || rows.length,
+      searcher,
+    });
+    return { published: true, inserted: wh.inserted, updated: wh.updated, total: wh.total };
+  } catch (err) {
+    console.warn("[ingest] directory publish skipped:", err?.message || err);
+    return { published: false, reason: "error" };
+  }
+}
+
+// Populate missing email/socials/WhatsApp status from the cross-tenant caches.
+// Returns how many rows it completed — those cost no crawl at all.
+async function applyEnrichmentCache(rows) {
+  const before = rows.filter((r) => r.email).length;
+  try {
+    await db.fillLeadsFromCaches(rows);
+  } catch {
+    // A cache read failure is never worth failing an ingest over — the
+    // background pass will find these the slow way.
+    return 0;
+  }
+  return rows.filter((r) => r.email).length - before;
+}
+
+// Queue the background website crawl for whatever the cache couldn't answer.
+// Returns { queued, pending } for the UI, or { queued: false, reason }.
+async function queueEnrichment({ userId, dir, slug, meta, rows }) {
+  const pending = rows.filter((r) => r.website && !r.email).length;
+  if (!pending) return { queued: false, pending: 0, reason: "nothing_to_enrich" };
+
+  // Never stack a second runner on a project that already has one: two
+  // processes writing the same project's CSVs would interleave their output.
+  const state = store.readState(dir);
+  if (state.activePid && store.processAlive(state.activePid)) {
+    return { queued: false, pending, reason: "already_running" };
+  }
+
+  try {
+    // Carry the existing meta through — enqueue writes `query`/`max` straight
+    // onto project.json, so passing blanks here would erase what /find recorded.
+    await queue.enqueue(userId, {
+      name: meta.name || slug,
+      query: meta.query || "",
+      max: meta.max || "",
+      stages: ["enrich"],
+      enrichEngine: "crawlee",
+      enrichFast: true,
+      enrichConcurrency: 30,
+    });
+    // enqueue leaves the project reading "waiting for a free slot", which is
+    // true of the crawl but wrong about the leads — they are already saved.
+    store.writeState(dir, { message: `Leads loaded — finding emails for ${pending} sites` });
+    return { queued: true, pending };
+  } catch (err) {
+    // The leads are stored and charged for; a queue failure must not turn that
+    // into an error the user sees as a lost search.
+    console.warn("[ingest] background enrichment not queued:", err?.message || err);
+    return { queued: false, pending, reason: "queue_failed" };
+  }
+}

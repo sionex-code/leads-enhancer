@@ -34,6 +34,7 @@ const APP_ONLY = [
   "/lists",
   "/admin",
   "/login",
+  "/extension",
 ];
 // Subset that requires a Google session (/admin self-authenticates with its own
 // cookie, so it is intentionally excluded here).
@@ -65,6 +66,11 @@ export function middleware(request) {
     }
 
     if (onApp) {
+      // /directory is served on BOTH hosts on purpose: the marketing copy is the
+      // public, indexed one, and the app copy is auth-aware because the session
+      // cookie is scoped to the app host and is invisible from marketing. The
+      // app copy sets noindex + a canonical back to marketing, so the duplicate
+      // never competes in search.
       // No marketing landing on the app host: route "/" to the dashboard or sign-in.
       if (pathname === "/") {
         const url = request.nextUrl.clone();
