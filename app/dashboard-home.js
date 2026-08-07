@@ -834,9 +834,18 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
     setQuery(buildQuery(service, null, country));
   }
 
-  // Ask the browser where we are and point the whole form at it: country, city,
-  // query text and map centre together, so nothing is left describing the old
-  // location. Requires HTTPS, which production is.
+  // Ask the browser where we are and put that place in the search box.
+  //
+  // The name comes from a reverse geocode, not from the city dropdown. Matching
+  // to the nearest warehouse city would only ever name somewhere we already
+  // hold leads — Pakistan has three such cities, so standing in Islamabad would
+  // fill in "Gujrat District", 135km away. A real name is both correct and
+  // searchable, because a place we don't cover simply routes to live search.
+  //
+  // If the place does happen to be a city we cover, the dropdowns move onto it
+  // as well, so the search can be served instantly from the warehouse.
+  //
+  // Requires HTTPS, which production is.
   function locateMe() {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setGeoNote({ tone: "warn", text: "This browser can't share a location." });
@@ -846,23 +855,8 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
     setGeoNote(null);
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setGeoBusy(false);
+      async (pos) => {
         const point = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        const best = nearestCatalogCity(catalogCountries, point);
-
-        if (!best) {
-          setGeoNote({
-            tone: "warn",
-            text: "Got your location, but the city list hasn't loaded yet. Try again in a moment.",
-          });
-          return;
-        }
-
-        setAllCities(false);
-        setCountryCode(best.country.code);
-        setCityObj(best.city);
-        setCitySearch("");
 
         // Only the *place* changes. Someone who typed "24 hour emergency
         // plumber" is asking to move that search, not to have it quietly
@@ -875,27 +869,87 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
             (resolvedArea?.keyword ||
               typed.split(/(?:^|\s+)in\s+/i)[0].trim())) ||
           service;
-        setQuery(buildQuery(keyword, best.city, best.country));
 
-        // Close enough: search around where they actually are. Far away:
-        // centre on the city instead, so the circle and the query agree.
-        const near = best.km <= NEAR_CITY_KM;
-        setCenter(near ? point : { lat: best.city.lat, lng: best.city.lng });
-        setGeoNote(
-          near
-            ? {
-                tone: "ok",
-                text: `Centred on your location. Nearest city we cover: ${best.city.name}${
-                  best.country.name ? `, ${best.country.name}` : ""
-                }.`,
-              }
-            : {
-                tone: "warn",
-                text: `We don't have leads near you yet. The closest city we cover is ${
-                  best.city.name
-                }, about ${Math.round(best.km)} km away — the map is centred there.`,
-              }
-        );
+        let named = null;
+        try {
+          const r = await fetch(
+            `${BASE_PATH}/api/geo/reverse?lat=${point.lat}&lng=${point.lng}`
+          );
+          const d = r.ok ? await r.json() : null;
+          if (d?.resolved && d.place) named = d;
+        } catch {
+          // Offline or Nominatim down — fall through to the catalog match.
+        }
+
+        setGeoBusy(false);
+        setCenter(point);
+        setAllCities(false);
+        setCitySearch("");
+
+        // Does the warehouse actually have this place? Same country, same name.
+        const match = named
+          ? (catalogCountries || [])
+              .filter((c) => !named.countryCode || c.code === named.countryCode)
+              .flatMap((c) => (c.cities || []).map((city) => ({ c, city })))
+              .find(
+                ({ city }) =>
+                  city.name.toLowerCase() === named.place.toLowerCase()
+              )
+          : null;
+
+        if (match) {
+          setCountryCode(match.c.code);
+          setCityObj(match.city);
+          setQuery(buildQuery(keyword, match.city, match.c));
+          setGeoNote({
+            tone: "ok",
+            text: `You're in ${named.place}${
+              named.countryName ? `, ${named.countryName}` : ""
+            } — we already have leads there.`,
+          });
+          return;
+        }
+
+        if (named) {
+          // Not a city we cover. Leave the dropdowns alone and let the typed
+          // query drive it: a custom query already routes to live search, which
+          // is exactly the path a place we don't hold leads for needs.
+          setQuery(
+            `${keyword} in ${named.place} ${named.countryName || ""}`
+              .replace(/\s+/g, " ")
+              .trim()
+          );
+          setGeoNote({
+            tone: "ok",
+            text: `You're in ${named.place}${
+              named.countryName ? `, ${named.countryName}` : ""
+            }. We have no leads stored there yet, so this runs as a live search.`,
+          });
+          return;
+        }
+
+        // Reverse geocoding failed. Nearest covered city is a weaker answer,
+        // but it beats leaving the form pointing at wherever it was.
+        const best = nearestCatalogCity(catalogCountries, point);
+        if (!best) {
+          setGeoNote({
+            tone: "warn",
+            text: "Got your location, but couldn't work out the place name. Pick a city from the dropdown.",
+          });
+          return;
+        }
+        setCountryCode(best.country.code);
+        setCityObj(best.city);
+        setQuery(buildQuery(keyword, best.city, best.country));
+        if (best.km > NEAR_CITY_KM) {
+          setCenter({ lat: best.city.lat, lng: best.city.lng });
+        }
+        setGeoNote({
+          tone: "warn",
+          text: `Couldn't name your exact location. Using ${best.city.name}, the closest city we cover (about ${Math.round(
+            best.km
+          )} km away).`,
+        });
       },
       (err) => {
         setGeoBusy(false);
