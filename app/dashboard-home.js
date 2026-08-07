@@ -45,6 +45,7 @@ import {
   ArrowRight,
   SlidersHorizontal,
   MapPin,
+  LocateFixed,
   Users,
 } from "lucide-react";
 
@@ -347,6 +348,39 @@ function EnrichProgress({ progress, stage }) {
     </Card>
   );
 }
+
+// Great-circle distance in km. Plenty for "which city is closest" — the error
+// against a proper geodesic is far smaller than a city is wide.
+function haversineKm(a, b) {
+  const R = 6371;
+  const rad = (d) => (d * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat);
+  const dLng = rad(b.lng - a.lng);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+// Nearest city *in the catalog*, not the nearest city on earth. The country and
+// city dropdowns can only ever hold catalog entries, so resolving a location to
+// anything outside it would leave the form displaying one place while searching
+// another — the exact mismatch that makes a live search come back empty.
+function nearestCatalogCity(countries, point) {
+  let best = null;
+  for (const country of countries || []) {
+    for (const city of country.cities || []) {
+      if (city.lat == null || city.lng == null) continue;
+      const km = haversineKm(point, city);
+      if (!best || km < best.km) best = { country, city, km };
+    }
+  }
+  return best;
+}
+
+// Past this, "your location" and the city we'd search stop being the same
+// place, so the map centres on the city rather than on the user.
+const NEAR_CITY_KM = 150;
 
 function buildQuickQuery(service, city, country) {
   return `${service} in ${city} ${country.querySuffix}`.replace(/\s+/g, " ").trim();
@@ -672,6 +706,10 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   // Mapped to the API's minRating/maxRating on submit so the backend is unchanged.
   const [rating, setRating] = useState("");
   const [allCities, setAllCities] = useState(false);
+  // "Use my location" — GPS result, plus whatever we need to tell the user
+  // about it. `geoNote` is {tone: "ok"|"warn", text}.
+  const [geoBusy, setGeoBusy] = useState(false);
+  const [geoNote, setGeoNote] = useState(null);
   const [radiusKm, setRadiusKm] = useState(10);
   // "warehouse" = serve what we already have (instant). "live" = scrape Google
   // Maps right now in this browser through the extension. Kept as an explicit
@@ -794,6 +832,71 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   function selectAllCities() {
     setAllCities(true);
     setQuery(buildQuery(service, null, country));
+  }
+
+  // Ask the browser where we are and point the whole form at it: country, city,
+  // query text and map centre together, so nothing is left describing the old
+  // location. Requires HTTPS, which production is.
+  function locateMe() {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setGeoNote({ tone: "warn", text: "This browser can't share a location." });
+      return;
+    }
+    setGeoBusy(true);
+    setGeoNote(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGeoBusy(false);
+        const point = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        const best = nearestCatalogCity(catalogCountries, point);
+
+        if (!best) {
+          setGeoNote({
+            tone: "warn",
+            text: "Got your location, but the city list hasn't loaded yet. Try again in a moment.",
+          });
+          return;
+        }
+
+        setAllCities(false);
+        setCountryCode(best.country.code);
+        setCityObj(best.city);
+        setCitySearch("");
+        setQuery(buildQuery(service, best.city, best.country));
+
+        // Close enough: search around where they actually are. Far away:
+        // centre on the city instead, so the circle and the query agree.
+        const near = best.km <= NEAR_CITY_KM;
+        setCenter(near ? point : { lat: best.city.lat, lng: best.city.lng });
+        setGeoNote(
+          near
+            ? {
+                tone: "ok",
+                text: `Centred on your location. Nearest city we cover: ${best.city.name}${
+                  best.country.name ? `, ${best.country.name}` : ""
+                }.`,
+              }
+            : {
+                tone: "warn",
+                text: `We don't have leads near you yet. The closest city we cover is ${
+                  best.city.name
+                }, about ${Math.round(best.km)} km away — the map is centred there.`,
+              }
+        );
+      },
+      (err) => {
+        setGeoBusy(false);
+        setGeoNote({
+          tone: "warn",
+          text:
+            err?.code === 1
+              ? "Location access was blocked. Allow it from the icon in your address bar, then try again."
+              : "Couldn't get your location. Pick a city from the dropdown instead.",
+        });
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
+    );
   }
 
   // ── Where a typed search actually goes ────────────────────────────────────
@@ -1129,10 +1232,36 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
             )}
           </div>
         )}
-        <div className="mb-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-          <MapPin className="h-3.5 w-3.5" />
-          <span>Drag the pin to refine the search center</span>
+        <div className="mb-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <MapPin className="h-3.5 w-3.5" />
+            <span>Drag the pin to refine the search center</span>
+          </div>
+          <button
+            type="button"
+            onClick={locateMe}
+            disabled={geoBusy}
+            title="Set the search area to where you are right now"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card/40 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {geoBusy ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <LocateFixed className="h-3.5 w-3.5" />
+            )}
+            {geoBusy ? "Locating…" : "Use my location"}
+          </button>
         </div>
+        {geoNote && (
+          <p
+            className={cn(
+              "mb-1.5 text-xs",
+              geoNote.tone === "warn" ? "text-amber-600" : "text-muted-foreground"
+            )}
+          >
+            {geoNote.text}
+          </p>
+        )}
         <LeadsMap
           interactive
           center={center}

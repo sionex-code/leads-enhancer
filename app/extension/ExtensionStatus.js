@@ -1,18 +1,18 @@
 "use client";
 
 import { CheckCircle2, Loader2, AlertTriangle } from "lucide-react";
-import useExtension from "../lib/useExtension";
 
-// Live "is it connected yet?" badge. Polls so the user doesn't have to guess
-// whether the install worked — this page is the one place where that answer
-// matters, and the one place they're actively installing.
+// Live "is it connected yet?" badge. This page is the one place where that
+// answer matters, and the one place they're actively installing.
+//
+// Presentational only — InstallGuide owns the polling hook, because it also
+// needs the answer (to collapse the steps once the extension is in) and two
+// independent pollers would be two independent sources of truth.
 //
 // Colour carries the icon and the border only. The text itself stays on
 // `foreground`/`muted-foreground`, because tinted text (emerald-300) on a tinted
 // background was effectively unreadable in the light theme.
-export default function ExtensionStatus() {
-  const { checking, installed, version } = useExtension({ poll: true });
-
+export default function ExtensionStatus({ checking, installed, version }) {
   if (checking) {
     return (
       <div className="mt-8 flex items-start gap-3 rounded-xl border border-border bg-card px-4 py-3.5">
@@ -25,7 +25,7 @@ export default function ExtensionStatus() {
   if (installed) {
     return (
       <div className="mt-8 flex items-start gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/[0.07] px-4 py-3.5">
-        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
         <div className="min-w-0">
           <p className="text-sm font-semibold text-foreground">
             Connected — extension v{version}
@@ -40,12 +40,12 @@ export default function ExtensionStatus() {
 
   return (
     <div className="mt-8 flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/[0.07] px-4 py-3.5">
-      <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+      <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
       <div className="min-w-0">
-        <p className="text-sm font-semibold text-foreground">Not detected yet</p>
+        <p className="text-sm font-semibold text-foreground">Not installed yet</p>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          Follow the steps below. This updates on its own once the extension
-          connects — you may need to reload the page after installing.
+          Follow the six steps below — it takes about two minutes. This badge
+          turns green on its own the moment the extension connects.
         </p>
       </div>
     </div>
