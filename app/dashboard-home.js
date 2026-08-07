@@ -349,6 +349,32 @@ function EnrichProgress({ progress, stage }) {
   );
 }
 
+// The rating band, applied to what the extension handed back.
+//
+// The warehouse does this in SQL; the extension knows nothing about it and
+// returns whatever Maps showed. Without this, choosing "4.5 and up" or "below
+// 4.0" does nothing at all on any search that goes live — which is every custom
+// keyword.
+//
+// Deliberately mirrors the SQL, including its edges: `>= min`, `< max`, and a
+// business with no rating matches neither band, because `NULLIF(rating,'')`
+// makes the comparison NULL rather than true.
+function filterByRating(rows, minRating, maxRating) {
+  if (minRating == null && maxRating == null) return rows;
+  return (rows || []).filter((r) => {
+    // Check for "no rating" before converting: Number("") and Number(null) are
+    // both 0, which is finite, so an unrated business would otherwise sail
+    // through "below 4.0" as a zero-star result.
+    const raw = r?.rating;
+    if (raw == null || raw === "") return false;
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return false;
+    if (minRating != null && value < minRating) return false;
+    if (maxRating != null && value >= maxRating) return false;
+    return true;
+  });
+}
+
 // Great-circle distance in km. Plenty for "which city is closest" — the error
 // against a proper geodesic is far smaller than a city is wide.
 function haversineKm(a, b) {
@@ -1718,7 +1744,7 @@ export default function Dashboard({ view = "" }) {
     });
 
     try {
-      const { rows, cancelled, timedOut } = await scrapeWithExtension(
+      const { rows: scraped, cancelled, timedOut } = await scrapeWithExtension(
         {
           query: liveParams.query,
           service: liveParams.service,
@@ -1761,6 +1787,11 @@ export default function Dashboard({ view = "" }) {
         }
       );
 
+      // Drop the ones outside the chosen rating band before anything counts,
+      // saves or displays them, so the numbers on screen are the numbers stored.
+      const rows = filterByRating(scraped, liveParams.minRating, liveParams.maxRating);
+      const droppedByRating = scraped.length - rows.length;
+
       setBusy(`Saving ${rows.length} leads`);
       setScrapeProgress((prev) => ({
         ...(prev || {}),
@@ -1795,9 +1826,16 @@ export default function Dashboard({ view = "" }) {
         fromCache: saved.fromCache || 0,
         message: stored
           ? `${stored} leads saved to this project.`
-          : `Nothing found for "${liveParams.query}"${
-              liveParams.areaLabel ? ` around ${liveParams.areaLabel.split(",")[0]}` : ""
-            }. Try a broader keyword or a wider area.`,
+          : // Blaming the keyword when the rating filter is what emptied the
+            // results sends the user off widening an area that was never the
+            // problem. Say which one it was.
+            droppedByRating
+            ? `Found ${scraped.length} business${
+                scraped.length === 1 ? "" : "es"
+              }, but none matched the rating filter. Widen it or set it to "Any rating".`
+            : `Nothing found for "${liveParams.query}"${
+                liveParams.areaLabel ? ` around ${liveParams.areaLabel.split(",")[0]}` : ""
+              }. Try a broader keyword or a wider area.`,
       });
 
       return {

@@ -405,4 +405,9 @@ function toLeadRow(wh) {
   };
 }
 
-module.exports = { catalog, queryLeads, toLeadRow };
+// `getPool` is exported for warehouse-publish.cjs, which writes into the same
+// database. Deliberately reusing this pool rather than opening a second one, and
+// deliberately not depending on the standalone `wh-db.cjs`: that file lives only
+// on the server (it drives the wh-ie-* workers) and is not in this repo, so a
+// require of it would break every local build.
+module.exports = { catalog, queryLeads, toLeadRow, getPool, refreshCatalog };

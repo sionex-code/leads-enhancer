@@ -3,9 +3,10 @@ import fs from "fs";
 import store from "../../../../web/lib/store.cjs";
 import db from "../../../../web/lib/db.cjs";
 import warehouse from "../../../../web/lib/warehouse.cjs";
+import geo from "../../../../web/lib/geo-resolve.cjs";
+import publicSearches from "../../../../web/lib/public-searches.cjs";
 import billing from "../../../../web/lib/billing.cjs";
 import settings from "../../../../web/lib/settings.cjs";
-import queue from "../../../../web/lib/queue.cjs";
 import waLib from "../../../../modules/whatsapp/index.cjs";
 import { requireUser } from "../../../../web/lib/session.js";
 
@@ -23,6 +24,27 @@ const CSV_HEADERS = [
 
 // Social networks shared between the cache backfill and buildCsv.
 const SOCIAL_KEYS = ["facebook", "instagram", "linkedin", "twitter", "youtube", "tiktok", "pinterest", "whatsapp", "telegram"];
+
+// Nominatim's display_name runs coarse-to-fine and always ends with the
+// country: "Islamabad, Zone 1, Islamabad Capital Territory, 44000, Pakistan".
+function countryFromDisplay(display) {
+  const parts = String(display || "").split(",").map((s) => s.trim()).filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : "";
+}
+
+// Name a project after the search that actually ran: "Islamabad Restaurants
+// Leads". Built from the resolved keyword and place rather than the dropdowns,
+// which for a typed query describe somewhere else entirely.
+function nameFromArea(area, keywordOverride) {
+  const titleCase = (s) =>
+    String(s || "").trim().replace(/\s+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const place = titleCase(area.shortName);
+  const keyword = titleCase(keywordOverride || area.keyword);
+  // Don't repeat the place when the keyword already contains it ("Gujrat
+  // Plumber" in Gujrat) — that would read "Gujrat Gujrat Plumber Leads".
+  const kw = place && keyword.toLowerCase().includes(place.toLowerCase()) ? "" : keyword;
+  return `${place} ${kw} Leads`.replace(/\s+/g, " ").trim().slice(0, 80);
+}
 
 // Bare hostname for a website (drops protocol + www), to key the enrichment cache.
 function hostOf(u) {
@@ -175,7 +197,23 @@ export async function POST(request) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const { name, query, cityId, cityName, countryCode, countryName, service, minRating, maxRating, centerLat, centerLng, radiusKm, isUnknownKeyword } = body || {};
+  const { name, query, cityId, cityName, countryCode, countryName, service, minRating, maxRating, centerLat, centerLng, radiusKm, isUnknownKeyword, isCustomQuery } = body || {};
+
+  // Where the leads come from. "warehouse" serves what we already have (instant);
+  // "live" skips the warehouse entirely and scrapes Google Maps in the user's
+  // browser via the extension. This is an explicit choice rather than only an
+  // automatic fallback: the warehouse having *some* rows for an area doesn't mean
+  // it has the ones the user wants, and previously any non-empty result meant the
+  // extension never ran.
+  const source = body?.source === "live" ? "live" : "warehouse";
+
+  // The warehouse resolves a search entirely from the structured fields —
+  // `services.name`, city id, country — and never looks at `query`. So any typed
+  // text that differs from those selections cannot be answered from stored leads:
+  // "Gujrat Plumber" against a city dropdown set to Uppsala returns Uppsala
+  // plumbers, which is both wrong and non-empty, so the live fallback never fires
+  // either. Custom text has to go live.
+  const mustGoLive = source === "live" || !!isCustomQuery || !!isUnknownKeyword;
 
   if (!name) return Response.json({ error: "Project name is required" }, { status: 400 });
 
@@ -198,8 +236,46 @@ export async function POST(request) {
   const dailyLeadsLeft = daily.leads.unlimited ? Infinity : daily.leads.remaining;
   const max = Math.min(Math.max(1, Math.trunc(Number(body.max) || 30)), 10000, avail, dailyLeadsLeft);
 
+  // Resolve typed text to a real place BEFORE naming the project. The client
+  // can only name a search from the dropdowns it can see, so a typed search got
+  // labelled with whatever city happened to be selected — "Copenhagen, Denmark
+  // Leads" sitting on top of 109 Islamabad businesses. Only this side knows
+  // where the search actually went, so it has to supply the name too.
+  let area = null;
+  if (mustGoLive && isCustomQuery && query) {
+    // The form already resolved this text to show the user where the pin was
+    // going. Reusing its answer means the search runs exactly where the map
+    // said it would, and saves a second Nominatim call for the same string.
+    // Everything is re-derived from it here rather than trusted wholesale: the
+    // client only supplies coordinates and labels, never a bounding box.
+    const pre = body.resolvedArea;
+    if (pre && Number.isFinite(Number(pre.lat)) && Number.isFinite(Number(pre.lng))) {
+      area = {
+        keyword: String(pre.keyword || "").trim(),
+        shortName: String(pre.place || "").trim(),
+        display: String(pre.display || "").trim(),
+        countryCode: String(pre.countryCode || "").trim().toUpperCase(),
+        countryName: String(pre.countryName || "").trim(),
+        lat: Number(pre.lat),
+        lng: Number(pre.lng),
+        // No bbox on purpose. A geocoded bounding box covers the whole
+        // administrative area and silently ignores the radius slider, so a
+        // 5 km search of "restaurants in London" would grid all of Greater
+        // London. Centre plus the user's radius respects both inputs.
+        fromClient: true,
+      };
+    } else {
+      area = await geo.resolveArea(query).catch(() => null);
+    }
+  }
+
+  // When the query was nothing but a place name, the keyword comes back empty —
+  // fall back to the service the user already had selected.
+  const areaKeyword = area ? (area.keyword || service || "").trim() : "";
+
   // Unique project name (appends random id if the slug already exists).
-  const { name: projectName } = store.uniqueProjectName(name, userId);
+  const requestedName = area ? nameFromArea(area, areaKeyword) : name;
+  const { name: projectName } = store.uniqueProjectName(requestedName, userId);
   const dir = store.safeProjectDir(store.slugify(projectName), userId);
 
   // Short public id for support references (stable per project).
@@ -218,11 +294,80 @@ export async function POST(request) {
     query: query || "",
     max: String(max),
     publicId,
-    cityName: cityName || "",
-    countryName: countryName || "",
-    service: service || "",
-    isUnknownKeyword: isUnknownKeyword ? "1" : "",
+    // When the area was resolved from the query, the dropdowns describe
+    // somewhere the search never went — record where it actually went.
+    cityName: area ? area.shortName : (cityName || ""),
+    countryName: area ? (area.countryName || countryFromDisplay(area.display)) : (countryName || ""),
+    service: area ? areaKeyword : (service || ""),
+    // Needed by /ingest to publish a live scrape into the shared warehouse:
+    // the country has to be an ISO code to match the warehouse's country list,
+    // and the coordinates place a city the catalog has never seen before.
+    countryCode: area ? (area.countryCode || "") : String(countryCode || "").toUpperCase(),
+    cityId: area ? "" : (cityId ?? ""),
+    areaLat: area ? String(area.lat ?? "") : "",
+    areaLng: area ? String(area.lng ?? "") : "",
+    // This flag makes the UI synthesise a label from cityName/countryName
+    // instead of showing the real one. That is only appropriate when we could
+    // not work out what was searched — which is no longer the case here.
+    isUnknownKeyword: isUnknownKeyword && !area ? "1" : "",
   });
+
+  // Explicit live search: don't touch the warehouse at all. The client drives the
+  // extension and POSTs the rows to /ingest, which is what actually stores them
+  // and charges credits — so there is nothing to insert here.
+  if (mustGoLive) {
+    store.writeState(dir, {
+      running: false,
+      queued: false,
+      activePid: null,
+      publicId,
+      message: "Searching Google Maps in your browser…",
+    });
+
+    // `area` was resolved above, before the project was named. Google answers
+    // the *text* ("Gujrat Plumber" returns Pakistani plumbers however the
+    // dropdowns are set), but the grid engine only keeps results inside the box
+    // it was handed — hand it the dropdown's box and every result is discarded
+    // as out-of-area, scoring a full page of leads as zero.
+    return Response.json({
+      ok: true,
+      slug: store.slugify(projectName),
+      name: projectName,
+      total: 0,
+      inserted: 0,
+      updated: 0,
+      needsLive: true,
+      source: "live",
+      liveParams: {
+        // Search the keyword alone once the place name is carried by the bbox;
+        // leaving it in ("Plumber" vs "Gujrat Plumber") narrows Maps to
+        // businesses with the place in their name.
+        query: area ? (areaKeyword || query || "") : (query || ""),
+        service: service || "",
+        cityName: cityName || "",
+        countryCode: countryCode || "",
+        // The warehouse path applies these in SQL. The live path has to carry
+        // them to the client and apply them to what the extension returns,
+        // otherwise picking a rating band silently does nothing for any search
+        // that goes live — which is every custom keyword.
+        minRating,
+        maxRating,
+        // A resolved bbox wins; otherwise fall back to the dropdown's centre,
+        // which is correct whenever the query wasn't custom text.
+        // An area the form resolved searches its centre at the radius the user
+        // chose. An area resolved here has no radius to honour, so its bbox is
+        // the best description of it. Neither case falls back to the dropdown
+        // centre, which describes somewhere the search is not going.
+        ...(area && area.fromClient
+          ? { centerLat: area.lat, centerLng: area.lng, radiusKm, areaLabel: area.display || area.shortName }
+          : area
+            ? { bbox: area.bbox, latStep: area.latStep, lngStep: area.lngStep, areaLabel: area.display }
+            : { centerLat, centerLng, radiusKm }),
+        max,
+      },
+      status: store.loadStatus(projectName, userId),
+    });
+  }
 
   // Query the warehouse. A warehouse outage must return a clean error, not a 500.
   let total, rows;
@@ -291,23 +436,48 @@ export async function POST(request) {
     },
   });
 
-  // Fallback: only when the warehouse has NOTHING for this area do we enqueue a
-  // live Google Maps scrape (matches the admin "fall back ... when empty" mode).
-  // When the warehouse already returned leads they're delivered instantly with no
-  // queue — so the user never sees "waiting for a free slot" on a successful find.
-  // (best-effort, never fails the response).
-  try {
-    const mode = await settings.getLeadSourceMode();
-    if (mode === "warehouse_fallback" && rows.length === 0) {
-      await queue.enqueue(userId, {
-        name: projectName,
-        query: query || "",
-        max: String(max),
-        stages: ["scrape"],
+  // Fallback: only when the warehouse has NOTHING for this area is a live
+  // Google Maps scrape needed.
+  //
+  // That scrape now runs in the user's browser via the extension, which is why
+  // this no longer enqueues a server-side job: live scraping was the single
+  // biggest source of CPU/bandwidth load on the VPS, and it scaled with user
+  // count. The client sees `needsLive` and drives the extension, then POSTs the
+  // rows to /api/projects/:slug/ingest. `liveParams` echoes back what the
+  // extension needs so the client doesn't have to reconstruct it.
+  let needsLive = false;
+  if (rows.length === 0) {
+    try {
+      const mode = await settings.getLeadSourceMode();
+      needsLive = mode === "warehouse_fallback";
+    } catch {
+      // Settings hiccup: don't offer a live scrape we can't reason about.
+      needsLive = false;
+    }
+    if (needsLive) {
+      store.writeState(dir, {
+        running: false,
+        queued: false,
+        activePid: null,
+        publicId,
+        message: "Searching Google Maps in your browser…",
       });
     }
-  } catch {
-    // Fallback failure must not fail the find response.
+  }
+
+  // Publish the *shape* of this search to the public directory: city, service,
+  // country and how many rows the warehouse holds. Deliberately not recorded
+  // for live/custom searches — those carry free-typed text belonging to the
+  // person who typed it, and their leads live in that user's project rather
+  // than the shared warehouse, so there would be nothing public to show.
+  if (rows.length > 0 && cityName && service) {
+    // Attribution is anonymised in the lib (first name + last initial) — these
+    // rows land on a public, indexed page.
+    const searcher = (await publicSearches.labelForUser(userId)) || null;
+    await publicSearches.record({
+      cityId, cityName, countryCode, countryName, service,
+      leadCount: total, searcher,
+    });
   }
 
   return Response.json({
@@ -317,6 +487,18 @@ export async function POST(request) {
     total,
     inserted: res.inserted,
     updated: res.updated,
+    needsLive,
+    source: "warehouse",
+    liveParams: needsLive
+      ? {
+          query: query || "",
+          service: service || "",
+          cityName: cityName || "",
+          countryCode: countryCode || "",
+          centerLat, centerLng, radiusKm,
+          max,
+        }
+      : null,
     status: store.loadStatus(projectName, userId),
   });
 }
