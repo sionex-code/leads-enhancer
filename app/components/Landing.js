@@ -37,6 +37,9 @@ import {
 } from "lucide-react";
 import { GoogleSignInButton } from "./GoogleSignInButton";
 import { Button } from "./ui/button";
+import RecentSearches from "./RecentSearches";
+import PublicSearch from "./PublicSearch";
+import useSignedIn, { appHref } from "../lib/useSignedIn";
 
 // Faint diagonal hatch the template uses behind several light sections.
 const HATCH =
@@ -105,9 +108,9 @@ const TESTIMONIALS = [
 ];
 
 const PLANS = [
-  { id: "free", name: "Free", price: 0, sub: "Kick the tires, no card", quota: "Free starter credits",
-    perks: ["Free starter credits", "Find + preview leads", "Basic enrichment", "CSV export"],
-    cta: "Start free", callbackUrl: "/dashboard", style: "light" },
+  { id: "free", name: "Starter", price: 0, sub: "Kick the tires, no card", quota: "Starter credits",
+    perks: ["Starter credits", "Find + preview leads", "Basic enrichment", "CSV export"],
+    cta: "Get started", callbackUrl: "/dashboard", style: "light" },
   { id: "p19", name: "Starter", price: 19, sub: "For solo prospectors", quota: "5,000 credits / month",
     perks: ["5,000 credits / mo", "20 searches + 400 leads / day", "Email + social enrichment", "Website health checks"],
     cta: "Get Starter", callbackUrl: "/billing?plan=p19", style: "light" },
@@ -125,7 +128,7 @@ const FAQ = [
   { q: "Do I need to install anything?", a: "No. LeadsFunda runs entirely in the cloud. Sign in with Google, start a scrape, and your leads appear in the dashboard, even if you close the tab." },
   { q: "Where do the leads come from?", a: "Public Google Maps business listings for the niche and location you choose. We then visit each business's own website to enrich emails and social profiles." },
   { q: "Can I cancel anytime?", a: "Yes. Plans are monthly and managed through Whop. Upgrade, downgrade or cancel whenever you like, with no contracts." },
-  { q: "What counts as a credit?", a: "Finding a lead costs 1 credit; a quick audit 3, a chatbot scan 5, and a full website report 10. Re-checking a lead you already own is free." },
+  { q: "What counts as a credit?", a: "Finding a lead costs 1 credit; a quick audit 3, a chatbot scan 5, and a full website report 10. Re-checking a lead you already own costs nothing." },
   { q: "Is my data safe?", a: "Every account's leads and projects are fully isolated and protected. We never share or resell your data." },
   { q: "How fast is a scrape?", a: "Jobs run on our servers with up to six in parallel, so a few thousand leads typically finish while you grab a coffee." },
 ];
@@ -167,6 +170,47 @@ function Reveal({ children, className = "", delay = 0 }) {
     >
       {children}
     </div>
+  );
+}
+
+// Every call to action on this page, in one component.
+//
+// Signed out it is the Google button, which hands off to the app host's /login.
+// Signed in it is a plain link to wherever that button would have landed you
+// anyway — because asking a customer who is already signed in to "Continue with
+// Google" sends them through a whole OAuth round-trip to arrive exactly where a
+// link would have put them.
+//
+// `signedInLabel` exists for the pricing cards: "Get Growth" still says "Get
+// Growth" once you're signed in, it just goes straight to checkout.
+function Cta({
+  signedIn,
+  callbackUrl = "/dashboard",
+  signedInLabel,
+  children,
+  size,
+  variant,
+  className,
+}) {
+  if (signedIn) {
+    return (
+      <Button asChild size={size} variant={variant} className={className}>
+        <a href={appHref(callbackUrl)}>
+          {signedInLabel || children}
+          <ArrowRight className="h-4 w-4" />
+        </a>
+      </Button>
+    );
+  }
+  return (
+    <GoogleSignInButton
+      callbackUrl={callbackUrl}
+      size={size}
+      variant={variant}
+      className={className}
+    >
+      {children}
+    </GoogleSignInButton>
   );
 }
 
@@ -321,7 +365,7 @@ function HeroApp() {
             <div className="flex items-center justify-between">
               <div className="font-heading text-base font-bold">Find leads</div>
               <span className="hidden items-center gap-1.5 rounded-full bg-[#a2e435]/20 px-2.5 py-1 text-[11px] font-semibold text-[#3a6b00] sm:inline-flex">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#7cc20a]" /> 6 jobs free
+                <span className="h-1.5 w-1.5 rounded-full bg-[#7cc20a]" /> 6 jobs included
               </span>
             </div>
             {/* search bar */}
@@ -491,7 +535,7 @@ function StepMock({ step }) {
 
 /* -------------------------------------------------------------- pricing -- */
 
-function PriceCard({ plan }) {
+function PriceCard({ plan, signedIn }) {
   const Icon = PLAN_ICONS[plan.id];
   const blue = plan.style === "blue";
   const dark = plan.style === "dark";
@@ -527,9 +571,9 @@ function PriceCard({ plan }) {
       </div>
       <div className={`mt-1 text-xs ${per}`}>{plan.quota}</div>
 
-      <GoogleSignInButton callbackUrl={plan.callbackUrl} className={`mt-6 w-full rounded-xl ${btnClass}`} variant={btnVariant}>
+      <Cta signedIn={signedIn} callbackUrl={plan.callbackUrl} className={`mt-6 w-full rounded-xl ${btnClass}`} variant={btnVariant}>
         {plan.cta}
-      </GoogleSignInButton>
+      </Cta>
 
       <div className={`mb-3 mt-6 text-xs font-semibold uppercase tracking-wider ${per}`}>Added features</div>
       <ul className="space-y-3 text-sm">
@@ -628,10 +672,14 @@ function DiscoverCards() {
 
 /* ----------------------------------------------------------------- page -- */
 
-export default function Landing() {
+export default function Landing({ recent = [], total = 0 }) {
   const [step, setStep] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState(null);
+  // Asked once, here, and threaded down — every CTA on the page needs the same
+  // answer and three components polling /api/public/me would be three requests
+  // for one fact.
+  const { signedIn, label: me } = useSignedIn();
 
   return (
     <div className={`lf relative min-h-screen overflow-x-clip bg-background text-foreground ${HATCH}`}>
@@ -653,7 +701,7 @@ export default function Landing() {
               ))}
             </nav>
             <div className="flex items-center gap-2">
-              <GoogleSignInButton size="sm" className="lf-cta rounded-xl hidden sm:inline-flex">Get started</GoogleSignInButton>
+              <Cta signedIn={signedIn} size="sm" className="lf-cta rounded-xl hidden sm:inline-flex" signedInLabel="Dashboard">Get started</Cta>
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground md:hidden hover:bg-muted transition-colors"
@@ -679,7 +727,7 @@ export default function Landing() {
                   </a>
                 ))}
                 <div className="mt-2 border-t border-border/60 pt-3">
-                  <GoogleSignInButton size="lg" className="w-full rounded-xl">Get started</GoogleSignInButton>
+                  <Cta signedIn={signedIn} size="lg" className="w-full rounded-xl" signedInLabel="Dashboard">Get started</Cta>
                 </div>
               </nav>
             </div>
@@ -688,35 +736,44 @@ export default function Landing() {
       </header>
 
       {/* ---- hero ---- */}
+      {/*
+        The search box IS the hero. A visitor can run a real search here, on real
+        Google Maps data, before they have an account — so the fastest way to
+        explain the product is to let them use it, not to describe it above a
+        pair of buttons that only lead to a sign-in screen. The headline and sub
+        stay because a page still needs to say what it is (and be indexable),
+        but they are sized to keep the search box above the fold.
+      */}
       <section className="relative px-4">
-        <div className="container flex flex-col items-center pb-10 pt-16 text-center sm:pt-24">
-          <span className="lf-shine mb-7 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-1.5 text-sm font-medium text-foreground/80 shadow-sm">
+        <div className="container flex flex-col items-center pb-10 pt-14 text-center sm:pt-20">
+          <span className="lf-shine mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-1.5 text-sm font-medium text-foreground/80 shadow-sm">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#a2e435] opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-[#7cc20a]" />
             </span>
-            Google Maps lead generation, on autopilot
+            Live Google Maps search — no account needed
           </span>
-          <h1 className="font-heading max-w-4xl text-5xl font-bold leading-[1.03] tracking-tight sm:text-6xl xl:text-[5.25rem]">
-            Turn Google Maps into a{" "}
+          <h1 className="font-heading max-w-3xl text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl xl:text-6xl">
+            Search leads on{" "}
             <span className="relative text-primary sm:whitespace-nowrap">
-              pipeline of leads
+              Google Maps
               <span className="hidden sm:block absolute -bottom-1.5 left-0 h-[6px] w-full rounded-full bg-gradient-to-r from-primary/25 via-[#a2e435]/40 to-[#a2e435]/15" />
             </span>
           </h1>
-          <p className="mt-7 max-w-xl text-lg text-muted-foreground">
-            Scrape any niche, enrich every lead with emails, socials and WhatsApp, and spot prospects whose websites need help, all from one dashboard.
+          <p className="mt-5 max-w-xl text-lg text-muted-foreground">
+            Pick a niche and a city below. You get the businesses, their ratings and
+            their contact details — emails, socials and WhatsApp — as one list you can export.
           </p>
-          <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-            <GoogleSignInButton size="lg" className="lf-cta rounded-xl px-7">Start free with Google</GoogleSignInButton>
-            <Button asChild variant="outline" size="lg" className="rounded-xl bg-card px-7 shadow-sm hover:bg-muted">
-              <a href="#features">See how it works <ArrowRight className="h-4 w-4" /></a>
-            </Button>
-          </div>
+
+          <PublicSearch signedIn={signedIn} />
+
           <div className="mt-8 flex flex-wrap items-center justify-center gap-x-5 gap-y-3">
             <AvatarStack />
             <span className="text-sm text-muted-foreground">Trusted by <span className="font-semibold text-foreground">2,400+</span> marketers</span>
             <span className="flex items-center gap-1.5"><Stars /> <span className="text-sm font-semibold text-foreground">5.0</span></span>
+            <a href="#how" className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground underline decoration-dotted underline-offset-4 transition-colors hover:text-foreground">
+              See how it works <ArrowRight className="h-3.5 w-3.5" />
+            </a>
           </div>
         </div>
 
@@ -796,7 +853,7 @@ export default function Landing() {
             <h2 className="font-heading mt-4 text-3xl font-bold leading-tight tracking-tight sm:text-[2.6rem]">Discover everything we built with you in mind</h2>
             <p className="mt-4 max-w-md text-muted-foreground">From smart filters to one-click export, every detail is crafted to make lead-gen smoother, faster and more impactful, so you spend time closing, not collecting.</p>
             <div className="mt-7 hidden lg:block">
-              <GoogleSignInButton size="lg" className="lf-cta rounded-xl px-7">Start free with Google</GoogleSignInButton>
+              <Cta signedIn={signedIn} size="lg" className="lf-cta rounded-xl px-7" signedInLabel="Open dashboard">Continue with Google</Cta>
             </div>
           </div>
           <DiscoverCards />
@@ -804,6 +861,8 @@ export default function Landing() {
       </section>
 
       {/* ---- bento: everything in one tab ---- */}
+      <RecentSearches items={recent} total={total} me={me} />
+
       <section id="features" className="container py-24">
         <Reveal><SectionHead icon={Sparkles} eyebrow="Features" title="Everything in one tab"
           sub="Scrape, enrich, audit and organize. The whole outreach workflow, with no stitching tools together." className="mb-12" /></Reveal>
@@ -934,7 +993,7 @@ export default function Landing() {
         <div className="rounded-[2rem] border border-border bg-muted/30 p-5 sm:p-8 pt-10 sm:pt-14">
           <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-4">
             {PLANS.map((plan, i) => (
-              <Reveal key={plan.id} delay={i * 80} className="h-full flex flex-col"><PriceCard plan={plan} /></Reveal>
+              <Reveal key={plan.id} delay={i * 80} className="h-full flex flex-col"><PriceCard plan={plan} signedIn={signedIn} /></Reveal>
             ))}
           </div>
         </div>
@@ -982,7 +1041,7 @@ export default function Landing() {
           <h2 className="font-heading mx-auto max-w-xl text-3xl font-bold sm:text-4xl">Ready to build your lead list?</h2>
           <p className="mx-auto mt-3 max-w-lg text-white/80">Sign in with Google and run your first scrape in minutes.</p>
           <div className="mt-7 flex justify-center">
-            <GoogleSignInButton size="lg" variant="secondary" className="lf-cta rounded-xl px-7">Start free with Google</GoogleSignInButton>
+            <Cta signedIn={signedIn} size="lg" variant="secondary" className="lf-cta rounded-xl px-7" signedInLabel="Open dashboard">Continue with Google</Cta>
           </div>
         </div>
       </section>
@@ -993,7 +1052,7 @@ export default function Landing() {
             <div className="col-span-2 md:col-span-2">
               <Logo />
               <p className="mt-4 max-w-xs text-sm text-muted-foreground">Turn Google Maps into a pipeline of enriched, ready-to-pitch B2B leads with 99% email data accuracy.</p>
-              <div className="mt-6"><GoogleSignInButton size="sm" className="lf-cta rounded-xl">Start free with Google</GoogleSignInButton></div>
+              <div className="mt-6"><Cta signedIn={signedIn} size="sm" className="lf-cta rounded-xl" signedInLabel="Open dashboard">Continue with Google</Cta></div>
             </div>
             <div>
               <div className="mb-4 text-sm font-semibold text-foreground">Pages</div>

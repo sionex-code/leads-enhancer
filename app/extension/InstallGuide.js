@@ -1,7 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { Download, Info, Smartphone, AlertTriangle } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  Download,
+  Info,
+  Smartphone,
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+  RefreshCw,
+} from "lucide-react";
 import useExtension from "../lib/useExtension";
 import useBrowser, { BROWSERS } from "./useBrowser";
 import ExtensionStatus from "./ExtensionStatus";
@@ -10,6 +18,7 @@ import ExtensionsPageDiagram from "./ExtensionsPageDiagram";
 
 const ZIP_NAME = "leadsfunda-extension.zip";
 const FOLDER_NAME = "leadsfunda-extension";
+const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || "";
 
 function Code({ children }) {
   return (
@@ -197,29 +206,121 @@ function steps(browser) {
       ),
     },
     {
-      title: "Come back and refresh this page",
+      title: "Come back and check",
       body: (
-        <p className="text-sm text-muted-foreground">
-          <strong className="text-foreground">LeadsFunda Lead Scraper</strong>{" "}
-          should now be listed. Switch back to this tab and reload it — the badge
-          above turns green, and live searches start working. The reload is
-          needed because a freshly installed extension can&apos;t reach tabs that
-          were already open.
-        </p>
+        <>
+          <p className="text-sm text-muted-foreground">
+            <strong className="text-foreground">LeadsFunda Lead Scraper</strong>{" "}
+            should now be listed. Switch back to this tab and press the button —
+            it reloads the page, which a freshly installed extension needs
+            before it can reach a tab that was already open.
+          </p>
+          <CheckAgainButton />
+        </>
       ),
     },
   ];
 }
 
+// The old step six just asked people to reload. Telling somebody mid-install to
+// go and press their own reload button is a step they can get wrong, or skip
+// and then conclude the install failed — so it is a button here instead.
+function CheckAgainButton() {
+  return (
+    <button
+      type="button"
+      onClick={() => window.location.reload()}
+      className="mt-3 inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm transition hover:bg-accent"
+    >
+      <RefreshCw className="h-4 w-4" />
+      I&apos;ve installed it — check now
+    </button>
+  );
+}
+
+// Where to send somebody the moment the extension connects.
+//
+// Landing straight back on the search they abandoned is the whole point: they
+// came here from a search that could not run, and "installed" is not the finish
+// line they were after. `?from=search` is set by the landing page's own prompt;
+// anyone else came from inside the app and wants the dashboard.
+function useReturnTarget() {
+  const [target, setTarget] = useState({
+    href: "/dashboard",
+    label: "Go to the dashboard",
+  });
+
+  useEffect(() => {
+    try {
+      const from = new URLSearchParams(window.location.search).get("from");
+      if (from === "search" && MARKETING_URL) {
+        setTarget({ href: MARKETING_URL, label: "Back to your search" });
+      }
+    } catch {
+      // Keep the dashboard default.
+    }
+  }, []);
+
+  return target;
+}
+
+function ReadyPanel({ version }) {
+  const { href, label } = useReturnTarget();
+  return (
+    <div className="mt-8 rounded-2xl border border-emerald-500/40 bg-emerald-500/[0.07] p-6">
+      <div className="flex gap-3">
+        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+        <div className="min-w-0">
+          <h2 className="font-medium text-foreground">
+            Installed — you&apos;re ready to search
+          </h2>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            Extension v{version} is connected. Live searches now run in this
+            browser, so a search that covers new ground comes back straight from
+            Google Maps instead of turning up empty.
+          </p>
+          <a
+            href={href}
+            className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:opacity-90"
+          >
+            {label}
+            <ArrowRight className="h-4 w-4" />
+          </a>
+          <p className="mt-3 text-xs text-muted-foreground">
+            One thing to remember: leave the extracted{" "}
+            <Code>{FOLDER_NAME}</Code> folder where it is. Your browser re-reads
+            it at every start, so moving or deleting it switches the extension
+            back off.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const FAQ = [
   {
-    q: "The badge above is still amber and I’ve installed it",
+    // Worded without "the amber badge above", because this list is also shown
+    // once the extension is in — where there is no amber badge to point at.
+    q: "It still says not installed, but I’ve installed it",
     a: (
       <>
-        Reload this page first — that alone fixes it most of the time. If it
-        stays amber, open the extensions page again and check the extension&apos;s
-        own toggle is on, and that you&apos;re on{" "}
-        <Code>leadsfunda.com</Code> rather than a preview or staging address.
+        Reload this page first — the button in step 6 does it, and that alone
+        fixes it most of the time. A newly loaded extension can only reach tabs
+        opened after it. If it still says not installed, open the extensions
+        page again and check the extension&apos;s own toggle is on, and that the
+        address bar says <Code>leadsfunda.com</Code> — the extension is limited
+        to that domain, so a preview or staging address won&apos;t connect.
+      </>
+    ),
+  },
+  {
+    q: "A search still says I need the extension",
+    a: (
+      <>
+        The tab running the search has to have been opened after the extension
+        was loaded, same as this one. Reload that tab too — the search itself is
+        unaffected, it just can&apos;t see the extension yet.
       </>
     ),
   },
@@ -324,6 +425,27 @@ function UnsupportedBrowser({ name, onOverride }) {
   );
 }
 
+function Troubleshooting() {
+  return (
+    <section className="mt-12 rounded-2xl border border-border bg-card/40 p-6">
+      <h2 className="font-medium text-foreground">If something goes wrong</h2>
+      <div className="mt-3 divide-y divide-border">
+        {FAQ.map(({ q, a }) => (
+          <details key={q} className="group py-3">
+            <summary className="cursor-pointer list-none text-sm font-medium text-foreground marker:content-none">
+              <span className="mr-2 inline-block text-muted-foreground transition group-open:rotate-90">
+                ›
+              </span>
+              {q}
+            </summary>
+            <div className="mt-2 pl-5 text-sm text-muted-foreground">{a}</div>
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function Steps({ browser }) {
   return (
     <ol className="mt-10 space-y-8">
@@ -347,17 +469,34 @@ export default function InstallGuide() {
   const browser = useBrowser();
   const [override, setOverride] = useState(false);
 
-  // Someone who already has it working doesn't need a wall of instructions —
-  // but they might be here to reinstall or update, so the steps stay one click
-  // away rather than gone.
-  const collapsed = installed;
-
   const blocked =
     browser.ready && !override && (browser.mobile || !browser.supported);
 
+  // Installed wins over every other state, including the mobile and unsupported
+  // gates: if the extension is answering, the browser plainly runs it and no
+  // amount of user-agent guessing should override that.
+  //
+  // Someone who has it working doesn't need a wall of instructions — but they
+  // might be here to reinstall or update, so the steps stay one click away
+  // rather than gone.
+  if (installed) {
+    return (
+      <>
+        <ReadyPanel version={version} />
+        <details className="mt-8">
+          <summary className="cursor-pointer text-sm text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-foreground">
+            Show the install steps again
+          </summary>
+          <Steps browser={browser} />
+        </details>
+        <Troubleshooting />
+      </>
+    );
+  }
+
   return (
     <>
-      <ExtensionStatus checking={checking} installed={installed} version={version} />
+      <ExtensionStatus checking={checking} installed={false} version={null} />
 
       {blocked ? (
         browser.mobile ? (
@@ -365,35 +504,11 @@ export default function InstallGuide() {
         ) : (
           <UnsupportedBrowser name={browser.name} onOverride={() => setOverride(true)} />
         )
-      ) : collapsed ? (
-        <details className="mt-8">
-          <summary className="cursor-pointer text-sm text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-foreground">
-            Show the install steps again
-          </summary>
-          <Steps browser={browser} />
-        </details>
       ) : (
         <Steps browser={browser} />
       )}
 
-      <section className="mt-12 rounded-2xl border border-border bg-card/40 p-6">
-        <h2 className="font-medium text-foreground">
-          If something goes wrong
-        </h2>
-        <div className="mt-3 divide-y divide-border">
-          {FAQ.map(({ q, a }) => (
-            <details key={q} className="group py-3">
-              <summary className="cursor-pointer list-none text-sm font-medium text-foreground marker:content-none">
-                <span className="mr-2 inline-block text-muted-foreground transition group-open:rotate-90">
-                  ›
-                </span>
-                {q}
-              </summary>
-              <div className="mt-2 pl-5 text-sm text-muted-foreground">{a}</div>
-            </details>
-          ))}
-        </div>
-      </section>
+      <Troubleshooting />
     </>
   );
 }
