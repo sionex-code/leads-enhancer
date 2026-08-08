@@ -30,7 +30,6 @@ import {
   MailCheck,
   MessageCircle,
   PauseCircle,
-  Play,
   OctagonX,
   RotateCcw,
   Search,
@@ -571,101 +570,86 @@ function buildFallbackCatalog() {
 
 // Where this search gets its leads. Live search runs in the user's browser, so
 // whether the extension is connected decides whether that option can work at
-// all — the status is shown on the card itself rather than discovered after a
-// search fails.
+// all — the status sits right beside the control rather than being discovered
+// after a search fails.
+//
+// This was two big description cards stacked above the rest of the form: a
+// third of the first screen spent explaining a binary the user changes maybe
+// once. A select does the same job in one row. The chip next to it shows the
+// *effective* source, which is not a duplicate of the select — a typed query is
+// always searched live whatever the preference says, and this is the only place
+// that difference is visible before the search runs.
 function SourcePicker({ source, setSource, ext, lockedLive }) {
-  const OPTIONS = [
-    {
-      key: "warehouse",
-      icon: Database,
-      title: "Our database",
-      desc: "Instant. Leads we've already collected and enriched.",
-    },
-    {
-      key: "live",
-      icon: Zap,
-      title: "Live via extension",
-      desc: "Scrapes the map right now, in this browser.",
-    },
-  ];
+  const active = lockedLive ? "live" : source;
+  const ActiveIcon = active === "live" ? Zap : Database;
 
   return (
-    <div className="mt-6" data-tour="find-source">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <span className="text-xs font-medium text-muted-foreground">Lead source</span>
-        <ExtensionPill ext={ext} />
+    <div data-tour="find-source">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <label className="w-44 space-y-1">
+          <span className="text-xs font-medium text-muted-foreground">Lead source</span>
+          <Select
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            className="h-9"
+            title="Our database answers instantly from leads we already hold. Live searches the map right now, in this browser."
+          >
+            <option value="warehouse">Our database</option>
+            <option value="live">Live via extension</option>
+          </Select>
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <ExtensionPill ext={ext} />
+          <span
+            title={
+              lockedLive
+                ? "Our database only covers the services in the dropdown, so what you typed is searched live in your browser."
+                : active === "live"
+                  ? "This search scrapes the map right now, in this browser."
+                  : "This search is answered instantly from leads we already hold."
+            }
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-xs"
+          >
+            <ActiveIcon className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="font-medium text-foreground">
+              {active === "live" ? "Live via extension" : "Our database"}
+            </span>
+          </span>
+        </div>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {OPTIONS.map(({ key, icon: Icon, title, desc }) => {
-          const active = source === key;
-          const disabled = lockedLive && key === "warehouse";
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => !disabled && setSource(key)}
-              aria-pressed={active}
-              disabled={disabled}
-              title={disabled ? "This keyword isn't in our database — it has to be searched live" : undefined}
-              className={cn(
-                "flex items-start gap-3 rounded-xl border p-3 text-left transition-colors",
-                disabled && "cursor-not-allowed opacity-50",
-                active
-                  ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-                  : "border-border bg-card/40 hover:border-primary/40 hover:bg-accent/40"
-              )}
-            >
-              <span
-                className={cn(
-                  "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
-                  active ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
-                )}
-              >
-                <Icon className="h-4 w-4" />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-sm font-medium text-foreground">{title}</span>
-                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{desc}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      {lockedLive && (
-        <p className="mt-2 text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">Custom keyword.</span> Our
-          database only covers the services in the dropdown, so this one is searched
-          live in your browser.
-        </p>
-      )}
-      {source === "live" && !ext.checking && !ext.installed && (
+      {active === "live" && !ext.checking && !ext.installed && (
         // This is a hard block, not advice: a live search cannot start without
         // the extension, so it gets stated plainly rather than as small print
-        // under the cards.
-        <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/5 p-4">
+        // beside the select.
+        <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
           <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <Puzzle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
             No extension installed
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Live search runs inside your own browser, so it needs the LeadsFunda
-            extension. Nothing here will run until it is installed.
+            {lockedLive
+              ? "Our database only covers the services in the dropdown, so what you typed has to be searched live — and live search runs inside your own browser."
+              : "Live search runs inside your own browser, so it needs the LeadsFunda extension. Nothing here will run until it is installed."}
           </p>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
             <Link
               href="/extension"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition hover:opacity-90"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm transition hover:opacity-90"
             >
               <Download className="h-3.5 w-3.5" />
               Install the extension
             </Link>
-            <button
-              type="button"
-              onClick={() => setSource("warehouse")}
-              className="rounded-lg border border-border bg-card px-3.5 py-2 text-xs font-medium text-foreground transition hover:bg-accent"
-            >
-              Use our database instead
-            </button>
+            {/* Pointless when the typed query is what forced live in the first
+                place — switching the preference would not change the route. */}
+            {!lockedLive && (
+              <button
+                type="button"
+                onClick={() => setSource("warehouse")}
+                className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-accent"
+              >
+                Use our database instead
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -1128,8 +1112,12 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   const citySelectVal = allCities ? "__all__" : cityObj?.id ?? cityObj?.name ?? "";
 
   return (
-    <div className="animate-page-in motion-reduce:animate-none mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:py-16">
-      <div className="mb-8 flex items-center justify-between gap-3">
+    <div className="animate-page-in motion-reduce:animate-none mx-auto max-w-4xl px-4 pb-8 pt-4 sm:px-6">
+      {/* Credits and the projects link live in the topbar on desktop (see
+          `findActions` below). The topbar has no room for them on a phone, so
+          they ride here instead — and only there, because on desktop this row
+          would push the heading off the sidebar's baseline. */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 md:hidden">
         <div className="flex flex-wrap items-center gap-2">
           <CreditsPill />
           <DailyUsagePills />
@@ -1142,17 +1130,18 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
           View my projects <ArrowRight className="h-3.5 w-3.5" />
         </button>
       </div>
-      <div className="flex flex-col items-center text-center">
-        <Badge variant="outline" className="mb-4 gap-1.5"><Zap className="h-3 w-3 text-primary" /> Local lead engine</Badge>
-        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">What leads do you want to find?</h1>
-        <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
-          Pick a service and city, or type your own query, and we'll pull matching leads instantly.
-        </p>
-      </div>
+
+      {/* pt-4 above + a locked 36px line box puts this heading on exactly the
+          same band as "New search", the sidebar's first nav item: same 16px off
+          the header border, same height, so the two columns start on one line.
+          Changing the size here means re-checking that leading. */}
+      <h1 className="text-center text-2xl font-bold leading-9 tracking-tight sm:text-3xl sm:leading-9">
+        What leads do you want to find?
+      </h1>
 
       {error && (
         <div className={cn(
-          "mt-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm",
+          "mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm",
           needPlan ? "border-primary/40 bg-primary/10 text-foreground" : "border-destructive/40 bg-destructive/10 text-red-600"
         )}>
           <span>{error}</span>
@@ -1164,145 +1153,150 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
         </div>
       )}
 
-      <form className="mt-8 flex flex-col gap-2 sm:flex-row" onSubmit={submit}>
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(e) => {
-                        setQuery(e.target.value);
-            }}
-            placeholder="plumber in Austin TX"
-            className="h-12 pl-10 text-base"
-            autoFocus
-          />
-        </div>
-        <Button type="submit" size="lg" className="h-12" disabled={!!busy || !query.trim()} data-tour="find-submit">
-          {busy ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />} Find leads
+      {/* The magnifier lives on the button, not inside the box. Having it in
+          both places said the same thing twice and cost the query 40px of the
+          only field on the page anyone actually types into. */}
+      <form className="mt-4 flex flex-col gap-2 sm:flex-row" onSubmit={submit}>
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="plumber in Austin TX"
+          className="h-11 flex-1 text-base"
+          autoFocus
+        />
+        <Button type="submit" size="lg" className="h-11 shrink-0 px-6" disabled={!!busy || !query.trim()} data-tour="find-submit">
+          {busy ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />} Find leads
         </Button>
       </form>
 
-      <SourcePicker
-        source={activeSource}
-        setSource={chooseSource}
-        ext={ext}
-        lockedLive={queryIsCustom}
-      />
-
-      {/* Service, Country and City resolve a warehouse lookup. A live search
-          does not use any of them: the extension geocodes whatever is in the
-          search box and grids that area, so leaving them on screen showed three
-          controls that had no effect on the search about to run. */}
-      {activeSource !== "live" && (
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-        <label className="space-y-1" data-tour="find-service">
-          <span className="text-xs text-muted-foreground">Service</span>
-          <Select value={service} onChange={(e) => selectService(e.target.value)} className="capitalize">
-            {catalogServices.map((item) => (
-              <option key={item.name} value={item.name}>{titleCase(item.name)}</option>
-            ))}
-          </Select>
-        </label>
-        <label className="space-y-1" data-tour="find-country">
-          <span className="text-xs text-muted-foreground">Country</span>
-          <Select value={countryCode} onChange={(e) => changeCountry(e.target.value)}>
-            {catalogCountries.map((item) => (
-              <option key={item.code} value={item.code}>{item.name}</option>
-            ))}
-          </Select>
-        </label>
-        <label className="space-y-1" data-tour="find-city">
-          <span className="text-xs text-muted-foreground">City</span>
-          <Select
-            value={citySelectVal}
-            onChange={(e) => {
-              const val = e.target.value;
-              if (val === "__all__") { selectAllCities(); return; }
-              const found = (country.cities || []).find((c) => String(c.id ?? c.name) === val);
-              if (found) selectCity(found);
-            }}
-          >
-            <option value="__all__">All cities</option>
-            {(country.cities || []).map((c) => (
-              <option key={c.id ?? c.name} value={c.id ?? c.name}>{c.name}{c.admin ? `, ${c.admin}` : ""}</option>
-            ))}
-          </Select>
-        </label>
-      </div>
-      )}
-
-      {/* Always relevant, whichever source is running. */}
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-        <label className="space-y-1" data-tour="find-max">
-          <span className="text-xs text-muted-foreground">Leads (max 10,000)</span>
-          <Input type="number" min={1} max={10000} value={max} onChange={(e) => setMax(e.target.value)} />
-        </label>
-        <label className="space-y-1" data-tour="find-rating">
-          <span className="text-xs text-muted-foreground">Rating</span>
-          <Select value={rating} onChange={(e) => setRating(e.target.value)} title="Target high-rated businesses or low-rated ones that need help">
-            <option value="">Any rating</option>
-            <option value="gte:4.5">4.5 and up</option>
-            <option value="gte:4">4.0 and up</option>
-            <option value="gte:3.5">3.5 and up</option>
-            <option value="gte:3">3.0 and up</option>
-            <option value="lt:4">Below 4.0</option>
-            <option value="lt:3.5">Below 3.5</option>
-            <option value="lt:3">Below 3.0</option>
-          </Select>
-        </label>
-      </div>
-
-      {/* Radius used to be a bare slider squeezed into a quarter of a four
-          column grid, with its value tucked into the label. It decides how much
-          ground a search covers, so it gets its own row, a readable value and
-          presets for the distances people actually pick. */}
-      <div className="mt-3 rounded-xl border border-border bg-card/40 p-3" data-tour="find-radius">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <MapPin className="h-3.5 w-3.5" />
-            Search radius
-          </span>
-          <span className="rounded-lg bg-muted px-2.5 py-1 text-sm font-semibold tabular-nums text-foreground">
-            {allCities ? "Country-wide" : `${radiusKm} km`}
-          </span>
-        </div>
-        <input
-          type="range"
-          min={1}
-          max={200}
-          value={radiusKm}
-          disabled={allCities}
-          onChange={(e) => setRadiusKm(Number(e.target.value) || 1)}
-          style={{ "--slider-percentage": `${((radiusKm - 1) / 199) * 100}%` }}
-          className="mt-2.5 h-6 w-full cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-40"
+      {/* Everything that shapes the search in one card: source, the warehouse
+          dropdowns, size, rating, radius. They were four separately bordered
+          blocks with their own outer margins, which spread six short rows of
+          controls down most of a screen. */}
+      <div className="mt-4 space-y-3 rounded-xl border border-border bg-card/40 p-4">
+        <SourcePicker
+          source={source}
+          setSource={chooseSource}
+          ext={ext}
+          lockedLive={queryIsCustom}
         />
-        <div className="mt-1 flex flex-wrap items-center gap-1.5">
-          {[5, 10, 25, 50, 100].map((km) => (
-            <button
-              key={km}
-              type="button"
-              disabled={allCities}
-              onClick={() => setRadiusKm(km)}
-              className={cn(
-                "rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40",
-                Number(radiusKm) === km
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground"
-              )}
-            >
-              {km} km
-            </button>
-          ))}
-          <span className="ml-auto text-[11px] text-muted-foreground">
-            {allCities
-              ? "Every city in the country"
-              : `Covers about ${Math.round(Math.PI * radiusKm * radiusKm).toLocaleString()} km²`}
-          </span>
+
+        <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 sm:grid-cols-3">
+          {/* Service, Country and City resolve a warehouse lookup. A live search
+              does not use any of them: the extension geocodes whatever is in the
+              search box and grids that area, so leaving them on screen showed three
+              controls that had no effect on the search about to run. */}
+          {activeSource !== "live" && (
+            <>
+              <label className="space-y-1" data-tour="find-service">
+                <span className="text-xs text-muted-foreground">Service</span>
+                <Select value={service} onChange={(e) => selectService(e.target.value)} className="h-9 capitalize">
+                  {catalogServices.map((item) => (
+                    <option key={item.name} value={item.name}>{titleCase(item.name)}</option>
+                  ))}
+                </Select>
+              </label>
+              <label className="space-y-1" data-tour="find-country">
+                <span className="text-xs text-muted-foreground">Country</span>
+                <Select value={countryCode} onChange={(e) => changeCountry(e.target.value)} className="h-9">
+                  {catalogCountries.map((item) => (
+                    <option key={item.code} value={item.code}>{item.name}</option>
+                  ))}
+                </Select>
+              </label>
+              <label className="space-y-1" data-tour="find-city">
+                <span className="text-xs text-muted-foreground">City</span>
+                <Select
+                  className="h-9"
+                  value={citySelectVal}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === "__all__") { selectAllCities(); return; }
+                    const found = (country.cities || []).find((c) => String(c.id ?? c.name) === val);
+                    if (found) selectCity(found);
+                  }}
+                >
+                  <option value="__all__">All cities</option>
+                  {(country.cities || []).map((c) => (
+                    <option key={c.id ?? c.name} value={c.id ?? c.name}>{c.name}{c.admin ? `, ${c.admin}` : ""}</option>
+                  ))}
+                </Select>
+              </label>
+            </>
+          )}
+
+          {/* Always relevant, whichever source is running. */}
+          <label className="space-y-1" data-tour="find-max">
+            <span className="text-xs text-muted-foreground">Leads (max 10,000)</span>
+            <Input className="h-9" type="number" min={1} max={10000} value={max} onChange={(e) => setMax(e.target.value)} />
+          </label>
+          <label className="space-y-1" data-tour="find-rating">
+            <span className="text-xs text-muted-foreground">Rating</span>
+            <Select className="h-9" value={rating} onChange={(e) => setRating(e.target.value)} title="Target high-rated businesses or low-rated ones that need help">
+              <option value="">Any rating</option>
+              <option value="gte:4.5">4.5 and up</option>
+              <option value="gte:4">4.0 and up</option>
+              <option value="gte:3.5">3.5 and up</option>
+              <option value="gte:3">3.0 and up</option>
+              <option value="lt:4">Below 4.0</option>
+              <option value="lt:3.5">Below 3.5</option>
+              <option value="lt:3">Below 3.0</option>
+            </Select>
+          </label>
+        </div>
+
+        {/* Radius used to be a bare slider squeezed into a quarter of a four
+            column grid, with its value tucked into the label. It decides how much
+            ground a search covers, so it gets a full row, a readable value and
+            presets for the distances people actually pick. */}
+        <div data-tour="find-radius">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <MapPin className="h-3.5 w-3.5" />
+              Search radius
+            </span>
+            <span className="rounded-lg bg-muted px-2.5 py-0.5 text-sm font-semibold tabular-nums text-foreground">
+              {allCities ? "Country-wide" : `${radiusKm} km`}
+            </span>
+          </div>
+          <input
+            type="range"
+            min={1}
+            max={200}
+            value={radiusKm}
+            disabled={allCities}
+            onChange={(e) => setRadiusKm(Number(e.target.value) || 1)}
+            style={{ "--slider-percentage": `${((radiusKm - 1) / 199) * 100}%` }}
+            className="mt-1.5 h-5 w-full cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-40"
+          />
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {[5, 10, 25, 50, 100].map((km) => (
+              <button
+                key={km}
+                type="button"
+                disabled={allCities}
+                onClick={() => setRadiusKm(km)}
+                className={cn(
+                  "rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+                  Number(radiusKm) === km
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                )}
+              >
+                {km} km
+              </button>
+            ))}
+            <span className="ml-auto text-[11px] text-muted-foreground">
+              {allCities
+                ? "Every city in the country"
+                : `Covers about ${Math.round(Math.PI * radiusKm * radiusKm).toLocaleString()} km²`}
+            </span>
+          </div>
         </div>
       </div>
 
       {/* Area picker map */}
-      <div className="mt-4" data-tour="find-map">
+      <div className="mt-3" data-tour="find-map">
         {/* What a typed search resolved to. Without this the map silently
             disagrees with the search box and the user has no way to tell
             which one the search will follow. */}
@@ -1345,7 +1339,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
             onClick={locateMe}
             disabled={geoBusy}
             title="Set the search area to where you are right now"
-            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card/40 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card/40 px-3 py-1 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
           >
             {geoBusy ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1365,12 +1359,15 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
             {geoNote.text}
           </p>
         )}
+        {/* Tall enough to place a pin, short enough that the whole form still
+            fits one screen — the map is a confirmation of the search area, not
+            the thing the page is for. */}
         <LeadsMap
           interactive
           center={center}
           radiusKm={Number(radiusKm) || 10}
           onCenterChange={setCenter}
-          height={260}
+          height={210}
         />
       </div>
 
@@ -1388,7 +1385,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
       </div>
 
       {showChips && (
-        <div className="mt-6 grid gap-4 lg:grid-cols-[260px_1fr]">
+        <div className="mt-3 grid gap-3 lg:grid-cols-[260px_1fr]">
           <Card>
             <CardContent className="p-4">
               <h2 className="mb-3 text-sm font-semibold">Service</h2>
@@ -2559,8 +2556,27 @@ export default function Dashboard({ view = "" }) {
   );
 
   if (simpleMode) {
+    const openProjects = () => {
+      setIsTransitioningOut(true);
+      setTimeout(() => {
+        router.push("/dashboard?view=projects");
+      }, 300);
+    };
+    // Balance and "where are my projects?" are account state, not part of the
+    // search, so they belong in the topbar — not in a strip above the heading,
+    // where they pushed the heading and the entire form down a row before the
+    // user had read a word of it.
+    const findActions = (
+      <div className="hidden items-center gap-2 md:flex">
+        <CreditsPill />
+        <DailyUsagePills />
+        <Button variant="outline" size="sm" onClick={openProjects}>
+          View my projects <ArrowRight className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    );
     return (
-      <AppShell active="new" title="Find leads" subtitle="Start a new lead project" tourKey="find" tourSteps={FIND_TOUR}>
+      <AppShell active="new" title="Find leads" actions={findActions} tourKey="find" tourSteps={FIND_TOUR}>
         <div className={cn(
           "transition-all duration-300 ease-out transform origin-center",
           isTransitioningOut ? "opacity-0 scale-95 -translate-y-4" : "opacity-100 scale-100 translate-y-0"
@@ -2568,12 +2584,7 @@ export default function Dashboard({ view = "" }) {
           <QuickScrapeHome
             busy={busy}
             onFind={startFindLeads}
-            onOpenDashboard={() => {
-              setIsTransitioningOut(true);
-              setTimeout(() => {
-                router.push("/dashboard?view=projects");
-              }, 300);
-            }}
+            onOpenDashboard={openProjects}
             error={error}
             needPlan={needPlan}
           />

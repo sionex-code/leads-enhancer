@@ -170,7 +170,9 @@ export default function AppShell({ active, title, subtitle, actions, sidebarExtr
           collapsed ? "w-[72px]" : "w-64"
         )}
       >
-        <div className={cn("flex h-16 items-center border-b border-border/60", collapsed ? "justify-center gap-1 px-2" : "justify-between px-4")}>
+        {/* Same height and same border weight as the topbar next to it, so the
+            two read as one continuous line across the top of the app. */}
+        <div className={cn("flex h-16 shrink-0 items-center border-b border-border", collapsed ? "justify-center gap-1 px-2" : "justify-between px-4")}>
           <Brand
             collapsed={collapsed}
             onClick={(e) => {
@@ -227,7 +229,11 @@ export default function AppShell({ active, title, subtitle, actions, sidebarExtr
 
       {/* Main column */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex min-h-16 items-center gap-3 border-b border-border bg-background/80 px-4 py-3 backdrop-blur md:px-6">
+        {/* h-16, matching the sidebar's brand row exactly — the two bottom
+            borders have to land on the same line or the whole top of the app
+            looks off. Fixed height rather than min-h because a title and its
+            subtitle together still fit inside 64px. */}
+        <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur md:px-6">
           <button
             onClick={() => setMobileOpen(true)}
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground md:hidden"
@@ -239,7 +245,11 @@ export default function AppShell({ active, title, subtitle, actions, sidebarExtr
             {title ? <h1 className="truncate text-base font-semibold leading-tight sm:text-lg">{title}</h1> : null}
             {subtitle ? <div className="truncate text-xs text-muted-foreground sm:text-sm">{subtitle}</div> : null}
           </div>
+          {/* Page actions first, Tour last: Tour is the same on every page, so
+              it belongs at the edge as a fixed landmark rather than shoving the
+              page's own controls around. */}
           <div className="flex shrink-0 items-center gap-2">
+            {actions}
             <button
               type="button"
               data-tour="tour-button"
@@ -249,7 +259,6 @@ export default function AppShell({ active, title, subtitle, actions, sidebarExtr
             >
               <HelpCircle className="h-4 w-4" /> <span className="hidden sm:inline">Tour</span>
             </button>
-            {actions}
           </div>
         </header>
 
