@@ -3301,11 +3301,14 @@ export default function Dashboard({ view = "" }) {
             <div className="flex gap-2 overflow-x-auto pb-1 -mx-3 px-3 md:mx-0 md:px-0 md:grid md:grid-cols-2 lg:grid-cols-4 md:gap-3 scrollbar-none">
               <StatCard className={cellClass} icon={Database} tint="bg-primary/10 text-primary"
                 value={raw} label="Leads found" hint={c.enriched ? `${c.enriched} enriched` : null} />
-              <StatCard className={cellClass} icon={Globe2} tint="bg-sky-500/10 text-sky-600"
+              {/* Warm tints only. A sky-blue and a violet tile next to the brand
+                  orange read as three unrelated apps sharing a row; keeping the
+                  strip within the palette lets the numbers do the talking. */}
+              <StatCard className={cellClass} icon={Globe2} tint="bg-flare-tint text-flare-ink"
                 value={c.websites || 0} label="With website" hint={cover(c.websites || 0)} />
               <StatCard className={cellClass} icon={Star} tint="bg-amber-500/10 text-amber-600"
                 value={saved} label="Already saved" hint={cover(saved)} />
-              <StatCard className={cellClass} icon={ArrowRight} tint="bg-violet-500/10 text-violet-600"
+              <StatCard className={cellClass} icon={ArrowRight} tint="bg-secondary text-secondary-foreground"
                 text={BAND_LABEL[avgBand]} label="Avg. opportunity"
                 hint={leads.length ? `${avg}/100 across ${leads.length.toLocaleString()} leads` : null} />
             </div>

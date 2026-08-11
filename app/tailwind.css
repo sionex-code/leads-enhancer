@@ -2,49 +2,57 @@
 @tailwind components;
 @tailwind utilities;
 
-/* shadcn/ui design tokens — LIGHT theme keyed to the LeadsFunda forest green
-   (#013b2f) and gold (#fec32a). Tokens live on :root so every (Tailwind) page
-   renders light. The legacy dashboard CSS now lives only on the /agent route
-   (app/agent/layout.js), so it can no longer bleed into the new shadcn app.
+/* shadcn/ui design tokens — LIGHT theme keyed to the LeadsFunda orange
+   (#e05305) with a hot flare accent (#ff7a1a). Tokens live on :root so every
+   (Tailwind) page renders light. The legacy dashboard CSS now lives only on the
+   /agent route (app/agent/layout.js), so it can no longer bleed into the new
+   shadcn app.
 
-   Every value below was sampled off the reference design rather than guessed,
-   which is why they look like odd numbers: --primary is the exact green of its
-   buttons, --foreground the exact headline ink, --muted-foreground the exact
-   body grey. The palette is deliberately two-colour — a near-black green does
-   the work and gold is the only thing allowed to be bright, which is what makes
-   it read as expensive rather than loud.
+   The palette is deliberately two-temperature: one orange doing all the brand
+   work, warmed greys around it, and nothing else allowed to be saturated. The
+   greys are warm (a hint of the same hue) rather than blue-grey — a neutral grey
+   next to a hot orange reads as dirty, and warming it is what makes the orange
+   look deliberate rather than sprayed on.
 
-   Anything that should follow the brand reads --primary or --gold. Nothing new
+   --primary sits at 45% lightness, not the brighter 50-55% it is tempting to
+   use: it carries white label text on buttons, and the brighter oranges drop
+   that contrast to ~3:1. The bright end of the brand lives in --flare, which is
+   only ever used for glows, stars and flourishes where nothing has to be read
+   against it.
+
+   Anything that should follow the brand reads --primary or --flare. Nothing new
    should hard-code a hex. */
 :root {
-  --background: 45 40% 99%;
-  --foreground: 214 51% 8%;
+  --background: 30 45% 99%;
+  --foreground: 20 16% 10%;
   --card: 0 0% 100%;
-  --card-foreground: 214 51% 8%;
+  --card-foreground: 20 16% 10%;
   --popover: 0 0% 100%;
-  --popover-foreground: 214 51% 8%;
-  --primary: 168 97% 12%;
+  --popover-foreground: 20 16% 10%;
+  --primary: 21 94% 45%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 220 14% 96%;
-  --secondary-foreground: 214 30% 18%;
-  --muted: 220 14% 96%;
-  --muted-foreground: 220 13% 33%;
-  --accent: 150 22% 94%;
-  --accent-foreground: 168 60% 12%;
+  --secondary: 30 20% 96%;
+  --secondary-foreground: 22 30% 18%;
+  --muted: 30 20% 96%;
+  --muted-foreground: 25 10% 35%;
+  --accent: 28 80% 95%;
+  --accent-foreground: 21 80% 28%;
   --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 100%;
-  --border: 220 14% 91%;
-  --input: 220 14% 89%;
-  --ring: 168 97% 12%;
+  --border: 28 22% 90%;
+  --input: 28 22% 87%;
+  --ring: 21 94% 45%;
   --radius: 0.75rem;
 
-  /* Gold is an accent, never a surface: the underline flourish, the rating
-     stars, the logo strip, the soft wash behind the hero. Three steps because
-     the design uses it at three strengths and interpolating opacity off one
-     value came out grey. */
-  --gold: 43 99% 58%;
-  --gold-soft: 43 98% 75%;
-  --gold-tint: 43 100% 89%;
+  /* The hot end of the brand: the underline flourish, the rating stars, the
+     glow behind the hero. Three steps because the design uses it at three
+     strengths and interpolating opacity off one value came out muddy. */
+  --flare: 25 100% 55%;
+  --flare-soft: 28 100% 68%;
+  --flare-tint: 30 100% 91%;
+  /* Label ink for text sitting on a flare tint — dark enough to read, still of
+     the same family, where plain --foreground would look like a stray black. */
+  --flare-ink: 21 88% 24%;
 }
 
 @layer base {

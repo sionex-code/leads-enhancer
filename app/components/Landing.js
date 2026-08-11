@@ -232,7 +232,7 @@ function Eyebrow({ icon: Icon = Sparkles, children }) {
 
 function Stars({ className = "h-3.5 w-3.5" }) {
   return (
-    <div className="flex items-center gap-0.5 text-gold">
+    <div className="flex items-center gap-0.5 text-flare">
       {[0, 1, 2, 3, 4].map((i) => <Star key={i} className={`${className} fill-current`} />)}
     </div>
   );
@@ -253,14 +253,14 @@ function Swoosh({ className = "" }) {
     >
       <path
         d="M2.5 8.6c18-4.6 40-6.6 60-6.6s39 2.3 57.2 6.2c-19-2-38-3-57-3s-40.4 1.3-60.2 3.4z"
-        fill="hsl(var(--gold-soft))"
+        fill="hsl(var(--flare-soft))"
       />
     </svg>
   );
 }
 
 // The soft geometry behind the hero: a warm wash top-right, faint concentric
-// rings bleeding off the left edge, two dot grids and one gold tile.
+// rings bleeding off the left edge, two dot grids and one flare tile.
 //
 // All of it is pointer-events-none and aria-hidden — it is texture, and it must
 // never intercept a click meant for the search box sitting on top of it.
@@ -271,10 +271,10 @@ function HeroDecor() {
       className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
     >
       {/* Warm wash, top right. */}
-      <div className="absolute -right-40 -top-56 h-[30rem] w-[30rem] rounded-full bg-gold-tint/45 blur-3xl" />
+      <div className="absolute -right-40 -top-56 h-[30rem] w-[30rem] rounded-full bg-flare-tint/45 blur-3xl" />
       {/* Concentric rings, running off the left edge. */}
       <svg
-        className="absolute -left-[19rem] top-16 hidden h-[30rem] w-[30rem] text-gold-soft/25 md:block"
+        className="absolute -left-[19rem] top-16 hidden h-[30rem] w-[30rem] text-flare-soft/25 md:block"
         viewBox="0 0 400 400"
         fill="none"
       >
@@ -284,10 +284,10 @@ function HeroDecor() {
       </svg>
       {/* Dot grids: one left of the headline, one right. */}
       <DotGrid className="absolute left-[15%] top-[27%] hidden text-muted-foreground/25 lg:block" cols={3} rows={3} />
-      <DotGrid className="absolute right-[9%] top-[25%] hidden text-gold/45 xl:block" cols={6} rows={4} />
-      {/* Single gold tile. */}
-      <div className="absolute left-[2.5%] top-[27%] hidden h-10 w-10 rotate-[8deg] rounded-xl bg-gold-tint lg:block" />
-      <div className="absolute left-[13.5%] top-[34%] hidden h-4 w-4 rounded-md bg-gold-tint lg:block" />
+      <DotGrid className="absolute right-[9%] top-[25%] hidden text-flare/45 xl:block" cols={6} rows={4} />
+      {/* Single flare tile. */}
+      <div className="absolute left-[2.5%] top-[27%] hidden h-10 w-10 rotate-[8deg] rounded-xl bg-flare-tint lg:block" />
+      <div className="absolute left-[13.5%] top-[34%] hidden h-4 w-4 rounded-md bg-flare-tint lg:block" />
     </div>
   );
 }
@@ -363,7 +363,7 @@ function HeroApp() {
   return (
     <div className="container relative max-w-[74.5rem] pb-8">
       {/* lime glow under the window */}
-      <div className="pointer-events-none absolute -inset-x-10 -bottom-10 top-10 -z-10 rounded-[3rem] bg-gradient-to-tr from-primary/15 via-gold-tint/60 to-gold/25 blur-3xl" />
+      <div className="pointer-events-none absolute -inset-x-10 -bottom-10 top-10 -z-10 rounded-[3rem] bg-gradient-to-tr from-primary/15 via-flare-tint/60 to-flare/25 blur-3xl" />
 
       {/* floating overlap cards */}
       <FloatCard className="-left-14 top-[58%] w-60" delay={0}>
@@ -446,7 +446,7 @@ function HeroApp() {
           <div className="min-w-0 flex-1 p-5">
             <div className="flex items-center justify-between">
               <div className="font-heading text-base font-bold">Find leads</div>
-              <span className="hidden items-center gap-1.5 rounded-full bg-[#fec32a]/20 px-2.5 py-1 text-[11px] font-semibold text-[#7a4a00] sm:inline-flex">
+              <span className="hidden items-center gap-1.5 rounded-full bg-flare/20 px-2.5 py-1 text-[11px] font-semibold text-flare-ink sm:inline-flex">
                 <span className="h-1.5 w-1.5 rounded-full bg-[#e0a412]" /> 6 jobs included
               </span>
             </div>
@@ -466,7 +466,7 @@ function HeroApp() {
                     <div className="flex items-center gap-1 text-[11px] text-muted-foreground"><Phone className="h-3 w-3" /> {r.m}</div>
                   </div>
                   <div className="ml-auto flex shrink-0 items-center gap-1.5">
-                    <span className="flex items-center gap-0.5 text-gold"><Star className="h-3 w-3 fill-current" />{r.r}</span>
+                    <span className="flex items-center gap-0.5 text-flare"><Star className="h-3 w-3 fill-current" />{r.r}</span>
                     {r.bad
                       ? <span className="rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold text-rose-600">No site</span>
                       : <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">Live</span>}
@@ -560,7 +560,7 @@ function StepMock({ step }) {
         <div className="mt-4 text-xs font-semibold text-foreground">City</div>
         <div className="mt-2 flex flex-wrap gap-2">
           {["Austin, TX", "Miami, FL", "Denver, CO", "Phoenix, AZ"].map((s, i) => (
-            <span key={s} className={`rounded-lg px-3 py-1.5 text-xs font-medium ${i === 0 ? "bg-[#fec32a]/25 text-[#7a4a00]" : "border border-border bg-card text-muted-foreground"}`}>{s}</span>
+            <span key={s} className={`rounded-lg px-3 py-1.5 text-xs font-medium ${i === 0 ? "bg-flare/25 text-flare-ink" : "border border-border bg-card text-muted-foreground"}`}>{s}</span>
           ))}
         </div>
         <div className="mt-5 flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 shadow-sm">
@@ -585,7 +585,7 @@ function StepMock({ step }) {
           {[{ l: "Businesses found", p: "100%", v: "1,284" }, { l: "Emails enriched", p: "71%", v: "912" }, { l: "WhatsApp detected", p: "27%", v: "347" }].map((b) => (
             <div key={b.l}>
               <div className="flex justify-between text-xs text-muted-foreground"><span>{b.l}</span><span className="font-semibold text-foreground">{b.v}</span></div>
-              <div className="mt-1 h-2 w-full rounded-full bg-muted"><div className="h-2 rounded-full bg-gradient-to-r from-primary to-[#0a7a5c]" style={{ width: b.p }} /></div>
+              <div className="mt-1 h-2 w-full rounded-full bg-muted"><div className="h-2 rounded-full bg-gradient-to-r from-primary to-flare" style={{ width: b.p }} /></div>
             </div>
           ))}
         </div>
@@ -600,10 +600,10 @@ function StepMock({ step }) {
     <div className="p-6">
       <div className="flex items-center justify-between">
         <div className="font-heading text-sm font-bold">Pipeline</div>
-        <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#fec32a]/25 px-2.5 py-1 text-xs font-semibold text-[#7a4a00]"><FileSpreadsheet className="h-3.5 w-3.5" /> Export CSV</span>
+        <span className="inline-flex items-center gap-1.5 rounded-lg bg-flare/25 px-2.5 py-1 text-xs font-semibold text-flare-ink"><FileSpreadsheet className="h-3.5 w-3.5" /> Export CSV</span>
       </div>
       <div className="mt-4 space-y-2">
-        {[{ n: "Northwind HVAC", s: "Contacted", c: "bg-sky-500/10 text-sky-600" }, { n: "Fabrikam Electric", s: "Replied", c: "bg-emerald-500/10 text-emerald-600" }, { n: "Contoso Roofing", s: "To call", c: "bg-amber-500/10 text-amber-600" }, { n: "Acme Plumbing Co.", s: "Won", c: "bg-[#fec32a]/30 text-[#7a4a00]" }].map((r) => (
+        {[{ n: "Northwind HVAC", s: "Contacted", c: "bg-sky-500/10 text-sky-600" }, { n: "Fabrikam Electric", s: "Replied", c: "bg-emerald-500/10 text-emerald-600" }, { n: "Contoso Roofing", s: "To call", c: "bg-amber-500/10 text-amber-600" }, { n: "Acme Plumbing Co.", s: "Won", c: "bg-flare/30 text-flare-ink" }].map((r) => (
           <div key={r.n} className="flex items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2 text-xs shadow-sm">
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
             <span className="truncate font-medium text-foreground">{r.n}</span>
@@ -631,7 +631,7 @@ function PriceCard({ plan, signedIn }) {
   const tile = blue ? "bg-white/15 text-white" : dark ? "bg-white/10 text-white" : "bg-primary/10 text-primary";
   const per = blue ? "text-white/75" : dark ? "text-white/60" : "text-muted-foreground";
   const rule = blue || dark ? "bg-white/15" : "bg-border";
-  const checkWrap = blue ? "bg-white/20 text-white" : dark ? "bg-white/10 text-[#fec32a]" : "bg-[#fec32a]/30 text-[#7a4a00]";
+  const checkWrap = blue ? "bg-white/20 text-white" : dark ? "bg-white/10 text-flare" : "bg-flare/30 text-flare-ink";
   const perkText = blue ? "text-white/90" : dark ? "text-white/70" : "text-muted-foreground";
 
   const btnClass = blue ? "lf-cta bg-white text-primary hover:bg-white/90"
@@ -641,7 +641,7 @@ function PriceCard({ plan, signedIn }) {
   return (
     <div className={`relative flex h-full flex-col rounded-3xl border p-6 transition-all duration-300 hover:-translate-y-1.5 ${shell} ${blue ? "lg:-mt-4 lg:mb-4" : ""}`}>
       {plan.popular && (
-        <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[#fec32a] px-3 py-1 text-xs font-semibold text-[#4a2f00] shadow-lg">Most popular</span>
+        <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-flare px-3 py-1 text-xs font-semibold text-flare-ink shadow-lg">Most popular</span>
       )}
       <div className={`mb-4 flex h-10 w-10 items-center justify-center rounded-xl ${tile}`}><Icon className="h-5 w-5" /></div>
       <div className="font-heading text-lg font-bold">{plan.name}</div>
@@ -771,8 +771,8 @@ export default function Landing({ recent = [], total = 0 }) {
       {/* ambient colourful blobs */}
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute -left-40 -top-40 h-[34rem] w-[34rem] rounded-full bg-primary/[0.07] blur-3xl" />
-        <div className="absolute -right-48 top-40 h-[30rem] w-[30rem] rounded-full bg-gold-tint/60 blur-3xl" />
-        <div className="absolute left-1/3 top-[48rem] h-[26rem] w-[26rem] rounded-full bg-[#fec32a]/12 blur-3xl" />
+        <div className="absolute -right-48 top-40 h-[30rem] w-[30rem] rounded-full bg-flare-tint/60 blur-3xl" />
+        <div className="absolute left-1/3 top-[48rem] h-[26rem] w-[26rem] rounded-full bg-flare/12 blur-3xl" />
       </div>
 
       {/* ---- nav ---- */}
@@ -997,7 +997,7 @@ export default function Landing({ recent = [], total = 0 }) {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="flex items-center justify-between rounded-xl border border-border bg-background px-3 py-3">
                 <div><div className="text-[11px] text-muted-foreground">Leads today</div><div className="font-heading text-xl font-bold text-foreground">2,400 <span className="text-xs font-semibold text-emerald-600">+10%</span></div></div>
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#fec32a]/25 text-[#7a4a00]"><TrendingUp className="h-4 w-4" /></span>
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-flare/25 text-flare-ink"><TrendingUp className="h-4 w-4" /></span>
               </div>
               <div className="flex items-center gap-2.5 rounded-xl border border-border bg-background px-3 py-3">
                 <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary"><Bell className="h-4 w-4" /></span>
@@ -1030,7 +1030,7 @@ export default function Landing({ recent = [], total = 0 }) {
               const active = step === i;
               return (
                 <button key={s.n} onClick={() => setStep(i)} className={`group relative flex w-full items-start gap-4 rounded-2xl border p-5 text-left transition-all ${active ? "border-border bg-card shadow-xl shadow-primary/5" : "border-transparent hover:bg-card/60"}`}>
-                  {active && <span className="absolute inset-x-5 top-0 h-1 rounded-full bg-gradient-to-r from-primary to-[#0a7a5c]" />}
+                  {active && <span className="absolute inset-x-5 top-0 h-1 rounded-full bg-gradient-to-r from-primary to-flare" />}
                   <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}><s.icon className="h-5 w-5" /></span>
                   <span>
                     <span className="font-heading flex items-center gap-2 text-lg font-bold">{s.title}</span>
@@ -1126,7 +1126,7 @@ export default function Landing({ recent = [], total = 0 }) {
       <section className="container py-20">
         <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-primary via-[#04503f] to-[#046a50] px-6 py-16 text-center text-white">
           <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10 blur-2xl" />
-          <div className="pointer-events-none absolute -bottom-20 -left-10 h-56 w-56 rounded-full bg-gold/15 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-20 -left-10 h-56 w-56 rounded-full bg-flare/15 blur-3xl" />
           <h2 className="font-heading mx-auto max-w-xl text-3xl font-bold sm:text-4xl">Ready to build your lead list?</h2>
           <p className="mx-auto mt-3 max-w-lg text-white/80">Sign in with Google and run your first scrape in minutes.</p>
           <div className="mt-7 flex justify-center">

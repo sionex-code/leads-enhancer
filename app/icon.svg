@@ -1,14 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <!-- Rounded square in the brand green -->
-  <rect width="64" height="64" rx="12" ry="12" fill="#013b2f"/>
+  <!-- Rounded square in the brand orange -->
+  <rect width="64" height="64" rx="12" ry="12" fill="#e05305"/>
   <!-- LeadsFunda mark, derived from the left polygon of the logo. Original
        viewBox 0 0 132.24 132.24 for just the mark, scaled to ~48x48 centered.
-       The strip is gold, matching the wordmark; the body is white so the glyph
-       still reads at 16px, where a gold-on-green mark would go muddy. -->
+       The body is white so the glyph still reads at 16px; the strip is the pale
+       flare tint rather than another orange, which would vanish into the tile. -->
   <g transform="translate(8, 8) scale(0.363636)">
-    <polygon fill="white" fill-opacity="0.9"
+    <polygon fill="white" fill-opacity="0.95"
       points="132.24 66.12 66.12 132.24 56.19 122.31 54.17 131.5 54.16 131.5 54.16 81.01 80.38 81.01 80.38 74.19 54.16 74.19 54.16 53.82 85.75 53.82 85.75 47 54.16 47 54.16 .93 56.15 9.97 66.12 0 132.24 66.12"/>
-    <polygon fill="#f5c443"
+    <polygon fill="#ffd0a6"
       points="47.35 .93 47.35 131.5 42.27 108.39 0 66.12 42.33 23.79 47.35 .93"/>
   </g>
 </svg>
