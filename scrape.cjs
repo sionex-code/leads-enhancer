@@ -100,6 +100,11 @@ const HEADERS = [
   "hours",
   "imageUrls",
   "mapsUrl",
+  // Plotted by the workspace map. The live/warehouse CSV has carried these all
+  // along (see app/api/projects/find/route.js), so scraped projects were the only
+  // ones whose map never appeared.
+  "lat",
+  "lng",
 ];
 
 // ---- helpers -----------------------------------------------------------------
@@ -441,6 +446,11 @@ async function captureFeedCards(page) {
             hours: "",
             imageUrls: "",
             mapsUrl: link?.href || location.href,
+            // The card sweep is a fallback for what the RPC decode missed; the
+            // DOM carries no coordinates, so these stay blank and the row simply
+            // isn't plotted. The RPC path (mapsparse) fills them for the rest.
+            lat: "",
+            lng: "",
           };
         })
         .filter((r) => r.name);

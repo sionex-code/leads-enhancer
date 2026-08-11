@@ -308,6 +308,11 @@ function EnrichProgress({ progress, stage }) {
   const status = stage?.status || progress?.status || "idle";
   if (!progress || (!progress.totalSites && status !== "running")) return null;
   if (status === "idle" && !progress.processedSites) return null;
+  // Finished work is not progress. Once the stage reports done with nothing left
+  // to process, this card is just a stale "done / 0 remaining" panel sitting on
+  // top of the results the user actually came back for — so it retires itself.
+  // Errors stay put: a failed run is exactly when you need the numbers.
+  if (status === "done" && !progress.remaining) return null;
   const eta = status === "running" ? formatDuration(progress.etaSeconds) : progress.remaining ? "not running" : "done";
   return (
     <Card>
@@ -3413,15 +3418,19 @@ export default function Dashboard({ view = "" }) {
         {/* Credit clarity: only leads new to your account are charged; duplicates you
             already have (matched by website/phone/name) are merged for free. */}
         {status?.state?.dbSync && !hideSyncBanner && (
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border bg-card/40 px-3 py-2 text-xs text-muted-foreground">
-            <CreditCard size={13} className="shrink-0 text-primary" />
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs text-muted-foreground">
+            <CreditCard size={13} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
+            {/* Two different facts, so they get two different colours: green for
+                what you gained, amber for what was already yours and therefore
+                free. As one flat grey line the charge/no-charge split — the whole
+                point of the banner — was invisible. */}
             <span>
-              <b className="font-semibold text-foreground">{Number(status.state.dbSync.inserted || 0).toLocaleString()} new leads</b>
+              <b className="font-semibold text-emerald-700 dark:text-emerald-400">{Number(status.state.dbSync.inserted || 0).toLocaleString()} new leads</b>
               {" "}added to this project
             </span>
-            <span>·</span>
+            <span className="text-muted-foreground/50">·</span>
             <span>
-              <b className="font-semibold text-foreground">{Number(status.state.dbSync.updated || 0).toLocaleString()}</b>
+              <b className="font-semibold text-amber-700 dark:text-amber-400">{Number(status.state.dbSync.updated || 0).toLocaleString()}</b>
               {" "}were already in your saved leads (no extra charge)
             </span>
             <button onClick={() => setHideSyncBanner(true)} aria-label="Dismiss" className="ml-auto text-muted-foreground transition-colors hover:text-foreground"><X size={13} /></button>
@@ -3879,6 +3888,39 @@ export default function Dashboard({ view = "" }) {
           </div>
         )}
       </div>
+      {/* Bulk selection dock. The checkboxes, the selection state and every bulk
+          handler already existed, but nothing ever rendered them — BottomDock was
+          added and left unwired, so ticking rows did nothing visible. It portals
+          to <body> (see BottomDock) to escape the page-in transform. */}
+      {selectedCount > 0 && (
+        <BottomDock>
+          <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-full border border-border bg-card/95 px-3 py-2 shadow-lg backdrop-blur">
+            <span className="px-1 text-sm font-medium tabular-nums">
+              {selectedCount.toLocaleString()} selected
+            </span>
+            <span className="h-4 w-px bg-border" />
+            <Button size="sm" variant="outline" onClick={bulkAddToList} disabled={!!bulkBusy}>
+              {bulkBusy === "list" ? <Loader2 size={15} className="animate-spin" /> : <ListPlus size={15} />}
+              Add to list
+            </Button>
+            <Button size="sm" variant="outline" onClick={exportLeadsCsv}>
+              <Download size={15} /> Export
+            </Button>
+            <Button size="sm" variant="outline" onClick={bulkRemove} disabled={!!bulkBusy}>
+              <Trash2 size={15} /> Remove
+            </Button>
+            <button
+              type="button"
+              onClick={() => setSelectedLeads(new Set())}
+              aria-label="Clear selection"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        </BottomDock>
+      )}
+
       {/* Lead detail drawer — opens on a row click. Rendered as a slide-over so
           the table keeps its full width; on desktop it docks to the right edge. */}
       <Sheet open={!!detailLead} onOpenChange={(o) => !o && closeLeadDetail()}>

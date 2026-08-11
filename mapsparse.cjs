@@ -61,6 +61,22 @@ function placeKey(p) {
   return clean(p[10]) || placeId(p) || clean(p[11]);
 }
 
+// "…/?cid=<decimal>" from the node's cid field, which looks like
+// "0x8644b1518ae24e97:0x4fbbf19295f14748". The second half already carries its
+// own "0x", so prefixing another one built "0x0x…" and made BigInt throw. That
+// throw escaped extractRow into rowsFromBody, and scrape.cjs catches a decode
+// failure by dropping the WHOLE response batch — so one place without a ChIJ id
+// silently lost every lead alongside it. Never throw out of here.
+function cidUrl(raw) {
+  const hex = String(raw || "").split(":")[1] || "";
+  if (!hex) return "";
+  try {
+    return `https://maps.google.com/?cid=${BigInt(hex.startsWith("0x") ? hex : `0x${hex}`).toString()}`;
+  } catch {
+    return "";
+  }
+}
+
 function formatHours(p) {
   const rows = p[203] && p[203][0];
   if (!Array.isArray(rows)) return "";
@@ -102,9 +118,14 @@ function extractRow(p) {
   const pid = placeId(p);
   const mapsUrl = pid
     ? `https://www.google.com/maps/place/?q=place_id:${pid}`
-    : p[10]
-      ? `https://maps.google.com/?cid=${BigInt("0x" + String(p[10]).split(":")[1]).toString()}`
-      : "";
+    : cidUrl(p[10]);
+
+  // Coordinates: p[9] is the geometry block, [2] lat and [3] lng. Same field
+  // positions gridscrape.cjs#parsePlaces already reads off this exact node shape
+  // (d[11] name, d[13][0] category, d[39] address …). Without these the workspace
+  // map has nothing to plot, since mapsUrl is a place_id link with no lat/lng in it.
+  const lat = Array.isArray(p[9]) && Number.isFinite(p[9][2]) ? p[9][2] : "";
+  const lng = Array.isArray(p[9]) && Number.isFinite(p[9][3]) ? p[9][3] : "";
 
   return {
     name: clean(p[11]),
@@ -119,6 +140,8 @@ function extractRow(p) {
     hours: formatHours(p),
     imageUrls,
     mapsUrl,
+    lat,
+    lng,
   };
 }
 
