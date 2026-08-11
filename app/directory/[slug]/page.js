@@ -30,11 +30,42 @@ const LOCKED_CELL = "select-none blur-[3px]";
 const titleCase = (s) =>
   String(s || "").trim().replace(/\s+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
+// Networks worth showing on a public listing, in the order they are rendered.
+const SOCIAL_KEYS = ["facebook", "instagram", "linkedin"];
+const SOCIAL_LABEL = { facebook: "Facebook", instagram: "Instagram", linkedin: "LinkedIn" };
+
+// Role addresses. A visitor judging whether this data is worth paying for learns
+// far more from a named mailbox than from info@ — anyone can guess info@. So a
+// generic address still counts as an email, it just loses the tie-break.
+const GENERIC_EMAIL =
+  /^(info|support|contact|hello|hi|admin|office|sales|enquiry|enquiries|inquiry|inquiries|mail|email|team|help|service|customerservice|noreply|no-reply|donotreply)@/i;
+
+// Is this row good enough to give away? The free sample has to answer "is the
+// data any good" in one glance, and a row missing the phone or the socials
+// answers "no". Everything here must be present for real, not masked.
+function showcaseScore(wh, cache) {
+  const email = String(cache?.email || "").trim();
+  const socials = SOCIAL_KEYS.filter((k) => String(cache?.[k] || "").trim());
+  const complete = !!(String(wh.website || "").trim() && String(wh.phone || "").trim() && email && socials.length);
+  if (!complete) return null;
+  const reviews = Number(wh.reviews) || 0;
+  const rating = Number(wh.rating) || 0;
+  return (
+    // A named mailbox is the strongest single signal, then breadth of socials,
+    // then the ordinary "is this a real business" markers.
+    (GENERIC_EMAIL.test(email) ? 0 : 60) +
+    socials.length * 12 +
+    Math.min(reviews, 200) / 10 +
+    rating * 2
+  );
+}
+
 // Everything a public visitor is allowed to receive. Called on the server; the
 // unmasked email/phone/website are never serialised into the response, so what
 // is withheld is genuinely absent from the page rather than hidden with CSS.
 // tier: "public" (signed out) | "member" (signed in, no plan) | "full"
-function toPublicRow(wh, cityName, email, tier) {
+function toPublicRow(wh, cityName, cache, tier) {
+  const email = String(cache?.email || "").trim();
   const reviews = wh.reviews != null && wh.reviews !== "" ? Number(wh.reviews) : null;
   return {
     name: wh.name || "",
@@ -48,7 +79,17 @@ function toPublicRow(wh, cityName, email, tier) {
     email: tier === "full" ? (email || "") : pub.maskEmailAtDomain(email, wh.website),
     phone: tier === "full" ? (wh.phone || "") : pub.maskPhone(wh.phone),
     website: tier === "public" ? pub.maskWebsite(wh.website) : pub.hostOf(wh.website),
+    // Social links ride along only on a row we are giving away in full. On a
+    // withheld row they are dropped entirely rather than masked — a profile URL
+    // cannot be usefully starred out, and it would hand over the lead anyway.
+    socials: tier === "full" ? socialsOf(cache) : [],
   };
+}
+
+function socialsOf(cache) {
+  return SOCIAL_KEYS
+    .map((key) => ({ key, url: String(cache?.[key] || "").trim() }))
+    .filter((s) => /^https?:\/\//i.test(s.url));
 }
 
 const hostOf = (u) => {
@@ -84,18 +125,32 @@ async function loadPage(slug, tier) {
       enrichment = new Map();
     }
 
-    // The first FREE_ROWS are served as if the viewer had a plan; the rest keep
-    // this viewer's real tier, so their contact details are masked here on the
-    // server and never reach the browser at all.
-    rows = raw.map((r, i) => ({
-      ...toPublicRow(
-        r,
-        entry.cityName,
-        enrichment.get(hostOf(r.website || ""))?.email || "",
-        i < FREE_ROWS ? "full" : tier
-      ),
-      locked: i >= FREE_ROWS && tier !== "full",
-    }));
+    // Which rows to give away. Not simply the first N: a sample is only
+    // persuasive if every row in it is complete — website, phone, a real email
+    // and at least one social — and a named mailbox beats info@. Rows that
+    // can't clear that bar are never unlocked, so a thin listing shows fewer
+    // than FREE_ROWS rather than a free row with three dashes in it.
+    const cacheOf = (r) => enrichment.get(hostOf(r.website || "")) || null;
+    const free = new Set(
+      raw
+        .map((r, i) => ({ i, score: showcaseScore(r, cacheOf(r)) }))
+        .filter((x) => x.score !== null)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, FREE_ROWS)
+        .map((x) => x.i)
+    );
+
+    rows = raw.map((r, i) => {
+      const unlocked = free.has(i) || tier === "full";
+      return {
+        ...toPublicRow(r, entry.cityName, cacheOf(r), unlocked ? "full" : tier),
+        locked: !unlocked,
+        // Showcase rows lead the table — the proof belongs above the fold, not
+        // scattered down a list of blurred ones.
+        showcase: free.has(i),
+      };
+    });
+    rows.sort((a, b) => Number(b.showcase) - Number(a.showcase));
   } catch {
     rows = []; // the page is still worth rendering with its CTA
   }
@@ -205,6 +260,10 @@ export default async function DirectoryEntry({ params }) {
   const where = [entry.cityName, entry.countryName].filter(Boolean).join(", ");
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "/login";
   const service = titleCase(entry.service);
+  // How many rows actually cleared the showcase bar. Never assume FREE_ROWS: a
+  // thin listing legitimately gives away fewer, and the copy has to match what
+  // the table is doing rather than what it hoped to do.
+  const freeCount = rows.filter((r) => r.showcase).length;
   const pctPhone = stats.shown ? Math.round((stats.withPhone / stats.shown) * 100) : 0;
   const pctSite = stats.shown ? Math.round((stats.withSite / stats.shown) * 100) : 0;
 
@@ -220,7 +279,9 @@ export default async function DirectoryEntry({ params }) {
     {
       q: `Do these ${entry.service} listings include phone numbers and websites?`,
       a: `${pctPhone}% of the businesses shown here have a phone number on file and ${pctSite}% have a website. ` +
-         `The first ${FREE_ROWS} are listed with their real details; the rest are shortened on this page and shown in full inside LeadsFunda.`,
+         (freeCount
+           ? `${freeCount} complete ${freeCount === 1 ? "listing is" : "listings are"} shown in full — website, email, phone and social profiles — and the rest are shortened on this page and available inside LeadsFunda.`
+           : `Contact details are shortened on this page and shown in full inside LeadsFunda.`),
     },
     {
       q: `How well rated are ${entry.service} businesses in ${entry.cityName}?`,
@@ -382,6 +443,24 @@ export default async function DirectoryEntry({ params }) {
                       {r.address && (
                         <div className="mt-0.5 text-[11px] text-muted-foreground/70">{r.address}</div>
                       )}
+                      {/* Socials only exist on a row we are giving away, so this
+                          doubles as the marker for which rows are the sample. */}
+                      {r.socials?.length > 0 && (
+                        <div className="mt-1.5 flex items-center gap-1.5">
+                          {r.socials.map((sn) => (
+                            <a
+                              key={sn.key}
+                              href={sn.url}
+                              target="_blank"
+                              rel="noreferrer nofollow"
+                              title={SOCIAL_LABEL[sn.key]}
+                              className="inline-flex h-5 items-center rounded-full border border-border bg-muted/60 px-2 text-[10px] font-medium capitalize text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                            >
+                              {SOCIAL_LABEL[sn.key]}
+                            </a>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       {r.rating ? (
@@ -449,9 +528,9 @@ export default async function DirectoryEntry({ params }) {
                   Unlock the emails and phone numbers
                 </p>
                 <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
-                  The first {FREE_ROWS} are shown in full, and you are signed in, so every
-                  website is too. Upgrade your plan to reveal the rest of the emails and
-                  phone numbers and export all {entry.leadCount.toLocaleString()} businesses.
+                  {freeCount > 0 ? `${freeCount} complete ${freeCount === 1 ? "listing is" : "listings are"} shown in full above, and you are signed in, so every website is too. ` : ""}
+                  Upgrade your plan to reveal the rest of the emails and phone numbers and
+                  export all {entry.leadCount.toLocaleString()} businesses.
                 </p>
                 <a
                   href={`${appUrl}/billing`}
@@ -467,9 +546,10 @@ export default async function DirectoryEntry({ params }) {
                   Sign in to view full leads
                 </p>
                 <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
-                  The first {FREE_ROWS} businesses above show their real website, email and
-                  phone. The rest are shortened on public pages — sign in to see them and to
-                  export the whole list.
+                  {freeCount > 0
+                    ? `The top ${freeCount} ${freeCount === 1 ? "business" : "businesses"} above are shown in full — real website, email, phone and social profiles. The rest are shortened on public pages. `
+                    : "Contact details are shortened on public pages. "}
+                  Sign in to see them and to export the whole list.
                 </p>
                 <a
                   href={`${appUrl}/login?callbackUrl=${encodeURIComponent(`/directory/${entry.slug}`)}`}
