@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -56,6 +55,7 @@ import { Select } from "./components/ui/select";
 import { Progress } from "./components/ui/progress";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "./components/ui/table";
 import { Sheet, SheetContent } from "./components/ui/sheet";
+import BottomDock from "./components/ui/bottom-dock";
 import { cn, waMeLink, waState, prettyEnrichStatus } from "./lib/utils";
 import { Socials, WaIcon, WaPhone } from "./components/SocialIcons";
 import LeadDetailPanel from "./components/leads/LeadDetailPanel";
@@ -135,26 +135,6 @@ function titleCase(s) {
 
 // Shared rating/reviews rule (matches the Leads page): show the review count
 // (0 when empty), and only show a star rating when there is at least one review.
-// A strip pinned to the bottom-centre of the viewport.
-//
-// It has to portal out to <body>: the workspace renders inside an
-// `animate-page-in` wrapper, and that animation uses `both` fill mode, so its
-// transform sticks around after it finishes. A transformed ancestor becomes the
-// containing block for any `position: fixed` descendant, which would anchor the
-// dock to the (very tall) page instead of the screen — it ended up thousands of
-// pixels down the document. Rendering into <body> steps outside that subtree.
-function BottomDock({ children }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  if (!mounted) return null;
-  return createPortal(
-    <div className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center px-4">
-      {children}
-    </div>,
-    document.body
-  );
-}
-
 function reviewCount(lead) {
   const n = Number(lead.reviews);
   return Number.isFinite(n) ? n : 0;

@@ -26,6 +26,12 @@ export async function GET(request) {
     hasEmail: searchParams.get("hasEmail") || "",
     hasWhatsapp: searchParams.get("hasWhatsapp") || "",
     hasWebsite: searchParams.get("hasWebsite") || "",
+    // Kept in step with /api/leads so an export always matches what's on screen.
+    hasPhone: searchParams.get("hasPhone") === "yes" ? "yes" : searchParams.get("hasPhone") === "no" ? "no" : "",
+    reviews: searchParams.get("reviews") || "",
+    rating: searchParams.get("rating") || "",
+    social: searchParams.get("social") || "",
+    enriched: searchParams.get("enriched") || "",
     httpStatus: searchParams.get("httpStatus") || "",
     minScore: Number(searchParams.get("minScore") || 0),
     project: searchParams.get("project") || "",

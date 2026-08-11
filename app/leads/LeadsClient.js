@@ -7,6 +7,7 @@ import AnimatedNumber from "../components/AnimatedNumber";
 import ReportModal from "../components/ReportModal";
 import ListsDialog from "../components/leads/ListsDialog";
 import ManageListsDialog from "../components/leads/ManageListsDialog";
+import BottomDock from "../components/ui/bottom-dock";
 import {
   Ban,
   BarChart3,
@@ -630,6 +631,16 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
   const [hasWebsite, setHasWebsite] = useState(""); // "" | "yes" | "no"
   const [httpStatus, setHttpStatus] = useState(""); // "" | "200" | "redirect" | "broken" | "unreachable"
   const [minScore, setMinScore] = useState(0);
+  // The same questions the project workspace asks of a result set. All of these
+  // filter (and sort) in SQL, not over the page already loaded — sorting client
+  // side would only reorder the 120 rows in front of you and hide the real top
+  // of the list.
+  const [hasPhone, setHasPhone] = useState(""); // "" | "yes" | "no"
+  const [reviewsFilter, setReviewsFilter] = useState(""); // "" | none | some | many
+  const [ratingFilter, setRatingFilter] = useState(""); // "" | none | low | good | top
+  const [socialFilter, setSocialFilter] = useState(""); // "" | any | none | <network> | no-<network>
+  const [enrichedFilter, setEnrichedFilter] = useState(""); // "" | yes | no
+  const [sort, setSort] = useState("recent"); // recent | name | reviews | rating
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
   const [active, setActive] = useState(null);
@@ -1062,8 +1073,15 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
     if (httpStatus) params.set("httpStatus", httpStatus);
     if (minScore) params.set("minScore", String(minScore));
     if (listFilter) params.set("list", listFilter);
+    if (hasPhone) params.set("hasPhone", hasPhone);
+    if (reviewsFilter) params.set("reviews", reviewsFilter);
+    if (ratingFilter) params.set("rating", ratingFilter);
+    if (socialFilter) params.set("social", socialFilter);
+    if (enrichedFilter) params.set("enriched", enrichedFilter);
+    if (sort && sort !== "recent") params.set("sort", sort);
     return params;
-  }, [search, project, country, city, workflow, hasEmail, hasWhatsapp, hasWebsite, httpStatus, minScore, listFilter]);
+  }, [search, project, country, city, workflow, hasEmail, hasWhatsapp, hasWebsite, httpStatus, minScore, listFilter,
+      hasPhone, reviewsFilter, ratingFilter, socialFilter, enrichedFilter, sort]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1094,7 +1112,8 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
 
   useEffect(() => {
     setPage(0);
-  }, [city, country, hasEmail, hasWhatsapp, hasWebsite, httpStatus, initialWorkflow, initialList, listFilter, minScore, project, search, workflow]);
+  }, [city, country, hasEmail, hasWhatsapp, hasWebsite, httpStatus, initialWorkflow, initialList, listFilter, minScore, project, search, workflow,
+      hasPhone, reviewsFilter, ratingFilter, socialFilter, enrichedFilter, sort]);
 
   useEffect(() => {
     setWorkflow(initialWorkflow);
@@ -1260,6 +1279,40 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                 <option value="yes">Has website</option>
                 <option value="no">No website</option>
               </Select>
+              <Select value={hasPhone} onChange={(e) => setHasPhone(e.target.value)} className="w-full sm:w-auto sm:min-w-[120px]" title="Filter by phone">
+                <option value="">Any phone</option>
+                <option value="yes">Has phone</option>
+                <option value="no">No phone</option>
+              </Select>
+              <Select value={reviewsFilter} onChange={(e) => setReviewsFilter(e.target.value)} className="w-full sm:w-auto sm:min-w-[130px]" title="Filter by review count">
+                <option value="">Any reviews</option>
+                <option value="none">No reviews</option>
+                <option value="some">1–20 reviews</option>
+                <option value="many">20+ reviews</option>
+              </Select>
+              <Select value={ratingFilter} onChange={(e) => setRatingFilter(e.target.value)} className="w-full sm:w-auto sm:min-w-[130px]" title="Filter by rating">
+                <option value="">Any rating</option>
+                <option value="none">No rating</option>
+                <option value="low">Under 4.0</option>
+                <option value="good">4.0 – 4.4</option>
+                <option value="top">4.5 and up</option>
+              </Select>
+              <Select value={socialFilter} onChange={(e) => setSocialFilter(e.target.value)} className="w-full sm:w-auto sm:min-w-[140px]" title="Filter by social profiles">
+                <option value="">Any socials</option>
+                <option value="any">Has socials</option>
+                <option value="none">No socials</option>
+                <option value="facebook">Has Facebook</option>
+                <option value="no-facebook">No Facebook</option>
+                <option value="instagram">Has Instagram</option>
+                <option value="no-instagram">No Instagram</option>
+                <option value="linkedin">Has LinkedIn</option>
+                <option value="no-linkedin">No LinkedIn</option>
+              </Select>
+              <Select value={enrichedFilter} onChange={(e) => setEnrichedFilter(e.target.value)} className="w-full sm:w-auto sm:min-w-[130px]" title="Filter by enrichment">
+                <option value="">Any enrichment</option>
+                <option value="yes">Enriched</option>
+                <option value="no">Not enriched</option>
+              </Select>
               <Select value={httpStatus} onChange={(e) => setHttpStatus(e.target.value)} className="w-full sm:w-auto sm:min-w-[130px]" title="Filter by website status">
                 <option value="">Any status</option>
                 <option value="200">200 OK</option>
@@ -1271,6 +1324,12 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                 <option value={0}>Any perf</option>
                 <option value={50}>Perf 50+</option>
                 <option value={90}>Perf 90+</option>
+              </Select>
+              <Select value={sort} onChange={(e) => setSort(e.target.value)} className="w-full sm:w-auto sm:min-w-[140px]" title="Sort">
+                <option value="recent">Newest first</option>
+                <option value="name">Name A–Z</option>
+                <option value="reviews">Most reviews</option>
+                <option value="rating">Highest rated</option>
               </Select>
               <span className="ml-auto text-xs text-muted-foreground">
                 {loading ? "Loading..." : total ? `${pageStart}-${pageEnd} of ${total}` : "0 shown"}
@@ -1305,12 +1364,14 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
           </CardContent>
         </Card>
 
-        {/* Bulk action bar — keep the leads page focused on list membership and deletion. */}
+        {/* Selection dock. Pinned to the bottom of the viewport rather than sat
+            above the table: a selection made 60 rows down was previously
+            actionable only by scrolling back to the top to find the bar. */}
         {selectedCount > 0 && (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-primary/40 bg-primary/5 px-4 py-2.5 text-sm">
-            <span className="font-medium">{selectedCount} selected</span>
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>Clear</Button>
+          <BottomDock>
+            <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-x-3 gap-y-2 rounded-full border border-border bg-card/95 px-4 py-2 text-sm shadow-lg backdrop-blur">
+            <span className="font-medium tabular-nums">{selectedCount.toLocaleString()} selected</span>
+            <div className="flex flex-wrap items-center gap-2">
               <Button variant="outline" size="sm" onClick={() => setListDialog({ ids: [...selected] })}><ListPlus size={15} /> Add to list</Button>
               <Button variant="outline" size="sm" disabled={!!batchBusy || !!batch || !reportableCount} onClick={bulkReport} title={reportableCount ? (SHOW_CREDITS ? `Generate website reports (${REPORT_COST} credits each = ${reportCost} credits)` : "Generate website reports for the selected leads") : "Select leads with a website first"}>
                 {batchBusy === "report" ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
@@ -1328,8 +1389,17 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                 {bulkBusy === "delete" ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
                 {workflow === "watchlist" || workflow === "contacts" ? "Remove" : "Delete"}
               </Button>
+              <button
+                type="button"
+                onClick={() => setSelected(new Set())}
+                aria-label="Clear selection"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <X size={15} />
+              </button>
             </div>
-          </div>
+            </div>
+          </BottomDock>
         )}
 
         {/* Table / cards */}

@@ -546,14 +546,34 @@ async function upsertLeads(userId, leadObjs) {
 // object. The returned `add(val)` keeps appending positional params so callers can
 // tack on extras (queryLeads appends LIMIT/OFFSET). Both queryLeads and exportCsv
 // use this so the list view and the CSV export apply identical filtering.
+// reviews/rating arrive from the scrape as raw strings ("1,204", "4.6", ""), so
+// every numeric use of them has to cast defensively — a stray "." or "n/a" cast
+// straight to a number would error the whole query, taking the leads table down
+// rather than just mis-filtering one row. The regex tests mean anything that
+// isn't a clean number simply reads as "not captured" (NULL), which is also the
+// honest answer. reviews casts to numeric, not bigint: no overflow to worry about.
+const REVIEWS_EXPR =
+  "(CASE WHEN regexp_replace(COALESCE(reviews, ''), '[^0-9]', '', 'g') ~ '^[0-9]+$' " +
+  "THEN regexp_replace(COALESCE(reviews, ''), '[^0-9]', '', 'g')::numeric END)";
+const RATING_EXPR =
+  "(CASE WHEN btrim(COALESCE(rating, '')) ~ '^[0-9]+([.,][0-9]+)?$' " +
+  "THEN replace(btrim(rating), ',', '.')::double precision END)";
+
 function buildLeadWhere(
   userId,
   {
     search = "",
     hasEmail = "",
-    hasPhone = false,
+    hasPhone = "",
     hasWhatsapp = "",
     hasWebsite = "",
+    // Same filters the project workspace offers, so the two tables answer the
+    // same questions. reviews/rating are text columns (they arrive from the
+    // scrape as strings), hence the cast-with-fallback below.
+    reviews = "",
+    rating = "",
+    social = "",
+    enriched = "",
     minScore = 0,
     project = "",
     country = "",
@@ -584,7 +604,10 @@ function buildLeadWhere(
   // Email is tri-state ("yes"/"no"); accept legacy truthy/`"1"` as "has email".
   if (hasEmail === "no") where.push("(email IS NULL OR email = '')");
   else if (hasEmail === true || hasEmail === "1" || hasEmail === "yes") where.push("email IS NOT NULL AND email != ''");
-  if (hasPhone) where.push("phone IS NOT NULL AND phone != ''");
+  // Tri-state like hasEmail: "yes"/"no", with legacy `true` still meaning "yes"
+  // (web/lib/agent.cjs passes a boolean).
+  if (hasPhone === true || hasPhone === "yes" || hasPhone === "1") where.push("phone IS NOT NULL AND phone != ''");
+  else if (hasPhone === "no") where.push("(phone IS NULL OR phone = '')");
   const whatsappYes = `(
     (whatsapp_status IS NOT NULL AND whatsapp_status != '' AND (lower(whatsapp_status) = 'yes' OR lower(whatsapp_status) LIKE 'on whatsapp%'))
     OR (whatsapp_id IS NOT NULL AND whatsapp_id != '')
@@ -596,6 +619,36 @@ function buildLeadWhere(
   if (hasWhatsapp === "no") where.push(whatsappNo);
   if (hasWebsite === "yes") where.push("website IS NOT NULL AND website != ''");
   if (hasWebsite === "no") where.push("(website IS NULL OR website = '')");
+
+  // reviews/rating are stored as the raw scraped strings ("1,204", "4.6"), so
+  // strip everything that isn't a digit (or a dot) before casting. NULLIF keeps
+  // an empty result NULL instead of blowing up the cast, which matters because
+  // "no review count captured" and "zero reviews" are different answers.
+  const REVIEWS_NUM = REVIEWS_EXPR;
+  const RATING_NUM = RATING_EXPR;
+  if (reviews === "none") where.push(`COALESCE(${REVIEWS_NUM}, 0) = 0`);
+  else if (reviews === "some") where.push(`COALESCE(${REVIEWS_NUM}, 0) BETWEEN 1 AND 20`);
+  else if (reviews === "many") where.push(`COALESCE(${REVIEWS_NUM}, 0) > 20`);
+  if (rating === "none") where.push(`${RATING_NUM} IS NULL`);
+  else if (rating === "low") where.push(`${RATING_NUM} < 4`);
+  else if (rating === "good") where.push(`${RATING_NUM} >= 4 AND ${RATING_NUM} < 4.5`);
+  else if (rating === "top") where.push(`${RATING_NUM} >= 4.5`);
+
+  // Socials. Named networks matter on their own: "no Facebook page" and "no
+  // LinkedIn" are pitches to different businesses.
+  const SOCIAL_COLS = ["facebook", "instagram", "linkedin", "twitter", "tiktok", "youtube"];
+  const has = (col) => `(${col} IS NOT NULL AND ${col} != '')`;
+  const hasAny = `(${SOCIAL_COLS.map(has).join(" OR ")})`;
+  if (social === "any") where.push(hasAny);
+  else if (social === "none") where.push(`NOT ${hasAny}`);
+  else if (SOCIAL_COLS.includes(social)) where.push(has(social));
+  else if (social.startsWith("no-") && SOCIAL_COLS.includes(social.slice(3))) where.push(`NOT ${has(social.slice(3))}`);
+
+  // "Enriched" = the website crawl has run: it found an email, recorded a status,
+  // or read the site's marketing stack.
+  const ENRICHED = `(${[has("email"), has("enrich_status"), has("tech")].join(" OR ")})`;
+  if (enriched === "yes") where.push(ENRICHED);
+  else if (enriched === "no") where.push(`NOT ${ENRICHED}`);
   // Website HTTP status (populated by the "Check status" scan).
   if (httpStatus === "200") where.push("http_status = 200");
   else if (httpStatus === "redirect") where.push("http_status BETWEEN 300 AND 399");
@@ -644,8 +697,20 @@ function buildLeadWhere(
   return { where, params, add, clause: "WHERE " + where.join(" AND ") };
 }
 
+// Sort orders offered by the table. Sorting has to happen in SQL, not on the
+// page the client already has, or "top rated first" would only reorder the 120
+// rows in front of you and quietly hide the actual top of the list. NULLS LAST
+// keeps leads with no captured rating/review count out of the winning end.
+const LEAD_SORTS = {
+  recent: "last_updated DESC",
+  name: "lower(coalesce(name, '')) ASC",
+  reviews: `${REVIEWS_EXPR} DESC NULLS LAST`,
+  rating: `${RATING_EXPR} DESC NULLS LAST`,
+};
+
 async function queryLeads(userId, opts = {}) {
-  const { limit = 2000, offset = 0 } = opts;
+  const { limit = 2000, offset = 0, sort = "recent" } = opts;
+  const orderBy = LEAD_SORTS[sort] || LEAD_SORTS.recent;
   const { clause, params, add } = buildLeadWhere(userId, opts);
   const totalRes = await q(`SELECT COUNT(*)::int AS c FROM leads ${clause}`, params);
   const total = totalRes.rows[0].c;
@@ -655,7 +720,7 @@ async function queryLeads(userId, opts = {}) {
     `SELECT *,
             (SELECT COUNT(*)::int FROM list_members m JOIN lists l2 ON l2.id = m.list_id AND l2.user_id = $1
               WHERE m.lead_id = leads.id) AS list_count
-       FROM leads ${clause} ORDER BY last_updated DESC LIMIT ${limP} OFFSET ${offP}`,
+       FROM leads ${clause} ORDER BY ${orderBy} LIMIT ${limP} OFFSET ${offP}`,
     params
   );
   return { total, rows: rowsRes.rows };
