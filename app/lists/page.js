@@ -1,10 +1,11 @@
-import { redirect } from "next/navigation";
+import ListsClient from "./ListsClient";
 
-// Lists live inside the leads table now (filter dropdown + "Manage lists"), so
-// this route only exists to keep old links, bookmarks and the Favorites card
-// working. See app/components/app/AppShell.js for why the two pages merged.
+// The single "Lists" destination in the sidebar: the cards overview. Clicking a
+// card opens /leads filtered to that list, where all the work happens (filter,
+// sort, status, notes, delete). /leads has no nav entry of its own — the two
+// used to be separate top-level items for what is one job.
 export const dynamic = "force-dynamic";
 
 export default function Page() {
-  redirect("/leads");
+  return <ListsClient />;
 }

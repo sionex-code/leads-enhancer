@@ -613,7 +613,7 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot, on
   );
 }
 
-export default function LeadsPage({ initialWorkflow = "", initialList = "", pageTitle = "Lead manager", activeNav = "leads" }) {
+export default function LeadsPage({ initialWorkflow = "", initialList = "", pageTitle = "Lead manager", activeNav = "lists" }) {
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [stats, setStats] = useState(null);

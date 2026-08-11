@@ -34,14 +34,14 @@ const DEFAULT_TOUR = [
 // — Projects opens the workspace (?view=projects), with Leads + Lists under the same
 // umbrella. Billing lives in the account menu now (not the sidebar).
 const NEW_SEARCH = { key: "new", label: "New search", href: "/dashboard", icon: Search };
-// One entry, not two: "Leads" and "Lists" were the same job split in half —
-// the table did all the work (filter, sort, status, notes, delete) while a
-// second page existed only to name lists and link back into that table. Lists
-// are now created/renamed/deleted from the table's list filter, so /lists
-// redirects here and the sidebar has a single destination.
+// One entry, not two. "Leads" and "Lists" were the same job split in half, so
+// Lists is now the single door: the cards overview at /lists (create, rename,
+// delete, plus Favorites and All leads), and opening a card lands in the leads
+// table filtered to it, where the actual work happens. /leads keeps working and
+// highlights this entry — it just isn't a separate destination any more.
 const PROJECT_NAV = [
   { key: "dashboard", label: "Projects", href: "/dashboard?view=projects", icon: LayoutGrid },
-  { key: "leads", label: "Lists", href: "/leads", icon: List },
+  { key: "lists", label: "Lists", href: "/lists", icon: List },
 ];
 
 // Live search runs in the extension, so "is it installed?" is a standing piece
