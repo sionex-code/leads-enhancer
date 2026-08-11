@@ -11,6 +11,26 @@ import { DEV_AUTH_ENABLED, devSession } from "./web/lib/dev-auth.js";
 
 const { orm, schema } = pg;
 
+// Two-host topology (see middleware.js): the session cookie is issued while on
+// app.leadsfunda.com (NEXTAUTH_URL), but the marketing landing on leadsfunda.com
+// needs to read it too so "/" can bounce an already-logged-in visitor straight to
+// the dashboard. Host-only cookies aren't shared across subdomains by default, so
+// when APP_HOST is a subdomain of MARKETING_HOST we widen the cookie's Domain to
+// the apex (e.g. "leadsfunda.com") so both hosts see it.
+function hostOf(u) {
+  try {
+    return new URL(u).host.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+const MARKETING_HOST = hostOf(process.env.NEXT_PUBLIC_MARKETING_URL || "");
+const APP_HOST = hostOf(process.env.NEXT_PUBLIC_APP_URL || "");
+const SHARED_COOKIE_DOMAIN =
+  MARKETING_HOST && APP_HOST && APP_HOST.endsWith("." + MARKETING_HOST)
+    ? MARKETING_HOST
+    : undefined;
+
 const nextAuth = NextAuth({
   adapter: DrizzleAdapter(orm(), {
     usersTable: schema.users,
@@ -24,17 +44,22 @@ const nextAuth = NextAuth({
   pages: {
     signIn: "/", // landing page hosts the Google CTA
   },
-  cookies: {
-    sessionToken: {
-      name: `authjs.session-token`,
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: process.env.NEXTAUTH_URL?.startsWith("https://") ?? false,
-      },
-    },
-  },
+  ...(SHARED_COOKIE_DOMAIN
+    ? {
+        cookies: {
+          sessionToken: {
+            name: "__Secure-authjs.session-token",
+            options: {
+              httpOnly: true,
+              sameSite: "lax",
+              path: "/",
+              secure: true,
+              domain: SHARED_COOKIE_DOMAIN,
+            },
+          },
+        },
+      }
+    : {}),
   callbacks: {
     // Expose the user id on the session object for server-side scoping.
     session({ session, user }) {
@@ -44,7 +69,7 @@ const nextAuth = NextAuth({
     async redirect({ url, baseUrl }) {
       // Allows relative callback URLs
       if (url.startsWith("/")) return `${baseUrl}${url}`;
-      
+
       const marketingUrl = process.env.NEXT_PUBLIC_MARKETING_URL || "";
       try {
         const urlObj = new URL(url);

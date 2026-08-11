@@ -12,7 +12,12 @@ name: Deploy LeadsFunda SaaS → app.leadsfunda.com
 # this build runs (NEXT_PUBLIC_* are inlined at build time).
 #
 # Hard-won invariants (see vps-deploy memory). Changing any of these breaks prod:
-#   • App dir is /home/adminsafe/leadsfunda — it already holds the prod `.env.local`
+#   • We connect as ROOT to /www/wwwroot/leadsfunda.com. The old adminsafe@
+#     /home/adminsafe/leadsfunda target in this file was never real — neither that
+#     user nor that directory exists on the box, so every run of this workflow
+#     failed. The SSH key in secrets.VPS_SSH_KEY authorises root (despite its
+#     "adminsafe" filename) and pm2 also runs as root (/root/.pm2).
+#   • App dir is /www/wwwroot/leadsfunda.com — it already holds the prod `.env.local`
 #     (DATABASE_URL → local PG, WAREHOUSE_DATABASE_URL, Whop, Google auth, OWA
 #     WhatsApp, NEXTAUTH_URL=https://app.leadsfunda.com, NEXT_PUBLIC_APP_URL,
 #     NEXT_PUBLIC_MARKETING_URL). We NEVER ship `.env.local` (the tar excludes it; a
@@ -36,8 +41,9 @@ concurrency:
 
 env:
   VPS_HOST: 144.91.104.65
-  VPS_USER: adminsafe
-  APP_DIR: /home/adminsafe/leadsfunda
+  VPS_USER: root
+  APP_DIR: /www/wwwroot/leadsfunda.com
+  BACKUP_DIR: /root/leadsfunda-backups
   PM2_APP: leadsfunda-ui
   APP_PORT: "3001"
 
@@ -79,15 +85,25 @@ jobs:
             cd '$APP_DIR'
 
             # Rolling backup (keep last 5), excluding the heavy/regenerable dirs.
-            tar czf ~/leadsfunda-backup-\$(date +%Y%m%d-%H%M%S).tgz \
+            mkdir -p '$BACKUP_DIR'
+            tar czf '$BACKUP_DIR'/leadsfunda-backup-\$(date +%Y%m%d-%H%M%S).tgz \
               --exclude=node_modules --exclude=.next --exclude=output \
               --exclude=.chrome-profile . 2>/dev/null || true
-            ls -t ~/leadsfunda-backup-*.tgz 2>/dev/null | tail -n +6 | xargs -r rm --
+            ls -t '$BACKUP_DIR'/leadsfunda-backup-*.tgz 2>/dev/null | tail -n +6 | xargs -r rm --
 
             tar xzf /tmp/saas-deploy.tgz
             rm -f /tmp/saas-deploy.tgz
 
             npm install --no-audit --no-fund
+
+            # World city index for live searches (data/geo, git-ignored so it is
+            # never in the tarball). The VPS already holds one and tar never
+            # deletes it, so this only fires on a fresh install. Non-fatal: it
+            # pulls a 19MB asset over the network and a deploy must not hinge on
+            # that — a missing index degrades live-search city lookup, nothing else.
+            if [ ! -f data/geo/countries.json ]; then
+              node scripts/build-geo-index.cjs || echo 'WARN: geo index build failed; live-search city lookup will be limited'
+            fi
 
             # Root build (no basePath). Bump heap — the VPS needs ~4G for next build.
             NEXT_PUBLIC_BASE_PATH= NODE_OPTIONS=--max-old-space-size=4096 npm run build

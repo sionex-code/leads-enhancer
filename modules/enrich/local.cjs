@@ -302,6 +302,11 @@ async function runBatch(ctx) {
   if (engine === "crawlee") {
     const concurrency = ctx.value("--enrichConcurrency", "30");
     const args = [input, "--concurrency", concurrency, "--timeout", "15000"];
+    // --noBrowser drops crawlee's PlaywrightCrawler second pass, leaving only the
+    // plain-HTTP CheerioCrawler. It finds fewer emails on JavaScript-rendered
+    // sites, but it costs no browser at all — the trade the post-search
+    // background pass wants, since it runs unattended after every live search.
+    if (ctx.flags.has("--noBrowser")) args.push("--noBrowser");
     await runNodeStage(ctx, "enrich", "enrich-crawlee.js", path.join(ctx.dir, "enrich.log"), args);
     // owner-reply pass after crawlee enrich
     await runOwnerReplyPass(ctx, ctx.store.latestEnrichedCsv(ctx.dir));
