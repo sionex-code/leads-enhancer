@@ -4,7 +4,8 @@ import { requireUser } from "../../../../../web/lib/session.js";
 
 export const dynamic = "force-dynamic";
 
-// Fetch and persist Ahrefs Domain Rating (free, no API key) for a single lead.
+// Fetch and persist Ahrefs Domain Rating (free, but needs AHREFS_API_KEY) for
+// a single lead.
 // Always overwrites whatever was previously cached; the lead row keeps the
 // timestamp so callers can decide when to refresh.
 export async function POST(_request, context) {

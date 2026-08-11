@@ -753,7 +753,8 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
     }
   }, [mergeLead, setBusyKey]);
 
-  // Single-row Ahrefs Domain Rating fetch (free public endpoint, no credits).
+  // Single-row Ahrefs Domain Rating fetch (free of charge, no credits — but it
+  // does need AHREFS_API_KEY on the server; see web/lib/ahrefs.cjs).
   const checkDomainRatingOne = useCallback(async (lead) => {
     const key = `${lead.id}:dr`;
     setBusyKey(key, true);
@@ -916,7 +917,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
       alert("Select one or more leads that have a website first.");
       return;
     }
-    if (!confirm(`Fetch Ahrefs Domain Rating for ${ids.length} lead${ids.length === 1 ? "" : "s"}?\n\n${SHOW_CREDITS ? "Free public endpoint, no credits used." : "Free public endpoint."}`)) return;
+    if (!confirm(`Fetch Ahrefs Domain Rating for ${ids.length} lead${ids.length === 1 ? "" : "s"}?\n\n${SHOW_CREDITS ? "Free — no credits used." : "Free."}`)) return;
     setBulkBusy("dr");
     try {
       const data = await jsonFetch(`/api/leads/domain-rating/bulk`, { method: "POST", body: JSON.stringify({ ids }) });
@@ -924,7 +925,11 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
         if (lead && lead.id && lead.domain_rating != null) mergeLead(lead);
       }
       const failed = data.failed || 0;
-      showToast(`Domain rating: ${data.succeeded || 0} ok${failed ? `, ${failed} failed` : ""}`);
+      const ok = data.succeeded || 0;
+      // A run where nothing succeeded is a broken integration, not a result —
+      // say what went wrong instead of flashing "0 ok" and moving on.
+      if (!ok && data.reason) alert(`Domain rating failed: ${data.reason}`);
+      else showToast(`Domain rating: ${ok} ok${failed ? `, ${failed} failed` : ""}`);
     } catch (err) {
       alert(err.message);
     } finally {

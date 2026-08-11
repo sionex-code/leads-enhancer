@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 // Bulk Ahrefs Domain Rating. Body: { ids: number[] }.
-// The free public endpoint is rate-limited, so we throttle to a small
+// The endpoint is rate-limited, so we throttle to a small
 // concurrency (one in-flight at a time per worker, 3 workers) and short-circuit
 // on a single transient 429/5xx by returning the result so far.
 export async function POST(request) {
@@ -50,6 +50,9 @@ export async function POST(request) {
     count: results.length,
     succeeded: results.filter((r) => r.domain_rating != null).length,
     failed: errors.length,
+    // Why they failed, not just how many. Every lead failing for the same reason
+    // (no API key, rate limit) is the common case and the one worth naming.
+    reason: errors.length ? errors[0].error : "",
     leads: results,
   });
 }
