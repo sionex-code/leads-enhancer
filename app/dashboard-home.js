@@ -1960,6 +1960,18 @@ export default function Dashboard({ view = "" }) {
   // The lead open in the right-hand detail drawer (a row click inspects; the
   // checkbox is what selects for bulk actions).
   const [detailKey, setDetailKey] = useState(null);
+  // The row as it looked when it was clicked. Keeps the drawer populated if that
+  // lead later drops out of the visible `leads` array (filter, page, refresh).
+  const [detailSnapshot, setDetailSnapshot] = useState(null);
+  // Open the drawer for a row, remembering the row itself and not just its key.
+  const openLeadDetail = (lead, key) => {
+    setDetailSnapshot(lead);
+    setDetailKey(key);
+  };
+  const closeLeadDetail = () => {
+    setDetailKey(null);
+    setDetailSnapshot(null);
+  };
   // The results map starts collapsed: it is a 320px band of Leaflet above the
   // table that most sessions scroll straight past, and leaving it shut also
   // means the map bundle and its tiles are never fetched until asked for.
@@ -2855,7 +2867,13 @@ export default function Dashboard({ view = "" }) {
   const safeTablePage = Math.min(tablePage, tablePageCount - 1);
   const pagedLeads = leads.slice(safeTablePage * WORKSPACE_PAGE_SIZE, safeTablePage * WORKSPACE_PAGE_SIZE + WORKSPACE_PAGE_SIZE);
   const pageOffset = safeTablePage * WORKSPACE_PAGE_SIZE;
-  const detailLead = detailKey ? leads.find((l) => leadKey(l) === detailKey) || null : null;
+  // Prefer the live row (so an enrich mid-drawer updates in place), but fall back
+  // to the snapshot taken on click. `leads` is re-derived by filtering, paging,
+  // polling and live-search ticks, so the clicked row can vanish from it while the
+  // drawer is still open — which used to leave the panel rendering nothing at all.
+  const detailLead = detailKey
+    ? leads.find((l) => leadKey(l) === detailKey) || detailSnapshot || null
+    : null;
   // Trust either source: the projects list (authoritative, refreshed every tick)
   // or the selected project's status. This keeps the Stop button enabled even
   // when a status fetch is mid-flight or briefly stale after switching projects.
@@ -3592,7 +3610,7 @@ export default function Dashboard({ view = "" }) {
                   const key = leadKey(lead);
                   const ownerReplied = lead.owner_replied;
                   return (
-                  <div className={cn("cursor-pointer rounded-lg border bg-card/60 p-3", selectedLeads.has(key) ? "border-primary/50 bg-primary/5" : "border-border")} key={`m-${lead.name}-${index}`} onClick={() => setDetailKey(key)}>
+                  <div className={cn("cursor-pointer rounded-lg border bg-card/60 p-3", selectedLeads.has(key) ? "border-primary/50 bg-primary/5" : "border-border")} key={`m-${lead.name}-${index}`} onClick={() => openLeadDetail(lead, key)}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-start gap-2">
                         <input type="checkbox" aria-label={`Select ${lead.name || "lead"}`} checked={selectedLeads.has(key)} onClick={(e) => e.stopPropagation()} onChange={() => toggleLead(key)} className="mt-0.5 accent-[hsl(var(--primary))]" />
@@ -3676,7 +3694,7 @@ export default function Dashboard({ view = "" }) {
                       <TableRow
                         key={`${lead.name}-${index}`}
                         className={cn("cursor-pointer", selectedLeads.has(key) && "bg-primary/5", detailKey === key && "bg-primary/10")}
-                        onClick={() => setDetailKey(key)}
+                        onClick={() => openLeadDetail(lead, key)}
                       >
                         <TableCell className="w-8" onClick={(e) => e.stopPropagation()}>
                           <input type="checkbox" aria-label={`Select ${lead.name || "lead"}`} checked={selectedLeads.has(key)} onChange={() => toggleLead(key)} className="accent-[hsl(var(--primary))]" />
@@ -3822,13 +3840,13 @@ export default function Dashboard({ view = "" }) {
       </div>
       {/* Lead detail drawer — opens on a row click. Rendered as a slide-over so
           the table keeps its full width; on desktop it docks to the right edge. */}
-      <Sheet open={!!detailLead} onOpenChange={(o) => !o && setDetailKey(null)}>
+      <Sheet open={!!detailLead} onOpenChange={(o) => !o && closeLeadDetail()}>
         <SheetContent side="right" showClose={false} className="max-w-sm p-0">
           <LeadDetailPanel
             lead={detailLead}
             locked={contactLocked}
             enriching={!!(rowBusy[detailKey] || {}).enrich}
-            onClose={() => setDetailKey(null)}
+            onClose={() => closeLeadDetail()}
             onEnrich={enrichCaptured}
             onToggleFavorite={(l) => addCapturedLead(l, "watchlist")}
           />

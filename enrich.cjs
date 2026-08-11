@@ -73,6 +73,13 @@ const EXTRA_HEADERS = [
   "whatsapp",
   "telegram",
   "enrichStatus",
+  // Both of these were computed per site and then thrown away: the CSV only
+  // carries the columns listed here, so `tech` (the detected marketing stack)
+  // and `favicon` never reached the file, never reached ingest, and never
+  // reached the leads table — which is why the drawer showed "Not scanned yet"
+  // for every batch-enriched lead. db.cjs already maps both.
+  "tech",
+  "favicon",
   // Phase 5: owner-reply columns written by the post-enrich owner-reply pass
   // (modules/enrich/local.cjs#runOwnerReplyPass). normalizeLead already maps these.
   "owner_replied",
@@ -646,7 +653,10 @@ async function enrichSite(website) {
     : "no email found";
   // One JSON text column on the lead; "" when the crawl saw nothing at all, so a
   // site we failed to fetch is never recorded as "runs no pixels".
-  result.tech = trackingDetect.serialize(result.tracking);
+  // mergeTracking only runs after a page actually came back, so a non-null
+  // result.tracking IS the "we scanned it" signal — pass it through so a site
+  // that genuinely runs no pixel serialises as such instead of as unknown.
+  result.tech = trackingDetect.serialize(result.tracking, { scanned: !!result.tracking });
   return result;
 }
 

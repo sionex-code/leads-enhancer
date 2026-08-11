@@ -98,10 +98,27 @@ export default function LeadDetailPanel({
   enriching = false,
   locked = false,
 }) {
-  if (!lead) return null;
+  // The drawer is only ever mounted with a lead, but never render an empty shell
+  // if that ever stops being true — a blank slide-over reads as a broken app.
+  if (!lead) {
+    return (
+      <aside className="flex h-full w-full flex-col items-center justify-center gap-3 p-8 text-center">
+        <Globe size={22} className="text-muted-foreground/60" />
+        <p className="text-sm font-medium">This lead is no longer in view</p>
+        <p className="text-xs text-muted-foreground">
+          It may have been filtered out or removed. Pick another row to inspect it.
+        </p>
+        <Button variant="outline" size="sm" onClick={onClose}>
+          Close
+        </Button>
+      </aside>
+    );
+  }
 
   const { score, band, reasons, coverage } = scoreLead(lead);
   const tracking = trackingDetect.parse(lead.tech);
+  // parse() returns null for "" — which means "never scanned", NOT "no pixels".
+  const scanned = trackingDetect.isScanned(tracking);
   const stack = tracking ? trackingDetect.summarize(tracking) : "";
   const reviews = parseInt(String(lead.reviews ?? "").replace(/[^\d]/g, ""), 10) || 0;
   const email = lead.email || "";
@@ -243,7 +260,7 @@ export default function LeadDetailPanel({
         <Section title="Marketing stack">
           {!lead.website ? (
             <p className="text-xs text-muted-foreground">No website to scan.</p>
-          ) : !tracking ? (
+          ) : !scanned ? (
             <p className="text-xs text-muted-foreground">Not scanned yet — run Enrich to detect pixels and analytics.</p>
           ) : (
             <div className="space-y-2">
@@ -262,7 +279,11 @@ export default function LeadDetailPanel({
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">Nothing detected on this site.</p>
+                // A scanned site running nothing at all is the strongest pitch in
+                // the drawer, so say it as a finding rather than as an empty state.
+                <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                  No tracking of any kind on this site.
+                </p>
               )}
               {trackingDetect.missing(tracking).map((gap) => (
                 <p key={gap} className="text-xs text-amber-600 dark:text-amber-400">

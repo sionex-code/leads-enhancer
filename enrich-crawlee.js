@@ -26,6 +26,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CheerioCrawler, PlaywrightCrawler, playwrightUtils, Configuration, log } from "crawlee";
+// Same detector enrich.cjs uses, so both engines report an identical stack for
+// the same site. This engine runs the automatic post-search pass, so without it
+// leads enriched in the background carried no marketing stack at all.
+import trackingDetect from "./web/lib/tracking-detect.cjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -80,6 +84,10 @@ const EXTRA_HEADERS = [
   "whatsapp",
   "telegram",
   "enrichStatus",
+  // Must match enrich.cjs — this file is a drop-in for it, and the CSV only
+  // carries the columns listed here.
+  "tech",
+  "favicon",
 ];
 
 // ---- tiny CSV (identical to enrich.cjs) --------------------------------------
@@ -275,6 +283,46 @@ const normUrl = (site) => {
   }
 };
 
+// The site's favicon, resolved absolute. Mirrors enrich.cjs#extractFavicon so
+// both engines produce the same value: largest declared icon, then apple-touch,
+// else /favicon.ico.
+function extractFavicon(html, baseUrl) {
+  const candidates = [];
+  for (const m of html.matchAll(/<link\b[^>]*>/gi)) {
+    const tag = m[0];
+    const rel = (tag.match(/\brel\s*=\s*["']([^"']+)["']/i) || [])[1] || "";
+    if (!/\b(icon|shortcut icon|apple-touch-icon)\b/i.test(rel)) continue;
+    const href = (tag.match(/\bhref\s*=\s*["']([^"']+)["']/i) || [])[1];
+    if (!href) continue;
+    const sizes = (tag.match(/\bsizes\s*=\s*["'](\d+)/i) || [])[1];
+    candidates.push({
+      href: decodeEntities(href),
+      size: sizes ? parseInt(sizes, 10) : /apple-touch/i.test(rel) ? 180 : 0,
+    });
+  }
+  candidates.sort((a, b) => b.size - a.size);
+  for (const c of candidates) {
+    try {
+      const u = new URL(c.href, baseUrl);
+      if (/^https?:$/.test(u.protocol)) return u.href;
+    } catch {}
+  }
+  try {
+    return new URL("/favicon.ico", baseUrl).href;
+  } catch {
+    return "";
+  }
+}
+
+// Per-page signals that aren't emails or socials: the marketing stack (unioned
+// across every page we see, since a pixel often sits only on the booking or
+// contact page) and the favicon (homepage only — inner pages declare the same
+// one, and the homepage is the page we always fetch first).
+function absorbPage(agg, html, url, isHome) {
+  agg.tracking = trackingDetect.merge(agg.tracking, trackingDetect.detectTracking(html));
+  if (isHome && !agg.favicon) agg.favicon = extractFavicon(html, url);
+}
+
 // Finalise the per-site aggregate into the EXTRA_HEADERS result shape, reusing
 // enrich.cjs's email scoring (own-domain > info@/contact@ > free mailboxes).
 function finalizeResult(agg) {
@@ -298,6 +346,10 @@ function finalizeResult(agg) {
     : agg.error
       ? `error: ${agg.error}`.slice(0, 90)
       : "no email found";
+  // agg.fetched is the honest "we actually saw this site's HTML" flag, so a site
+  // we couldn't reach stays unknown rather than being recorded as pixel-free.
+  result.tech = trackingDetect.serialize(agg.tracking, { scanned: !!agg.fetched });
+  result.favicon = agg.favicon || "";
   return result;
 }
 
@@ -401,7 +453,7 @@ function loadState(stateFile) {
     queued.add(key);
     const id = jobs.length;
     jobs.push({ id, key, url, host: hostOf(url) });
-    aggById.set(id, { emails: new Set(), socials: {}, contactPage: "", viaBrowser: false, error: "", fetched: false });
+    aggById.set(id, { emails: new Set(), socials: {}, contactPage: "", viaBrowser: false, error: "", fetched: false, tracking: null, favicon: "" });
   }
 
   console.log(`  ${rows.length} rows, ${jobs.length} unique sites to crawl\n`);
@@ -446,6 +498,7 @@ function loadState(stateFile) {
       for (const e of found) agg.emails.add(e);
       if (found.length && !agg.contactPage && CONTACT_WORDS.test(finalUrl)) agg.contactPage = finalUrl;
       extractSocial(html, agg.socials);
+      absorbPage(agg, html, finalUrl, depth === 0);
 
       // Already have an email on the business's own domain → don't crawl further.
       if ([...agg.emails].some((e) => agg.host && e.endsWith("@" + agg.host))) return;
@@ -554,6 +607,10 @@ function loadState(stateFile) {
         let html = await grabFromPage(page);
         for (const e of extractEmails(html)) agg.emails.add(e);
         extractSocial(html, agg.socials);
+        // Before the early return below — this is rendered DOM, so it also
+        // catches tags a tag manager injected client-side, which the plain-HTTP
+        // pass can only infer from the loader script.
+        absorbPage(agg, html, page.url(), depth === 0);
         if (agg.emails.size) {
           agg.viaBrowser = true;
           return;

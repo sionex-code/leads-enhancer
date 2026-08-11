@@ -122,10 +122,33 @@ function summarize(tracking) {
 }
 
 // Storage helpers — the lead row keeps this as one JSON text column.
-function serialize(tracking) {
+//
+// "" means UNKNOWN: we never got the site's HTML, so we cannot say anything about
+// its stack. A site we did fetch and found nothing on is a completely different
+// (and very sellable) fact — "runs no pixel at all" — so it must serialise to a
+// real JSON object with empty groups, not to "". Collapsing both to "" is what
+// used to make every scanned-but-clean lead read as "Not scanned yet" in the UI.
+//
+// Pass scanned:true whenever the HTML was actually retrieved.
+function serialize(tracking, { scanned = false } = {}) {
   if (!tracking) return "";
   const any = GROUPS.some(([k]) => (tracking[k] || []).length);
-  return any ? JSON.stringify(tracking) : "";
+  if (!any && !scanned) return "";
+  return JSON.stringify(tracking);
+}
+
+// Union of two detect results, for sites crawled over several pages: a pixel
+// only present on the contact page still counts as present on the business.
+function merge(a, b) {
+  const out = {};
+  for (const [key] of GROUPS) {
+    const seen = [];
+    for (const name of [...((a || {})[key] || []), ...((b || {})[key] || [])]) {
+      if (!seen.includes(name)) seen.push(name);
+    }
+    out[key] = seen;
+  }
+  return out;
 }
 
 function parse(value) {
@@ -139,4 +162,10 @@ function parse(value) {
   }
 }
 
-module.exports = { detectTracking, missing, summarize, serialize, parse, GROUPS };
+// True when the value came from a real scan — including a scan that found
+// nothing. Lets the UI tell "no pixel" apart from "not looked at yet".
+function isScanned(tracking) {
+  return !!tracking && GROUPS.some(([k]) => Array.isArray(tracking[k]));
+}
+
+module.exports = { detectTracking, missing, summarize, serialize, parse, merge, isScanned, GROUPS };
