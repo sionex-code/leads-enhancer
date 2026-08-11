@@ -21,7 +21,7 @@ const DEFAULT_TIMEOUT_MS = 10000;
 // screen calls it an API key, and guessing wrong shouldn't cost an afternoon.
 const apiKey = () => String(process.env.AHREFS_API_KEY || process.env.AHREFS_TOKEN || "").trim();
 const MISSING_KEY =
-  "Ahrefs API key not set — add AHREFS_API_KEY to the server env (free key: Ahrefs account → Account settings → API keys)";
+  "Ahrefs API key not set. Add AHREFS_API_KEY to the server env (free key: Ahrefs account → Account settings → API keys)";
 
 // Normalize an arbitrary website / domain string into the bare hostname
 // (lowercased, no scheme/path) the DR endpoint accepts.
@@ -57,7 +57,7 @@ async function fetchDomainRating(rawTarget, { timeoutMs = DEFAULT_TIMEOUT_MS } =
         res.status === 401 || res.status === 403
           ? "Ahrefs rejected the API key (check AHREFS_API_KEY)"
           : res.status === 429
-            ? "Ahrefs rate limit reached — try again shortly"
+            ? "Ahrefs rate limit reached. Try again shortly"
             : res.status === 400
               // What a dead or malformed domain comes back as. Not a fault worth
               // alarming anyone about: this lead simply has no rating to fetch.

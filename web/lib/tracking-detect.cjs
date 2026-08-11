@@ -107,8 +107,8 @@ function detectTracking(html) {
 function missing(tracking) {
   const t = tracking || {};
   const gaps = [];
-  if (!(t.adPixels || []).length) gaps.push("No ad pixel — can't retarget visitors");
-  if (!(t.analytics || []).length) gaps.push("No analytics — traffic is unmeasured");
+  if (!(t.adPixels || []).length) gaps.push("No ad pixel: can't retarget visitors");
+  if (!(t.analytics || []).length) gaps.push("No analytics: traffic is unmeasured");
   if (!(t.marketing || []).length) gaps.push("No email capture on site");
   return gaps;
 }

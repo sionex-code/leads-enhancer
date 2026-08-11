@@ -10,7 +10,7 @@ function pool() {
   if (_pool) return _pool;
   const connectionString = process.env.WAREHOUSE_DATABASE_URL;
   if (!connectionString) {
-    throw new Error("WAREHOUSE_DATABASE_URL is not set — cannot connect to warehouse Postgres");
+    throw new Error("WAREHOUSE_DATABASE_URL is not set, so nothing can connect to warehouse Postgres");
   }
   _pool = new Pool({ connectionString, max: 3, idleTimeoutMillis: 30000 });
   _pool.on("error", (err) => {

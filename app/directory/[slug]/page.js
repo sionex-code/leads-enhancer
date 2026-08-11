@@ -292,7 +292,7 @@ export default async function DirectoryEntry({ params }) {
       q: `Do these ${entry.service} listings include phone numbers and websites?`,
       a: `${pctPhone}% of the businesses shown here have a phone number on file and ${pctSite}% have a website. ` +
          (freeCount
-           ? `${freeCount} complete ${freeCount === 1 ? "listing is" : "listings are"} shown in full — website, email, phone and social profiles — and the rest are shortened on this page and available inside LeadsFunda.`
+           ? `${freeCount} complete ${freeCount === 1 ? "listing is" : "listings are"} shown in full (website, email, phone and social profiles), and the rest are shortened on this page and available inside LeadsFunda.`
            : `Contact details are shortened on this page and shown in full inside LeadsFunda.`),
     },
     {
@@ -559,7 +559,7 @@ export default async function DirectoryEntry({ params }) {
                 </p>
                 <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
                   {freeCount > 0
-                    ? `The top ${freeCount} ${freeCount === 1 ? "business" : "businesses"} above are shown in full — real website, email, phone and social profiles. The rest are shortened on public pages. `
+                    ? `The top ${freeCount} ${freeCount === 1 ? "business" : "businesses"} above are shown in full: real website, email, phone and social profiles. The rest are shortened on public pages. `
                     : "Contact details are shortened on public pages. "}
                   Sign in to see them and to export the whole list.
                 </p>

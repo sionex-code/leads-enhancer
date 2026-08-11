@@ -21,7 +21,7 @@ async function jsonFetch(url, options = {}) {
 const LISTS_TOUR = [
   { key: "lists-new", title: "Create a list", body: "Name a new list here, then add leads to it from the leads table." },
   { key: "lists-favorites", title: "Favorites", body: "Favorites is a built-in list of every lead you star, which is always one click away." },
-  { key: "lists-open", title: "Open a list", body: "Click any list to open the leads table filtered to just those leads — with all the filtering, sorting and status controls." },
+  { key: "lists-open", title: "Open a list", body: "Click any list to open the leads table filtered to just those leads, with all the filtering, sorting and status controls." },
 ];
 
 // Saved lists overview. "Favorites" is a built-in list (the watchlist flag); the
@@ -77,7 +77,7 @@ export default function ListsClient() {
   }
 
   return (
-    <AppShell active="lists" title="Lists" subtitle="Your saved lists — open one to work its leads" tourKey="lists" tourSteps={LISTS_TOUR}>
+    <AppShell active="lists" title="Lists" subtitle="Your saved lists. Open one to work its leads" tourKey="lists" tourSteps={LISTS_TOUR}>
       <div className="mx-auto max-w-3xl space-y-5 p-4 sm:p-6">
         <Card data-tour="lists-new">
           <CardContent className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
@@ -100,7 +100,7 @@ export default function ListsClient() {
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/15 text-primary"><Database className="h-5 w-5" /></div>
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-semibold">All leads</div>
-                <div className="text-xs text-muted-foreground">Every lead you own — filter, sort and work them</div>
+                <div className="text-xs text-muted-foreground">Every lead you own. Filter, sort and work them</div>
               </div>
               <ArrowRight className="h-4 w-4 text-muted-foreground" />
             </CardContent>

@@ -13,7 +13,7 @@ function pool() {
   if (_pool) return _pool;
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
-    throw new Error("DATABASE_URL is not set — cannot connect to Postgres");
+    throw new Error("DATABASE_URL is not set, so nothing can connect to Postgres");
   }
   // Managed Postgres (Supabase et al.) requires TLS. Supabase's pooler presents a
   // cert that doesn't chain to a public CA, so we enable SSL without strict

@@ -108,7 +108,7 @@ function ProxyManager() {
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary"><Network className="h-4.5 w-4.5" /></div>
           <div>
             <h2 className="text-sm font-semibold">Scraper proxy pool</h2>
-            <p className="text-xs text-muted-foreground">{proxies.length ? `${enabledCount}/${proxies.length} enabled · random proxy per request` : "No proxies — scrapers connect directly"}</p>
+            <p className="text-xs text-muted-foreground">{proxies.length ? `${enabledCount}/${proxies.length} enabled · random proxy per request` : "No proxies. scrapers connect directly"}</p>
           </div>
         </div>
 

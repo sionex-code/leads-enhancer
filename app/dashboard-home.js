@@ -260,7 +260,7 @@ function CapturedActions({ lead, busy = {}, onEnrich, onRemove }) {
   const enriched = !!(lead.email || lead.enrichStatus || lead.enrich_status);
   return (
     <>
-      <Button variant="ghost" size="icon" className={cn("h-8 w-8", enriched && "text-emerald-600")} title={enriched ? "Enriched — re-grab email + socials" : "Grab email + socials"} disabled={!lead.website || busy.enrich} onClick={() => onEnrich(lead)}>
+      <Button variant="ghost" size="icon" className={cn("h-8 w-8", enriched && "text-emerald-600")} title={enriched ? "Enriched: re-grab email + socials" : "Grab email + socials"} disabled={!lead.website || busy.enrich} onClick={() => onEnrich(lead)}>
         {busy.enrich ? <Loader2 size={14} className="animate-spin" /> : enriched ? <MailCheck size={14} /> : <Mail size={14} />}
       </Button>
       {waLink && (
@@ -663,7 +663,7 @@ function SourcePicker({ source, setSource, ext, lockedLive }) {
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {lockedLive
-              ? "Our database only covers the services in the dropdown, so what you typed has to be searched live — and live search runs inside your own browser."
+              ? "Our database only covers the services in the dropdown, so what you typed has to be searched live, and live search runs inside your own browser."
               : "Live search runs inside your own browser, so it needs the LeadsFunda extension. Nothing here will run until it is installed."}
           </p>
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
@@ -1302,7 +1302,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
             tone: "ok",
             text: `You're in ${named.place}${
               named.countryName ? `, ${named.countryName}` : ""
-            } — we already have leads there.`,
+            }, we already have leads there.`,
           });
           return;
         }
@@ -1624,7 +1624,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
               <Database className="h-3.5 w-3.5 shrink-0 text-primary" />
               We already have <span className="font-semibold text-foreground">{bestMatch.leadCount.toLocaleString()}</span>
               {" "}<span className="capitalize">{bestMatch.service}</span> leads in{" "}
-              <span className="font-semibold text-foreground">{bestMatch.city.name}</span> — this runs instantly from our database.
+              <span className="font-semibold text-foreground">{bestMatch.city.name}</span>, which runs instantly from our database.
             </>
           ) : bestMatch ? (
             // Matched, but the user asked for live anyway. Say so rather than
@@ -1632,7 +1632,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
             <>
               <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />
               We hold <span className="font-semibold text-foreground">{bestMatch.leadCount.toLocaleString()}</span> of these in{" "}
-              <span className="font-semibold text-foreground">{bestMatch.city.name}</span>, but Lead source is set to live — this will scrape fresh results.
+              <span className="font-semibold text-foreground">{bestMatch.city.name}</span>, but Lead source is set to live, so this will scrape fresh results.
             </>
           ) : (
             <>
@@ -2450,7 +2450,7 @@ export default function Dashboard({ view = "" }) {
   function stopExtensionScrape() {
     scrapeAbortRef.current?.abort();
     setScrapeProgress((prev) =>
-      prev ? { ...prev, stopping: true, message: "Stopping — saving what we found…" } : prev
+      prev ? { ...prev, stopping: true, message: "Stopping, saving what we found…" } : prev
     );
   }
 
@@ -2597,7 +2597,7 @@ export default function Dashboard({ view = "" }) {
       pendingWatch.current.delete(item.slug);
       setProjects((ps) => ps.map((p) => (p.slug === item.slug ? { ...p, watchlist: item.watchlist } : p)));
       setError(err.message);
-      showToast("Couldn't update favorite — try again");
+      showToast("Couldn't update favorite, try again");
       return;
     }
     // Best-effort refresh; don't revert the star if this part hiccups.
@@ -2658,7 +2658,7 @@ export default function Dashboard({ view = "" }) {
     } catch (err) {
       setRowOverlay((o) => ({ ...o, [key]: { ...(o[key] || {}), [flag]: false } }));
       setError(err.message);
-      showToast("Couldn't add — try again");
+      showToast("Couldn't add, try again");
     }
   }
 
@@ -3835,7 +3835,7 @@ export default function Dashboard({ view = "" }) {
                             <LeadAvatar lead={lead} size={26} />
                             <div className="min-w-0">
                               <div className="truncate text-[13.5px] font-medium leading-tight text-foreground" title={lead.name || "Unknown"}>{lead.name || "Unknown"}</div>
-                              <div className="truncate text-[11px] leading-tight text-muted-foreground" title={lead.category || ""}>{lead.category || "—"}</div>
+                              <div className="truncate text-[11px] leading-tight text-muted-foreground" title={lead.category || ""}>{lead.category || "-"}</div>
                             </div>
                           </div>
                         </TableCell>
@@ -3895,7 +3895,7 @@ export default function Dashboard({ view = "" }) {
                         <TableCell className="max-w-[200px] py-0">
                           {lead.address
                             ? <span className="block truncate text-[12px] text-muted-foreground" title={lead.address}>{lead.address}</span>
-                            : <span className="text-[11px] text-muted-foreground/70">—</span>
+                            : <span className="text-[11px] text-muted-foreground/70">-</span>
                           }
                         </TableCell>
 
@@ -3910,7 +3910,7 @@ export default function Dashboard({ view = "" }) {
                             </span>
                             <span
                               className="w-6 text-right text-[12px] font-semibold tabular-nums text-foreground"
-                              title={`${opp.score}/100 from ${opp.coverage}% signal coverage — ${opp.reasons[0] || "no gaps found"}`}
+                              title={`${opp.score}/100 from ${opp.coverage}% signal coverage. ${opp.reasons[0] || "no gaps found"}`}
                             >
                               {opp.score}
                             </span>

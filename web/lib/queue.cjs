@@ -42,7 +42,7 @@ async function enqueue(userId, payload) {
     running: false,
     queued: true,
     activePid: null,
-    message: "Queued — waiting for a free slot",
+    message: "Queued: waiting for a free slot",
   });
 
   const { rows } = await pool().query(
@@ -102,7 +102,7 @@ async function reapFinished() {
       if (ageMs < STALE_CLAIM_MS) continue;
       await pool().query(
         `UPDATE jobs SET status = 'failed', error = $1, finished_at = now() WHERE id = $2`,
-        ["spawn never started (no pid) — slot reclaimed", job.id]
+        ["spawn never started (no pid), slot reclaimed", job.id]
       );
       await pool().query(
         `INSERT INTO notifications (user_id, type, payload) VALUES ($1, 'job_failed', $2)`,
@@ -139,7 +139,7 @@ async function reapFinished() {
         try { store.killTree(job.pid); } catch {}
         await pool().query(
           `UPDATE jobs SET status = 'failed', error = $1, finished_at = now() WHERE id = $2`,
-          ["runner exceeded max runtime — slot reclaimed", job.id]
+          ["runner exceeded max runtime, slot reclaimed", job.id]
         );
         await pool().query(
           `INSERT INTO notifications (user_id, type, payload) VALUES ($1, 'job_failed', $2)`,

@@ -163,7 +163,7 @@ export default function LeadDetailPanel({
             {lead.name || "Unknown"}
           </h3>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            {[lead.category, lead.city || lead.address].filter(Boolean).join(" · ") || "—"}
+            {[lead.category, lead.city || lead.address].filter(Boolean).join(" · ") || "-"}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -235,7 +235,7 @@ export default function LeadDetailPanel({
             )}
             {alreadyEnriched && coverage < 60 && (
               <p className="mt-1.5 text-[11px] text-muted-foreground">
-                Enriched — the rest of the picture needs a site audit.
+                Enriched. The rest of the picture needs a site audit.
               </p>
             )}
           </div>
@@ -252,7 +252,7 @@ export default function LeadDetailPanel({
                 <CopyButton value={lead.phone} />
               </>
             ) : (
-              <span className="text-muted-foreground">—</span>
+              <span className="text-muted-foreground">-</span>
             )}
           </div>
           <div className="flex items-center gap-2 text-sm">
@@ -271,7 +271,7 @@ export default function LeadDetailPanel({
                 </>
               )
             ) : (
-              <span className="text-muted-foreground">—</span>
+              <span className="text-muted-foreground">-</span>
             )}
           </div>
         </Section>
@@ -292,7 +292,7 @@ export default function LeadDetailPanel({
           {!lead.website ? (
             <p className="text-xs text-muted-foreground">No website to scan.</p>
           ) : !scanned ? (
-            <p className="text-xs text-muted-foreground">Not scanned yet — run Enrich to detect pixels and analytics.</p>
+            <p className="text-xs text-muted-foreground">Not scanned yet. Run Enrich to detect pixels and analytics.</p>
           ) : (
             <div className="space-y-2">
               {stack ? (
@@ -358,7 +358,7 @@ export default function LeadDetailPanel({
                 {lead.address || "View location"}
               </a>
             ) : (
-              <span className="min-w-0 flex-1">{lead.address || "—"}</span>
+              <span className="min-w-0 flex-1">{lead.address || "-"}</span>
             )}
             <CopyButton value={lead.address} />
           </div>

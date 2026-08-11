@@ -58,10 +58,10 @@ export async function GET() {
       authResolvesSession: sessionResolves,
       sessionHasUserId: hasUserId,
       hint: !secure && !plain
-        ? "No session cookie reached the server — the browser is not storing or not sending it."
+        ? "No session cookie reached the server, so the browser is not storing or not sending it."
         : secure && plain
           ? "Two session cookies are present; a stale one may be shadowing the live one. Clearing cookies for this domain will fix it."
-          : "Session cookie present — see the status above for whether it matches a live row.",
+          : "Session cookie present. See the status above for whether it matches a live row.",
     },
     { headers: { "Cache-Control": "no-store" } }
   );

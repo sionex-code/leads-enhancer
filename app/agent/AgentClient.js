@@ -257,7 +257,7 @@ export default function AgentClient() {
         <header className="topbar">
           <div>
             <h1><Sparkles size={18} style={{ verticalAlign: "-3px" }} /> AI Agent</h1>
-            <div className="subtle">Scrape, enrich, audit, manage leads and generate website reports — by chat.</div>
+            <div className="subtle">Scrape, enrich, audit, manage leads and generate website reports, by chat.</div>
           </div>
           <div className="agent-controls">
             <label className="agent-select">
@@ -339,7 +339,7 @@ export default function AgentClient() {
         {error && <div className="chat-error">{error}</div>}
         <div className="chat-input">
           <textarea
-            placeholder={thinking ? "Agent is working…" : "Ask the agent — e.g. “scrape 20 plumbers in Dallas and report on the top 5 sites”"}
+            placeholder={thinking ? "Agent is working…" : "Ask the agent, e.g. “scrape 20 plumbers in Dallas and report on the top 5 sites”"}
             value={input}
             rows={2}
             disabled={thinking}

@@ -298,7 +298,7 @@ export default function PublicSearch({ signedIn = false }) {
             </p>
             <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
               The search runs inside your own browser rather than on our servers.
-              That is exactly why you can run one here without an account — and
+              That is exactly why you can run one here without an account, and
               the extension is the part that does it.
             </p>
             <ul className="mt-3 space-y-1.5 text-xs text-muted-foreground">
@@ -323,7 +323,7 @@ export default function PublicSearch({ signedIn = false }) {
               Show me how
             </a>
             <p className="mt-2 text-[11px] text-muted-foreground">
-              Already installed it? Reload this page — a new extension can&apos;t
+              Already installed it? Reload this page, because a new extension can&apos;t
               reach tabs that were already open.
             </p>
           </div>

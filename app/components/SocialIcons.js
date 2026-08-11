@@ -189,7 +189,7 @@ export function WaPhone({ lead, className = "", onCheck, busy = false }) {
           e.stopPropagation();
           onCheck(lead);
         }}
-        title={checked ? "Not on WhatsApp — check again" : "Check whether this number is on WhatsApp"}
+        title={checked ? "Not on WhatsApp, check again" : "Check whether this number is on WhatsApp"}
         className={cn(
           "underline decoration-dotted underline-offset-4 transition-colors disabled:opacity-60",
           checked ? "text-red-600" : "hover:text-primary",

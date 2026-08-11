@@ -62,13 +62,13 @@ function signalsFor(lead) {
   const isEnriched = enriched(lead);
 
   // --- web presence ---------------------------------------------------------
-  push("website", 25, true, website ? 0 : 1, "No website — biggest gap to sell into");
+  push("website", 25, true, website ? 0 : 1, "No website: biggest gap to sell into");
 
   // Tracking only counts once the site has actually been crawled.
   push("adPixel", 12, !!(website && tracking), tracking && !(tracking.adPixels || []).length ? 1 : 0,
-    "No ad pixel — can't retarget visitors");
+    "No ad pixel: can't retarget visitors");
   push("analytics", 8, !!(website && tracking), tracking && !(tracking.analytics || []).length ? 1 : 0,
-    "No analytics — traffic is unmeasured");
+    "No analytics: traffic is unmeasured");
   push("emailCapture", 4, !!(website && tracking), tracking && !(tracking.marketing || []).length ? 1 : 0,
     "No email capture on the site");
 
@@ -142,7 +142,7 @@ export function scoreLead(lead) {
     .filter((s) => s.reason)
     .sort((a, b) => b.weight * b.value - a.weight * a.value)
     .map((s) => s.reason);
-  if (!contactable) reasons.push("No phone or email — hard to reach");
+  if (!contactable) reasons.push("No phone or email: hard to reach");
 
   return {
     score,
@@ -174,9 +174,9 @@ export const BAND_RING = {
 
 // Shared copy for the (i) in the Opportunity column header and the drawer.
 export const OPPORTUNITY_HELP = [
-  "How likely this business is to need what you sell — higher means more to fix.",
+  "How likely this business is to need what you sell. Higher means more to fix.",
   "It rewards gaps you can act on: no website, no ad pixel or analytics, no social profiles, few or no reviews, a weak rating, a slow or broken site, and an incomplete Maps listing.",
-  "Only signals we have actually captured are scored, so an un-enriched lead is never marked 'clean' by default. Coverage tells you how much of the picture that score is based on — run Enrich to raise it.",
+  "Only signals we have actually captured are scored, so an un-enriched lead is never marked 'clean' by default. Coverage tells you how much of the picture that score is based on. Run Enrich to raise it.",
   "A business with no phone and no email is capped at 35 however many gaps it has, because you cannot reach it.",
-  "Thinly-checked leads sit near the middle rather than at zero — a low score means 'few gaps found', not 'not looked at'.",
+  "Thinly-checked leads sit near the middle rather than at zero: a low score means 'few gaps found', not 'not looked at'.",
 ];

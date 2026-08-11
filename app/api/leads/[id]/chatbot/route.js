@@ -23,7 +23,7 @@ export async function POST(_request, context) {
   const charge = await billing.consumeCredits(userId, billing.CHATBOT_COST, { reason: "chatbot", count: 1, project: lead.project });
   if (!charge.ok) {
     return Response.json(
-      { error: `Not enough credits — a chatbot scan costs ${billing.CHATBOT_COST} credits and you have ${charge.credits}.`, code: "insufficient_credits", credits: charge.credits },
+      { error: `Not enough credits: a chatbot scan costs ${billing.CHATBOT_COST} credits and you have ${charge.credits}.`, code: "insufficient_credits", credits: charge.credits },
       { status: 402 }
     );
   }

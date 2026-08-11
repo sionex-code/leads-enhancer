@@ -27,7 +27,7 @@ function getPool() {
   const url = process.env.WAREHOUSE_DATABASE_URL;
   if (!url) {
     throw new Error(
-      "[warehouse] WAREHOUSE_DATABASE_URL env var is not set — set it to the warehouse Postgres connection string. " +
+      "[warehouse] WAREHOUSE_DATABASE_URL env var is not set. Set it to the warehouse Postgres connection string. " +
       "Example: postgresql://warehouse:PASSWORD@127.0.0.1:5433/warehouse"
     );
   }

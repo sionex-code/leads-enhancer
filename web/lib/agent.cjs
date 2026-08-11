@@ -230,15 +230,15 @@ const TOOLS = {
     },
   },
   capture_leads: {
-    description: "Scrape a NEW batch of map-listing leads and WAIT for it to finish, then return the leads directly. Scrape ONLY by default (no email enrichment). This is autonomous — by default it blocks until done and hands back the leads, so you can show them immediately in the same turn. Use has_phone/has_email to return only matching leads.",
+    description: "Scrape a NEW batch of map-listing leads and WAIT for it to finish, then return the leads directly. Scrape ONLY by default (no email enrichment). This is autonomous: by default it blocks until done and hands back the leads, so you can show them immediately in the same turn. Use has_phone/has_email to return only matching leads.",
     args: {
-      project: "project name (new or existing — auto-named from the query if omitted)",
+      project: "project name (new or existing, auto-named from the query if omitted)",
       query: "Maps search, e.g. 'dentists in Miami FL'",
       max: "number of leads, e.g. 30",
       enrich: "true to also run email/social enrichment after the scrape (only when the user explicitly asks for emails/socials)",
       has_phone: "true to return only the scraped leads that have a phone number",
       has_email: "true to return only the scraped leads that have an email (implies enrich)",
-      wait: "default true — block until the scrape finishes and return the leads. Set false only for a huge scrape the user wants to run in the background.",
+      wait: "default true, blocks until the scrape finishes and return the leads. Set false only for a huge scrape the user wants to run in the background.",
     },
     run: async ({ project, query, max = 20, enrich = false, has_phone = false, has_email = false, wait = true }, ctx = {}) => {
       if (!query) throw new Error("query is required");
@@ -275,8 +275,8 @@ const TOOLS = {
         shown: shown.length,
         leads: shown,
         note: shown.length
-          ? "These are the ACTUAL scraped leads. Present ONLY these rows as a markdown table — do NOT add, rename, or invent any rows or businesses."
-          : "The scrape returned 0 matching leads — the location may not have geocoded to the city the user meant, or nothing matched. Tell the user plainly that no leads were found and suggest a more specific area or query. NEVER invent leads.",
+          ? "These are the ACTUAL scraped leads. Present ONLY these rows as a markdown table. Do NOT add, rename, or invent any rows or businesses."
+          : "The scrape returned 0 matching leads. The location may not have geocoded to the city the user meant, or nothing matched. Tell the user plainly that no leads were found and suggest a more specific area or query. NEVER invent leads.",
       };
     },
   },
@@ -297,7 +297,7 @@ const TOOLS = {
   },
   enrich_leads: {
     description: "Find emails + social links for an existing project's leads by crawling their websites, and WAIT for it to finish (default), then report how many now have an email. Use get_leads with has_email after.",
-    args: { project: "project name or slug", wait: "default true — block until enrichment finishes" },
+    args: { project: "project name or slug", wait: "default true, blocks until enrichment finishes" },
     run: async ({ project, wait = true }, ctx = {}) => {
       if (!project) throw new Error("project required");
       store.spawnRunner({ name: project, stages: ["enrich"], enrichConcurrency: 16 });
@@ -310,14 +310,14 @@ const TOOLS = {
   },
   check_whatsapp: {
     description: "Check which of a project's lead phone numbers are on WhatsApp and WAIT for it to finish (default), then report results.",
-    args: { project: "project name or slug", wait: "default true — block until the check finishes" },
+    args: { project: "project name or slug", wait: "default true, blocks until the check finishes" },
     run: async ({ project, wait = true }, ctx = {}) => {
       if (!project) throw new Error("project required");
       store.spawnRunner({ name: project, stages: ["whatsapp"] });
       if (wait === false || wait === "false") return { started: true, project, note: "Checking in background. Call wait_for_project to block until done." };
       const w = await waitForProject(project, { ctx, stages: ["whatsapp"], label: "checking WhatsApp" });
       if (w.stopped) return { stopped: true, project };
-      return { project, finished: w.finished, timed_out: !!w.timedOut, note: "WhatsApp check done — use get_leads to see the whatsapp column." };
+      return { project, finished: w.finished, timed_out: !!w.timedOut, note: "WhatsApp check done. Use get_leads to see the whatsapp column." };
     },
   },
   inspect_website: {
@@ -330,7 +330,7 @@ const TOOLS = {
     },
   },
   generate_reports: {
-    description: "Generate an independent in-depth report (live inspection + Lighthouse desktop+mobile + social media + AI analysis) for up to 5 websites. Takes several minutes — returns a job_id immediately; poll report_job_status until done.",
+    description: "Generate an independent in-depth report (live inspection + Lighthouse desktop+mobile + social media + AI analysis) for up to 5 websites. Takes several minutes and returns a job_id immediately; poll report_job_status until done.",
     args: { websites: "array of up to 5 website URLs/domains (or lead domains)", project: "optional: pull business details for these domains from this project's leads" },
     run: async ({ websites = [], project = "" } = {}) => {
       const list = (Array.isArray(websites) ? websites : String(websites).split(/[,\s]+/)).filter(Boolean).slice(0, siteReport.MAX_SITES);
@@ -346,7 +346,7 @@ const TOOLS = {
     },
   },
   report_job_status: {
-    description: "Check a report generation job. When done, each result has a `report` file — the user can open it at /api/agent/reports/<file>.",
+    description: "Check a report generation job. When done, each result has a `report` file, which the user can open at /api/agent/reports/<file>.",
     args: { job_id: "id returned by generate_reports" },
     run: async ({ job_id }) => {
       const job = siteReport.getJob(job_id);
@@ -390,30 +390,30 @@ function toolDocs() {
 function systemPrompt(session) {
   return `You are Lead Ops Agent, an autonomous assistant inside a local lead-generation dashboard. You manage scraping projects, a global leads database, and website analysis reports.
 
-${session.project ? `The user has selected project: "${session.project}". Default to it when a tool needs a project.` : "No project selected — use list_projects if you need one."}
+${session.project ? `The user has selected project: "${session.project}". Default to it when a tool needs a project.` : "No project selected, use list_projects if you need one."}
 
 TOOLS:
 ${toolDocs()}
 
-HOW TO CALL A TOOL — reply with ONLY a fenced json block, nothing else:
+HOW TO CALL A TOOL: reply with ONLY a fenced json block, nothing else:
 \`\`\`json
 {"tool": "get_leads", "args": {"project": "Austin", "limit": 10}}
 \`\`\`
 One tool call per reply. After you receive the TOOL RESULT, either call another tool or give your final answer as plain text (no json block).
 
 RULES:
-- YOU are the only one who can run tools. NEVER tell the user to "check status", "let me know", or describe which tool could be used — emit the json block and run it yourself, immediately. You are an autonomous agent: finish the job in this turn.
-- When the user asks to scrape/get/find leads, call capture_leads and let it WAIT (default) — it returns the actual leads in its result. Then present them right away as a short markdown table (name, phone, domain, rating). Do NOT just say a scrape started.
-- CRITICAL — NEVER fabricate leads. Show ONLY the exact rows present in the tool result's "leads" array, with their exact names/phones/domains. Do NOT add rows, invent businesses, autocomplete a list, or reuse names from earlier examples. If "leads" is empty or "shown" is 0, tell the user plainly that no leads were found (suggest a more specific area) — do NOT make any up. A made-up table is a serious failure.
+- YOU are the only one who can run tools. NEVER tell the user to "check status", "let me know", or describe which tool could be used. Emit the json block and run it yourself, immediately. You are an autonomous agent: finish the job in this turn.
+- When the user asks to scrape/get/find leads, call capture_leads and let it WAIT (default), because it returns the actual leads in its result. Then present them right away as a short markdown table (name, phone, domain, rating). Do NOT just say a scrape started.
+- CRITICAL: NEVER fabricate leads. Show ONLY the exact rows present in the tool result's "leads" array, with their exact names/phones/domains. Do NOT add rows, invent businesses, autocomplete a list, or reuse names from earlier examples. If "leads" is empty or "shown" is 0, tell the user plainly that no leads were found (suggest a more specific area). Do NOT make any up. A made-up table is a serious failure.
 - Geocoding note: some city names are ambiguous (e.g. "Islamabad" can resolve to Anantnag in Kashmir, India). If the returned leads' addresses are clearly in the wrong country/region, say so and suggest a more specific query like "restaurants in Islamabad, Pakistan" or a sector like "F-6 Islamabad Pakistan".
 - Interpret the request and set the args: "get 30 leads from Miami with phone numbers" → capture_leads {query:"<business type> in Miami", max:30, has_phone:true}. If the business type is missing, infer it from context or ask one short question. "with emails"/"that have email" → has_email:true (this also enriches). "on whatsapp" → after scraping, call check_whatsapp then get_leads.
 - Scraping is scrape-ONLY by default: do NOT enrich (no emails) unless the user explicitly asks for emails/socials.
-- capture_leads, enrich_leads, check_whatsapp, and wait_for_project block until the work is done and hand back results — use them; don't fire-and-forget. Only set wait:false if the user explicitly wants a big scrape to run in the background, and then offer to check back.
+- capture_leads, enrich_leads, check_whatsapp, and wait_for_project block until the work is done and hand back results, so use them; don't fire-and-forget. Only set wait:false if the user explicitly wants a big scrape to run in the background, and then offer to check back.
 - Reports (generate_reports) run minutes-long as a job: start it, then you MAY poll report_job_status once; if not done, give the job id and tell the user it's generating. When done, give links: /api/agent/reports/<file>.
 - Lead workflow fields are real CRM state. Use update_lead_workflow, mark_message_sent, and complete_lead when the user asks to watch, contact, note, mark sent, skip, or complete leads.
 - Never invent data; always read it via tools. Keep answers short and concrete.
-- BE FAST: take the fewest steps possible. If a question needs no data (greetings, "what can you do", clarifying), answer directly with NO tool call. Don't call list_projects/project_status just to confirm something you already know — the selected project is given above. Use exactly the one tool the task needs, then answer.
-- Deleting leads is permanent — only delete what the user explicitly asked for, and confirm what was deleted.`;
+- BE FAST: take the fewest steps possible. If a question needs no data (greetings, "what can you do", clarifying), answer directly with NO tool call. Don't call list_projects/project_status just to confirm something you already know: the selected project is given above. Use exactly the one tool the task needs, then answer.
+- Deleting leads is permanent, so only delete what the user explicitly asked for, and confirm what was deleted.`;
 }
 
 // Parse a {"tool":...} call out of the model reply (fenced or bare).

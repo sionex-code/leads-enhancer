@@ -40,7 +40,7 @@ export default function ExtensionRequiredDialog({ open, onClose }) {
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           We didn&apos;t have these leads stored yet, so they need to be pulled from
           the map live. That runs in your own browser through our free Chrome
-          extension — it takes about a minute to set up, once.
+          extension. It takes about a minute to set up, once.
         </p>
 
         <ul className="mt-5 space-y-3 text-sm text-muted-foreground">
@@ -48,7 +48,7 @@ export default function ExtensionRequiredDialog({ open, onClose }) {
             <Zap className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
             <span>
               <span className="font-medium text-foreground">Faster searches.</span>{" "}
-              No queue — you aren&apos;t waiting behind other people&apos;s scrapes.
+              No queue, so you aren&apos;t waiting behind other people&apos;s scrapes.
             </span>
           </li>
           <li className="flex gap-3">

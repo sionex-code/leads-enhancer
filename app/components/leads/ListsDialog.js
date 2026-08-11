@@ -83,7 +83,7 @@ export default function ListsDialog({ lead, ids, lists, onClose, onSavedLead, on
 
         <div className="flex flex-col gap-4 p-5">
           <div className="max-h-[30vh] space-y-1.5 overflow-y-auto pr-1">
-            {allLists.length === 0 && <p className="text-sm text-muted-foreground">No lists yet — create one below.</p>}
+            {allLists.length === 0 && <p className="text-sm text-muted-foreground">No lists yet. Create one below.</p>}
             {allLists.map((l) => (
               <label key={l.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent">
                 <input type="checkbox" checked={checked.has(l.id)} onChange={() => toggle(l.id)} className="accent-[hsl(var(--primary))]" />

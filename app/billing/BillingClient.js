@@ -212,7 +212,7 @@ export default function BillingClient() {
                   {!active && !credits
                     ? "Activate a plan to get monthly credits."
                     : unlimited
-                      ? "You're on the unlimited plan — find and enrich as much as you need."
+                      ? "You're on the unlimited plan, so find and enrich as much as you need."
                       : monthly
                         ? `${credits.toLocaleString()} of ${monthly.toLocaleString()} credits remaining this cycle.`
                         : `${credits.toLocaleString()} credits available. 1 credit per lead · audit 3 · chatbot 5 · report 10.`}

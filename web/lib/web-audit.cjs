@@ -358,12 +358,12 @@ function renderAuditHtml(report) {
   const sevColor = { high: "#ef4444", medium: "#f59e0b", low: "#64748b" };
   const p = report.performance || {};
   const donut = (label, v) =>
-    `<div class="d"><div class="ring" style="background:conic-gradient(${scoreColor(v)} ${Math.round((Number(v) || 0) * 3.6)}deg,#1e2742 0)"><span>${Number.isFinite(Number(v)) ? v : "—"}</span></div><label>${esc(label)}</label></div>`;
+    `<div class="d"><div class="ring" style="background:conic-gradient(${scoreColor(v)} ${Math.round((Number(v) || 0) * 3.6)}deg,#1e2742 0)"><span>${Number.isFinite(Number(v)) ? v : "-"}</span></div><label>${esc(label)}</label></div>`;
   const issuesHtml = (report.issues || [])
-    .map((i) => `<li><span class="sev" style="background:${sevColor[i.severity]}">${i.severity}</span> <b>${esc(i.category)}</b> — ${esc(i.message)}</li>`)
+    .map((i) => `<li><span class="sev" style="background:${sevColor[i.severity]}">${i.severity}</span> <b>${esc(i.category)}</b>: ${esc(i.message)}</li>`)
     .join("");
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Audit — ${esc(report.url)}</title><style>
+<title>Audit: ${esc(report.url)}</title><style>
 :root{color-scheme:dark}body{margin:0;background:#0b0f1d;color:#e6eaf5;font:15px/1.6 system-ui,sans-serif}
 .wrap{max-width:880px;margin:0 auto;padding:36px 22px 70px}
 h1{font-size:20px;margin:0 0 4px}.sub{color:#7c8db5;font-size:13px;word-break:break-all}
@@ -383,11 +383,11 @@ pre{background:#0d1117;color:#9fb0e0;padding:14px;border-radius:10px;overflow:au
 <div class="score">${report.score}<span style="font-size:20px;color:#64748b">/100</span></div>
 <div class="donuts">${["performance","layout","mobile","seo","security","accessibility"].map((k) => donut(k, report.scores?.[k])).join("")}</div>
 <div class="card"><h2>Key metrics</h2><dl class="kv">
-<dt>TTFB</dt><dd>${p.ttfbMs ?? "—"} ms</dd>
-<dt>First Contentful Paint</dt><dd>${p.fcpMs ?? "—"} ms</dd>
-<dt>Full load</dt><dd>${p.loadMs ?? "—"} ms</dd>
-<dt>Page weight</dt><dd>${p.totalTransferKB ?? "—"} KB</dd>
-<dt>Requests</dt><dd>${p.requestCount ?? "—"}</dd>
+<dt>TTFB</dt><dd>${p.ttfbMs ?? "-"} ms</dd>
+<dt>First Contentful Paint</dt><dd>${p.fcpMs ?? "-"} ms</dd>
+<dt>Full load</dt><dd>${p.loadMs ?? "-"} ms</dd>
+<dt>Page weight</dt><dd>${p.totalTransferKB ?? "-"} KB</dd>
+<dt>Requests</dt><dd>${p.requestCount ?? "-"}</dd>
 <dt>Support chat</dt><dd>${report.chat?.hasSupportChat ? esc(report.chat.providers.join(", ")) : "none detected"}</dd>
 </dl></div>
 <div class="card"><h2>Issues (${report.summary?.total || 0})</h2><ul class="issues">${issuesHtml || "<li>No issues found 🎉</li>"}</ul></div>

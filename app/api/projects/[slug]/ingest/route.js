@@ -288,7 +288,7 @@ async function queueEnrichment({ userId, dir, slug, meta, rows }) {
     });
     // enqueue leaves the project reading "waiting for a free slot", which is
     // true of the crawl but wrong about the leads — they are already saved.
-    store.writeState(dir, { message: `Leads loaded — finding emails for ${pending} sites` });
+    store.writeState(dir, { message: `Leads loaded, finding emails for ${pending} sites` });
     return { queued: true, pending };
   } catch (err) {
     // The leads are stored and charged for; a queue failure must not turn that

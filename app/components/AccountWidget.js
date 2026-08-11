@@ -82,7 +82,7 @@ export default function AccountWidget({ collapsed = false }) {
             "inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card text-sm font-medium text-foreground transition hover:bg-accent",
             collapsed ? "h-9 w-9" : "w-full px-3 py-2"
           )}
-          title="Your session has ended — sign in again"
+          title="Your session has ended, sign in again"
         >
           <LogIn className="h-4 w-4 shrink-0" />
           {!collapsed && <span>Sign in again</span>}

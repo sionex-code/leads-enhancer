@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import AgentClient from "./AgentClient";
 
-export const metadata = { title: "AI Agent — LeadsFunda" };
+export const metadata = { title: "AI Agent | LeadsFunda" };
 
 // Without this the page is statically prerendered and served with
 // s-maxage=31536000, which the VPS nginx caches — deploys never show up.

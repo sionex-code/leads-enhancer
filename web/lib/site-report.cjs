@@ -208,7 +208,7 @@ async function aiAnalysis(site, inspection, audit) {
   try {
     return await llm.chat(
       [
-        { role: "system", content: "You are a senior web auditor writing a client-ready website report. Be specific, factual, and concise. Use ONLY the data provided — never invent scores or facts. The 'audit' data is from a real-browser scan (desktop + mobile) listing concrete issues (performance, layout, mobile-friendliness, SEO, security, accessibility, support-chat). Output markdown with exactly these sections: ## Executive Summary (3-4 sentences naming the biggest problems), ## Key Issues Found (bulleted, group by severity high→low, quote the concrete findings — load time, broken images, missing viewport, no support chat, etc.), ## SEO & Visibility, ## Social Media Presence (which channels exist, which are missing), ## Top Recommendations (numbered, max 6, most impactful first), ## Outreach Angle (2-3 sentences: how a web agency could pitch this business based on the issues)." },
+        { role: "system", content: "You are a senior web auditor writing a client-ready website report. Be specific, factual, and concise. Use ONLY the data provided. Never invent scores or facts. The 'audit' data is from a real-browser scan (desktop + mobile) listing concrete issues (performance, layout, mobile-friendliness, SEO, security, accessibility, support-chat). Output markdown with exactly these sections: ## Executive Summary (3-4 sentences naming the biggest problems), ## Key Issues Found (bulleted, group by severity high→low, quote the concrete findings: load time, broken images, missing viewport, no support chat, etc.), ## SEO & Visibility, ## Social Media Presence (which channels exist, which are missing), ## Top Recommendations (numbered, max 6, most impactful first), ## Outreach Angle (2-3 sentences: how a web agency could pitch this business based on the issues)." },
         { role: "user", content: "Audit data:\n```json\n" + JSON.stringify(facts) + "\n```" },
       ],
       { model: "reasoning", maxTokens: 1800, temperature: 0.3 }
@@ -256,7 +256,7 @@ function donut(label, value) {
   const has = Number.isFinite(n);
   const color = scoreColor(value);
   const deg = has ? Math.round((n / 100) * 360) : 0;
-  return `<div class="donut-wrap"><div class="donut" style="background:conic-gradient(${color} ${deg}deg, #232a42 ${deg}deg)"><span>${has ? n : "—"}</span></div><label>${label}</label></div>`;
+  return `<div class="donut-wrap"><div class="donut" style="background:conic-gradient(${color} ${deg}deg, #232a42 ${deg}deg)"><span>${has ? n : "-"}</span></div><label>${label}</label></div>`;
 }
 
 function deviceBlock(name, lh) {
@@ -286,7 +286,7 @@ function renderReportHtml({ site, inspection, lighthouse, analysisHtml, generate
   const soc = (k) => inspection.socials[k] || site[k] || "";
   const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${site.name || domain} — Website Report</title>
+<title>${site.name || domain}: Website Report</title>
 <style>
   :root{color-scheme:dark}
   body{margin:0;background:#0b0f1d;color:#e6eaf5;font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -336,13 +336,13 @@ function renderReportHtml({ site, inspection, lighthouse, analysisHtml, generate
 
   <div class="card"><h2>Website snapshot</h2>
     <dl class="kv">
-      <dt>Title</dt><dd>${inspection.title || "—"}</dd>
+      <dt>Title</dt><dd>${inspection.title || "-"}</dd>
       <dt>Meta description</dt><dd>${inspection.description || "<em>missing</em>"}</dd>
       <dt>Main heading (H1)</dt><dd>${inspection.h1 || "<em>missing</em>"}</dd>
       <dt>Response time</dt><dd>${inspection.responseMs} ms</dd>
       <dt>Social preview image</dt><dd>${inspection.ogImage ? "yes" : "<em>missing (og:image)</em>"}</dd>
-      <dt>Tech detected</dt><dd>${(inspection.tech || []).join(", ") || "—"}</dd>
-      <dt>Emails on site</dt><dd>${(inspection.emails || []).join(", ") || site.email || "—"}</dd>
+      <dt>Tech detected</dt><dd>${(inspection.tech || []).join(", ") || "-"}</dd>
+      <dt>Emails on site</dt><dd>${(inspection.emails || []).join(", ") || site.email || "-"}</dd>
     </dl>
   </div>
 

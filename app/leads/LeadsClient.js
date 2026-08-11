@@ -101,7 +101,7 @@ function visibleExportColumns(isVisible) {
 // Explanations surfaced behind (i) icons in the table headers.
 const DOMAIN_RATING_INFO = (
   <>
-    Ahrefs Domain Rating (0-100) — strength of the site&apos;s backlink profile on a logarithmic scale. Higher = more authority.
+    Ahrefs Domain Rating (0-100): strength of the site&apos;s backlink profile on a logarithmic scale. Higher = more authority.
     <span className="mt-2 block text-muted-foreground">Sourced from the free Ahrefs DR endpoint. Data is cached per lead; re-run &quot;Domain rating&quot; to refresh.</span>
     <span className="mt-1 block text-[10px] text-muted-foreground">Domain Rating by Ahrefs (ahrefs.com)</span>
   </>
@@ -269,7 +269,7 @@ function QuickLeadActions({ lead, onPatch, onLists }) {
       <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.watchlist && "text-amber-500")} disabled={busy} onClick={() => onPatch(lead.id, { watchlist: !lead.watchlist })} title={lead.watchlist ? "Remove from favorites" : "Add to favorites"}>
         <Star size={iconSize} fill={lead.watchlist ? "currentColor" : "none"} />
       </Button>
-      <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.list_count > 0 && "text-primary")} disabled={busy} onClick={() => onLists && onLists(lead)} title={lead.list_count > 0 ? `In ${lead.list_count} list${lead.list_count === 1 ? "" : "s"} — edit` : "Add to a list"}>
+      <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.list_count > 0 && "text-primary")} disabled={busy} onClick={() => onLists && onLists(lead)} title={lead.list_count > 0 ? `In ${lead.list_count} list${lead.list_count === 1 ? "" : "s"}, edit` : "Add to a list"}>
         <ListPlus size={iconSize} />
       </Button>
     </div>
@@ -556,7 +556,7 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot, on
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-xs text-muted-foreground">Authority</span>
                 {lead.domain_rating != null && lead.domain_rating !== "" ? (
-                  <a href={domainRatingUrl(lead.domain) || "#"} target="_blank" rel="noreferrer" className="inline-flex items-center" title={`Domain Rating by Ahrefs — last checked ${lead.domain_rating_checked_at ? new Date(lead.domain_rating_checked_at).toLocaleString() : ""}`}>
+                  <a href={domainRatingUrl(lead.domain) || "#"} target="_blank" rel="noreferrer" className="inline-flex items-center" title={`Domain Rating by Ahrefs, last checked ${lead.domain_rating_checked_at ? new Date(lead.domain_rating_checked_at).toLocaleString() : ""}`}>
                     <Pill tone={drClass(lead.domain_rating)}><BarChart3 size={12} /> DR {Number(lead.domain_rating).toFixed(lead.domain_rating % 1 === 0 ? 0 : 1)}</Pill>
                   </a>
                 ) : (
@@ -705,7 +705,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
     } catch (err) {
       // Revert to the server's truth and surface the failure.
       jsonFetch(`/api/leads/${id}`).then((d) => d.lead && mergeLead(d.lead)).catch(() => {});
-      showToast(err.message || "Couldn't save — try again");
+      showToast(err.message || "Couldn't save, try again");
       return null;
     }
   }, [mergeLead, showToast]);
@@ -917,7 +917,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
       alert("Select one or more leads that have a website first.");
       return;
     }
-    if (!confirm(`Fetch Ahrefs Domain Rating for ${ids.length} lead${ids.length === 1 ? "" : "s"}?\n\n${SHOW_CREDITS ? "Free — no credits used." : "Free."}`)) return;
+    if (!confirm(`Fetch Ahrefs Domain Rating for ${ids.length} lead${ids.length === 1 ? "" : "s"}?\n\n${SHOW_CREDITS ? "Free, no credits used." : "Free."}`)) return;
     setBulkBusy("dr");
     try {
       const data = await jsonFetch(`/api/leads/domain-rating/bulk`, { method: "POST", body: JSON.stringify({ ids }) });
@@ -945,7 +945,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
     const have = credits ?? 0;
     if (AUDIT_COST > have) {
       alert(SHOW_CREDITS
-        ? `Not enough credits — an audit needs ${AUDIT_COST} and you have ${have}.`
+        ? `Not enough credits: an audit needs ${AUDIT_COST} and you have ${have}.`
         : "Your plan doesn't have enough allowance left for an audit. Upgrade in Billing.");
       return;
     }
@@ -967,7 +967,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
       });
       const fresh = await jsonFetch(`/api/leads/${lead.id}`).catch(() => null);
       if (fresh?.lead) mergeLead(fresh.lead);
-      showToast("Audit complete — scores updated");
+      showToast("Audit complete, scores updated");
     } catch (err) {
       refreshCredits();
       alert(err.message);
@@ -1468,7 +1468,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                         <Pill tone="muted">No reply</Pill>
                       )}
                       {lead.domain_rating != null && lead.domain_rating !== "" ? (
-                        <a href={domainRatingUrl(lead.domain) || "#"} target="_blank" rel="noreferrer" title={`Domain Rating by Ahrefs — last checked ${lead.domain_rating_checked_at ? new Date(lead.domain_rating_checked_at).toLocaleString() : ""}`}>
+                        <a href={domainRatingUrl(lead.domain) || "#"} target="_blank" rel="noreferrer" title={`Domain Rating by Ahrefs, last checked ${lead.domain_rating_checked_at ? new Date(lead.domain_rating_checked_at).toLocaleString() : ""}`}>
                           <Pill tone={drClass(lead.domain_rating)}><BarChart3 size={11} /> DR {Number(lead.domain_rating).toFixed(lead.domain_rating % 1 === 0 ? 0 : 1)}</Pill>
                         </a>
                       ) : null}
@@ -1569,7 +1569,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                             {showRating(lead) ? (
                               <span className="flex items-center gap-1"><Star size={12} className="text-amber-500" fill="currentColor" />{lead.rating}</span>
                             ) : (
-                              <span className="text-muted-foreground">—</span>
+                              <span className="text-muted-foreground">-</span>
                             )}
                           </TableCell>
                         )}
@@ -1585,7 +1585,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                                 target="_blank"
                                 rel="noreferrer"
                                 className="inline-flex items-center gap-1"
-                                title={`Domain Rating by Ahrefs — last checked ${lead.domain_rating_checked_at ? new Date(lead.domain_rating_checked_at).toLocaleString() : ""}`}
+                                title={`Domain Rating by Ahrefs, last checked ${lead.domain_rating_checked_at ? new Date(lead.domain_rating_checked_at).toLocaleString() : ""}`}
                               >
                                 <Pill tone={drClass(lead.domain_rating)}>
                                   <BarChart3 size={12} />
@@ -1593,7 +1593,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                                 </Pill>
                               </a>
                             ) : (
-                              <span className="text-muted-foreground" title="Run Domain rating to fetch from Ahrefs">—</span>
+                              <span className="text-muted-foreground" title="Run Domain rating to fetch from Ahrefs">-</span>
                             )}
                           </TableCell>
                         )}
@@ -1632,12 +1632,12 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                         )}
                         {isVisible("address") && (
                           <TableCell className="max-w-[200px] text-xs text-muted-foreground">
-                            {lead.address ? <span className="line-clamp-2" title={lead.address}>{lead.address}</span> : <span>—</span>}
+                            {lead.address ? <span className="line-clamp-2" title={lead.address}>{lead.address}</span> : <span>-</span>}
                           </TableCell>
                         )}
                         {isVisible("category") && (
                           <TableCell className="max-w-[140px] text-xs text-muted-foreground">
-                            {lead.category ? <span className="block truncate" title={lead.category}>{lead.category}</span> : <span>—</span>}
+                            {lead.category ? <span className="block truncate" title={lead.category}>{lead.category}</span> : <span>-</span>}
                           </TableCell>
                         )}
                         <TableCell>

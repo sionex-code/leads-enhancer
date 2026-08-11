@@ -22,7 +22,7 @@ export async function POST(_request, context) {
   const charge = await billing.consumeCredits(userId, cost, { reason: "audit", count: 1, project: lead.project });
   if (!charge.ok) {
     return Response.json(
-      { error: `Not enough credits — this audit needs ${cost} credits and you have ${charge.credits}.`, code: "insufficient_credits", cost, credits: charge.credits },
+      { error: `Not enough credits: this audit needs ${cost} credits and you have ${charge.credits}.`, code: "insufficient_credits", cost, credits: charge.credits },
       { status: 402 }
     );
   }
