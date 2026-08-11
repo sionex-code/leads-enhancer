@@ -408,10 +408,11 @@ export default async function DirectoryEntry({ params }) {
                     <td className={cn("px-4 py-3 font-mono text-xs text-muted-foreground", r.locked && r.email && LOCKED_CELL)}>
                       {r.email ? (
                         r.email
-                      ) : tier === "full" ? (
-                        // Nothing is being withheld from a viewer with a plan:
-                        // we simply hold no address for this business. Implying
-                        // otherwise would promise data that does not exist.
+                      ) : !r.locked ? (
+                        // Nothing is being withheld on an unlocked row — a plan
+                        // holder's, or one of the free ones at the top: we simply
+                        // hold no address for this business. A padlock here would
+                        // promise data that does not exist.
                         <span className="font-sans text-muted-foreground">n/a</span>
                       ) : (
                         <span className="inline-flex items-center gap-1 font-sans text-[11px] text-muted-foreground">
