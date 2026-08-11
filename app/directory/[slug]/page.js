@@ -40,20 +40,32 @@ const SOCIAL_LABEL = { facebook: "Facebook", instagram: "Instagram", linkedin: "
 const GENERIC_EMAIL =
   /^(info|support|contact|hello|hi|admin|office|sales|enquiry|enquiries|inquiry|inquiries|mail|email|team|help|service|customerservice|noreply|no-reply|donotreply)@/i;
 
-// Is this row good enough to give away? The free sample has to answer "is the
-// data any good" in one glance, and a row missing the phone or the socials
-// answers "no". Everything here must be present for real, not masked.
+// Is this row good enough to give away, and how good? The free sample has to
+// answer "is this data any good" at a glance, so a row is only ever unlocked
+// with a website, a phone number AND a real email behind it — never with a gap
+// where one of them should be.
+//
+// Two grades of qualifying row, because enrichment coverage varies by city and a
+// strict all-four rule leaves some listings with nothing to show:
+//   * complete — also has a social profile. The best proof, ranked first.
+//   * contactable — no social, but the email is a named mailbox rather than
+//     info@/support@. Anyone can guess info@, so a role address on its own
+//     proves little; a named one still proves the enrichment ran and found
+//     something real.
+// A row with only a role address and no socials stays locked: as a sample it
+// argues against the product rather than for it.
 function showcaseScore(wh, cache) {
   const email = String(cache?.email || "").trim();
   const socials = SOCIAL_KEYS.filter((k) => String(cache?.[k] || "").trim());
-  const complete = !!(String(wh.website || "").trim() && String(wh.phone || "").trim() && email && socials.length);
-  if (!complete) return null;
+  if (!String(wh.website || "").trim() || !String(wh.phone || "").trim() || !email) return null;
+  const generic = GENERIC_EMAIL.test(email);
+  if (!socials.length && generic) return null;
+
   const reviews = Number(wh.reviews) || 0;
   const rating = Number(wh.rating) || 0;
   return (
-    // A named mailbox is the strongest single signal, then breadth of socials,
-    // then the ordinary "is this a real business" markers.
-    (GENERIC_EMAIL.test(email) ? 0 : 60) +
+    (socials.length ? 100 : 0) +      // a complete row outranks any contactable one
+    (generic ? 0 : 60) +              // a named mailbox is the strongest single signal
     socials.length * 12 +
     Math.min(reviews, 200) / 10 +
     rating * 2
