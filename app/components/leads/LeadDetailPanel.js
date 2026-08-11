@@ -26,10 +26,10 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "../ui/button";
-import { cn, waMeLink } from "../../lib/utils";
+import { cn, waMeLink, mapsLink, hasDirectMapsLink } from "../../lib/utils";
 import { BrandIcon } from "../SocialIcons";
 import LeadAvatar from "./LeadAvatar";
-import { scoreLead, BAND_LABEL, OPPORTUNITY_HELP } from "../../lib/opportunity";
+import { scoreLead, isEnriched, BAND_LABEL, OPPORTUNITY_HELP } from "../../lib/opportunity";
 import { InfoPopover } from "../ui/info-popover";
 import trackingDetect from "../../../web/lib/tracking-detect.cjs";
 
@@ -123,6 +123,9 @@ export default function LeadDetailPanel({
   const reviews = parseInt(String(lead.reviews ?? "").replace(/[^\d]/g, ""), 10) || 0;
   const email = lead.email || "";
   const waHref = lead.phone ? waMeLink(lead.phone) : "";
+  const mapsHref = mapsLink(lead);
+  const mapsIsDirect = hasDirectMapsLink(lead);
+  const alreadyEnriched = isEnriched(lead);
 
   const bandTint =
     band === "high"
@@ -204,8 +207,17 @@ export default function LeadDetailPanel({
             <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-current/10">
               <div className="h-full rounded-full bg-current opacity-40" style={{ width: `${coverage}%` }} />
             </div>
-            {coverage < 60 && (
+            {/* Only prompt when Enrich genuinely hasn't run and there is a site
+                to run it against. Coverage stays low for an already-enriched lead
+                whose site was unreachable (or that has no website), so gating on
+                coverage told people to re-run something they had already done. */}
+            {!alreadyEnriched && lead.website && (
               <p className="mt-1.5 text-[11px] text-muted-foreground">Run Enrich to check pixels, socials and site health.</p>
+            )}
+            {alreadyEnriched && coverage < 60 && (
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                Enriched — the rest of the picture needs a site audit.
+              </p>
             )}
           </div>
         </div>
@@ -308,7 +320,19 @@ export default function LeadDetailPanel({
         <Section title="Address">
           <div className="flex items-start gap-2 text-sm">
             <MapPin size={15} className="mt-0.5 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 flex-1">{lead.address || "—"}</span>
+            {mapsHref ? (
+              <a
+                href={mapsHref}
+                target="_blank"
+                rel="noreferrer"
+                className="min-w-0 flex-1 hover:underline"
+                title={mapsIsDirect ? "Open this listing on Google Maps" : "Search for this business on Google Maps"}
+              >
+                {lead.address || "View location"}
+              </a>
+            ) : (
+              <span className="min-w-0 flex-1">{lead.address || "—"}</span>
+            )}
             <CopyButton value={lead.address} />
           </div>
         </Section>
@@ -328,10 +352,13 @@ export default function LeadDetailPanel({
             <MessageCircle size={15} /> WhatsApp
           </Button>
         </div>
-        {lead.mapsUrl || lead.maps_url ? (
+        {/* Always offer the map. When the scrape captured the canonical listing
+            URL we go straight there; otherwise mapsLink() falls back to a Maps
+            search on name + address, which beats showing no link at all. */}
+        {mapsHref ? (
           <Button variant="ghost" className="w-full" asChild>
-            <a href={lead.mapsUrl || lead.maps_url} target="_blank" rel="noreferrer">
-              View full profile
+            <a href={mapsHref} target="_blank" rel="noreferrer">
+              <MapPin size={15} /> {mapsIsDirect ? "View on Google Maps" : "Find on Google Maps"}
             </a>
           </Button>
         ) : null}

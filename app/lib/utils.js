@@ -23,6 +23,25 @@ export function waMeLink(lead) {
   return "";
 }
 
+// Google Maps link for a lead. Prefers the canonical listing URL captured by the
+// scraper, but never returns nothing: live-search and warehouse leads often
+// arrive without one, and "no link at all" is worse than a search that lands on
+// the right place. Name + address is specific enough to resolve the business.
+export function mapsLink(lead) {
+  if (!lead) return "";
+  const direct = String(lead.mapsUrl || lead.maps_url || "").trim();
+  if (direct) return /^https?:\/\//i.test(direct) ? direct : `https://${direct}`;
+  const query = [lead.name, lead.address || lead.city].filter(Boolean).join(" ").trim();
+  if (!query) return "";
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+}
+
+// True when the link above is the real captured listing rather than a search we
+// synthesised — lets the UI label it honestly.
+export function hasDirectMapsLink(lead) {
+  return !!String(lead?.mapsUrl || lead?.maps_url || "").trim();
+}
+
 // Human-friendly enrichment status for display. Hides raw network/error codes
 // (e.g. "error: ENOTFOUND") that may still linger in older cached results — to
 // the user, a site we couldn't read simply means no email was found. Returns ""

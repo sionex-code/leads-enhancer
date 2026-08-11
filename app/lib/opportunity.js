@@ -37,9 +37,16 @@ function reviewsOf(lead) {
 
 // Socials are only meaningful once the site has been crawled — before that,
 // empty columns mean "not looked yet", not "no Facebook page".
-function enriched(lead) {
+//
+// Exported because the UI needs the same answer: coverage is NOT a proxy for
+// "has this been enriched". An enriched lead whose site was unreachable, or that
+// has no website at all, still scores low coverage because the tracking and
+// site-health signals stay unknown — so prompting on coverage told people to run
+// Enrich on leads that had already been enriched.
+export function isEnriched(lead) {
   return !!(lead?.enrichStatus || lead?.enrich_status || lead?.email || lead?.tech);
 }
+const enriched = isEnriched;
 
 // Each signal: weight (how much it matters), known (do we have the data), value
 // (0 = no opportunity here, 1 = wide open), reason (what to say on the call).

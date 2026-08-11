@@ -773,7 +773,7 @@ function LiveServicePicker({ value, onPick }) {
   );
 }
 
-function LiveAreaPicker({ countryCode, onCountry, city, onCity }) {
+function LiveAreaPicker({ countryCode, onCountry, city, onCity, onCountryCities }) {
   const [countries, setCountries] = useState([]);
   const [text, setText] = useState("");
   const [cities, setCities] = useState(() => LIVE_CITY_CACHE.get(countryCode) || []);
@@ -794,7 +794,7 @@ function LiveAreaPicker({ countryCode, onCountry, city, onCity }) {
   useEffect(() => {
     if (!countryCode) return undefined;
     const cached = LIVE_CITY_CACHE.get(countryCode);
-    if (cached) { setCities(cached); setLoading(false); return undefined; }
+    if (cached) { setCities(cached); setLoading(false); onCountryCities?.(cached); return undefined; }
     let alive = true;
     setLoading(true);
     setCities([]);
@@ -803,10 +803,13 @@ function LiveAreaPicker({ countryCode, onCountry, city, onCity }) {
       .then((d) => {
         const list = d?.cities || [];
         LIVE_CITY_CACHE.set(countryCode, list);
-        if (alive) { setCities(list); setLoading(false); }
+        // Report them up so the map can move onto the country straight away,
+        // before the user has picked any particular city.
+        if (alive) { setCities(list); setLoading(false); onCountryCities?.(list); }
       })
       .catch(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [countryCode]);
 
   // Recomputed as they type, straight off the loaded array — no network, no
@@ -821,7 +824,13 @@ function LiveAreaPicker({ countryCode, onCountry, city, onCity }) {
         <Select
           className="h-9"
           value={countryCode}
-          onChange={(e) => { onCountry(e.target.value); setText(""); }}
+          // Hand the name up too: the search box is geocoded as text, so the
+          // parent needs "Australia", not "AU", to rewrite the query.
+          onChange={(e) => {
+            const code = e.target.value;
+            onCountry(code, countries.find((x) => x.code === code)?.name || "");
+            setText("");
+          }}
         >
           {!countries.length && <option value={countryCode}>Loading…</option>}
           {countries.map((c) => (
@@ -965,6 +974,9 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   // Held separately from countryCode/cityObj so switching source back to the
   // warehouse does not find its selects pointing at a city we hold no leads for.
   const [liveCountry, setLiveCountry] = useState("US");
+  // Whether the user has actually chosen a country, so the map is only recentred
+  // on a real choice and not when the live panel first mounts with its default.
+  const liveCountryPicked = useRef(false);
   const [liveCity, setLiveCity] = useState(null);
   const [liveService, setLiveService] = useState("");
 
@@ -1117,6 +1129,34 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
     const { place } = splitQuery();
     const next = place ? `${s} in ${place}` : s;
     setQuery(next.replace(/\s+/g, " ").trim());
+  }
+
+  // Changing the country used to only swap the city list: the search box still
+  // read "... in Adelaide, SA, Australia" (or the old country) and the map stayed
+  // where it was, so the form disagreed with itself until a city was picked.
+  // The country is a place choice, so it edits the place half of the query
+  // immediately — same contract as pickLiveCity.
+  function pickLiveCountry(code, countryName) {
+    liveCountryPicked.current = true;
+    setLiveCountry(code);
+    setLiveCity(null);
+    if (!countryName) return;
+    const keyword = liveService || splitQuery().keyword || service;
+    setQuery(`${keyword} in ${countryName}`.replace(/\s+/g, " ").trim());
+  }
+
+  // Move the map onto the new country as soon as its city list lands, using its
+  // largest city as the stand-in centre. Only while no city is chosen — once the
+  // user picks one, pickLiveCity owns the centre.
+  function centerOnCountry(list) {
+    // Only after an explicit country change — the picker also reports its list on
+    // mount, and hijacking the map just for showing the panel would be wrong.
+    if (!liveCountryPicked.current) return;
+    if (liveCity || !Array.isArray(list) || !list.length) return;
+    // /api/geo/places drops the population from the wire because the list is
+    // already sorted by it, so the first city with coordinates IS the largest.
+    const top = list.find((c) => Number.isFinite(c?.la) && Number.isFinite(c?.ln));
+    if (top) setCenter({ lat: top.la, lng: top.ln });
   }
 
   function pickLiveCity(c, countryName) {
@@ -1633,9 +1673,10 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
               <LiveServicePicker value={liveService} onPick={pickLiveService} />
               <LiveAreaPicker
                 countryCode={liveCountry}
-                onCountry={setLiveCountry}
+                onCountry={pickLiveCountry}
                 city={liveCity}
                 onCity={pickLiveCity}
+                onCountryCities={centerOnCountry}
               />
             </>
           )}
