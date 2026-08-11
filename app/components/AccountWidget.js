@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react";
 import { signOut } from "next-auth/react";
 import Link from "next/link";
-import { LogOut, LogIn, Crown, CreditCard, ChevronsUpDown, Sparkles, ShieldCheck } from "lucide-react";
+import { LogOut, LogIn, Crown, CreditCard, ChevronsUpDown, Sparkles, ShieldCheck, Puzzle } from "lucide-react";
+import useExtension from "../lib/useExtension";
 import { Avatar } from "./ui/avatar";
 import { Progress } from "./ui/progress";
 import {
@@ -14,6 +15,7 @@ import {
   DropdownMenuSeparator,
 } from "./ui/dropdown-menu";
 import { cn } from "./../lib/utils";
+import { SHOW_CREDITS } from "../../web/lib/credits-ui.cjs";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 // Sign-out returns to the marketing landing (on its own host in prod).
@@ -62,6 +64,9 @@ export function useMe(pollMs = 10000) {
 // renders just the avatar (icon-rail mode).
 export default function AccountWidget({ collapsed = false }) {
   const me = useMe();
+  // Extension install state rides along with the account menu entry below, so
+  // "is live search going to work?" stays answerable from every page.
+  const { checking: extChecking, installed: extInstalled } = useExtension();
 
   // Session gone (expired cookie, signed out in another tab). Offer the way
   // back in rather than a spinner that never resolves.
@@ -158,10 +163,28 @@ export default function AccountWidget({ collapsed = false }) {
               <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" side="top" className="w-60">
+          {/* The trigger sits inside two nested p-3 wrappers, so a plain left-0
+              popup lands 12px right of the sidebar nav links and reads as
+              misaligned. Pull it back over the padding and match the nav's width
+              so both edges line up with the links above. */}
+          <DropdownMenuContent align="start" side="top" className="-left-3 w-[calc(100%+1.5rem)]">
             <DropdownMenuLabel>{ent?.active ? "Manage plan" : "Get started"}</DropdownMenuLabel>
             <DropdownMenuItem asChild>
               <Link href="/billing"><CreditCard className="h-4 w-4" /> Billing &amp; plans</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/extension">
+                <Puzzle className="h-4 w-4" /> Extension
+                {!extChecking && (
+                  <span
+                    title={extInstalled ? "Extension connected" : "Extension not installed"}
+                    className={cn(
+                      "ml-auto h-2 w-2 shrink-0 rounded-full",
+                      extInstalled ? "bg-emerald-500" : "bg-amber-500"
+                    )}
+                  />
+                )}
+              </Link>
             </DropdownMenuItem>
             {me?.admin && (
               <DropdownMenuItem asChild>
@@ -183,12 +206,19 @@ export default function AccountWidget({ collapsed = false }) {
           </DropdownMenuContent>
         </DropdownMenu>
 
+        {/* Balance + usage bar only when credits are shown at all (see
+            web/lib/credits-ui.cjs). The "Choose a plan" CTA stays either way —
+            it sells the plan, not the meter. */}
         <div className="mt-3 space-y-1.5">
-          <div className="flex items-center justify-between text-[11px]">
-            <span className={cn("font-medium", ent?.active ? "text-foreground" : "text-amber-600")}>{quotaText}</span>
-            {!unlimited && monthly ? <span className="text-muted-foreground">{used.toLocaleString()}/{monthly.toLocaleString()}</span> : null}
-          </div>
-          <Progress value={pct} className="h-1.5" indicatorClassName={ent?.active ? "bg-primary" : "bg-amber-500"} />
+          {SHOW_CREDITS && (
+            <>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className={cn("font-medium", ent?.active ? "text-foreground" : "text-amber-600")}>{quotaText}</span>
+                {!unlimited && monthly ? <span className="text-muted-foreground">{used.toLocaleString()}/{monthly.toLocaleString()}</span> : null}
+              </div>
+              <Progress value={pct} className="h-1.5" indicatorClassName={ent?.active ? "bg-primary" : "bg-amber-500"} />
+            </>
+          )}
           {!ent?.active && (
             <Link
               href="/billing"

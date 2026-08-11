@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -10,29 +10,31 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Menu,
-  Plus,
+  Search,
   HelpCircle,
-  Puzzle,
+  ChevronRight,
 } from "lucide-react";
 import AccountWidget from "../AccountWidget";
-import useExtension from "../../lib/useExtension";
 import useSidebarCollapse from "../useSidebarCollapse";
 import Tour from "../Tour";
 import { Sheet, SheetContent } from "../ui/sheet";
 import { cn } from "../../lib/utils";
+import { SHOW_CREDITS } from "../../../web/lib/credits-ui.cjs";
 
 // Fallback tour for pages that don't ship a section-specific one. Each page passes
 // its own `tourKey` + `tourSteps` (see app/dashboard-home.js, leads, lists) so the
 // walkthrough explains that section; a missing target just centers the copy.
 const DEFAULT_TOUR = [
-  { key: "credits", title: "Credits", body: "One balance for everything: 1 credit per new lead, 3 per audit, 5 per chatbot scan, 10 per full report." },
+  ...(SHOW_CREDITS
+    ? [{ key: "credits", title: "Credits", body: "One balance for everything: 1 credit per new lead, 3 per audit, 5 per chatbot scan, 10 per full report." }]
+    : []),
   { key: "tour-button", title: "Replay anytime", body: "Click Tour up here whenever you want to see a section's walkthrough again." },
 ];
 
 // "New search" (the find-leads start page) sits above a grouped "Projects" section
 // — Projects opens the workspace (?view=projects), with Leads + Lists under the same
 // umbrella. Billing lives in the account menu now (not the sidebar).
-const NEW_SEARCH = { key: "new", label: "New search", href: "/dashboard", icon: Plus };
+const NEW_SEARCH = { key: "new", label: "New search", href: "/dashboard", icon: Search };
 const PROJECT_NAV = [
   { key: "dashboard", label: "Projects", href: "/dashboard?view=projects", icon: LayoutGrid },
   { key: "leads", label: "Leads", href: "/leads", icon: Database },
@@ -40,10 +42,9 @@ const PROJECT_NAV = [
 ];
 
 // Live search runs in the extension, so "is it installed?" is a standing piece
-// of account state — it needs a permanent home. It used to be reachable only
-// from the dialog raised by a search that needed it, which meant nobody could
-// find it until something had already failed.
-const EXTENSION_NAV = { key: "extension", label: "Extension", href: "/extension", icon: Puzzle };
+// of account state — it needs a permanent home. That home is now the account
+// menu at the bottom of the sidebar (see app/components/AccountWidget.js), which
+// keeps it reachable from every page without spending a top-level nav slot.
 
 function Brand({ collapsed, onClick }) {
   return (
@@ -57,7 +58,7 @@ function Brand({ collapsed, onClick }) {
   );
 }
 
-function NavItem({ item, active, collapsed, onNavigate, prominent, trailing }) {
+function NavItem({ item, active, collapsed, onNavigate, prominent, trailingSpace }) {
   const { key, label, href, icon: Icon } = item;
   const isActive = active === key;
   return (
@@ -69,6 +70,7 @@ function NavItem({ item, active, collapsed, onNavigate, prominent, trailing }) {
       className={cn(
         "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
         collapsed && "justify-center px-0",
+        trailingSpace && "pr-9",
         isActive
           ? "bg-primary/10 text-primary"
           : prominent
@@ -79,40 +81,31 @@ function NavItem({ item, active, collapsed, onNavigate, prominent, trailing }) {
       {isActive && <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-primary" />}
       <Icon className="h-[18px] w-[18px] shrink-0" />
       {!collapsed && <span className="truncate">{label}</span>}
-      {trailing}
     </Link>
   );
 }
 
-// The sidebar entry carries a status dot, so the answer to "is live search
-// going to work?" is visible from every page instead of only after a search
-// stalls. Collapsed, the dot rides the icon's corner.
-function ExtensionNavItem({ active, collapsed, onNavigate }) {
-  const { checking, installed } = useExtension();
+// `projectsNav` is the caller's own project list, nested directly beneath the
+// Projects link rather than floating in a separate block further down the
+// sidebar, so the list reads as belonging to the item that opens it. It is
+// dropped in the icon rail, where there is no room to show names.
+function NavLinks({ active, collapsed, onNavigate, projectsNav }) {
+  // The nested project list is collapsible from the Projects row's chevron.
+  // Remembered per browser, because whether somebody wants the list open is a
+  // standing preference, not a per-page one.
+  const [projectsOpen, setProjectsOpen] = useState(true);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("lf_projects_open") === "0") setProjectsOpen(false);
+    } catch {}
+  }, []);
+  const toggleProjects = () => {
+    setProjectsOpen((open) => {
+      try { localStorage.setItem("lf_projects_open", open ? "0" : "1"); } catch {}
+      return !open;
+    });
+  };
 
-  const dot = checking ? null : (
-    <span
-      title={installed ? "Extension connected" : "Extension not installed"}
-      className={cn(
-        "shrink-0 rounded-full",
-        collapsed ? "absolute right-3 top-1.5 h-2 w-2 ring-2 ring-card" : "ml-auto h-2 w-2",
-        installed ? "bg-emerald-500" : "bg-amber-500"
-      )}
-    />
-  );
-
-  return (
-    <NavItem
-      item={EXTENSION_NAV}
-      active={active}
-      collapsed={collapsed}
-      onNavigate={onNavigate}
-      trailing={dot}
-    />
-  );
-}
-
-function NavLinks({ active, collapsed, onNavigate }) {
   return (
     <nav className="flex flex-col gap-1">
       <NavItem item={NEW_SEARCH} active={active} collapsed={collapsed} onNavigate={onNavigate} prominent />
@@ -123,22 +116,57 @@ function NavLinks({ active, collapsed, onNavigate }) {
           Projects
         </div>
       )}
-      {PROJECT_NAV.map((item) => (
-        <NavItem key={item.key} item={item} active={active} collapsed={collapsed} onNavigate={onNavigate} />
-      ))}
-      {collapsed ? (
-        <div className="mx-auto my-1.5 h-px w-8 bg-border/60" />
-      ) : (
-        <div className="px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-          Setup
-        </div>
-      )}
-      <ExtensionNavItem active={active} collapsed={collapsed} onNavigate={onNavigate} />
+      {PROJECT_NAV.map((item) => {
+        const expandable = item.key === "dashboard" && !collapsed && projectsNav;
+        return (
+          <Fragment key={item.key}>
+            {expandable ? (
+              // The chevron sits over the link rather than inside it: a button
+              // nested in an <a> is invalid, and the link itself must still
+              // navigate to the workspace when the row is clicked.
+              <div className="relative">
+                <NavItem item={item} active={active} collapsed={collapsed} onNavigate={onNavigate} trailingSpace />
+                <button
+                  type="button"
+                  onClick={toggleProjects}
+                  aria-expanded={projectsOpen}
+                  aria-label={projectsOpen ? "Collapse projects" : "Expand projects"}
+                  title={projectsOpen ? "Collapse projects" : "Expand projects"}
+                  className="absolute right-1.5 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <ChevronRight
+                    className={cn("h-4 w-4 transition-transform duration-200", projectsOpen && "rotate-90")}
+                  />
+                </button>
+              </div>
+            ) : (
+              <NavItem item={item} active={active} collapsed={collapsed} onNavigate={onNavigate} />
+            )}
+            {expandable ? (
+              // grid-rows 1fr → 0fr animates to the list's natural height without
+              // hard-coding one. Capped rather than unbounded: a long project list
+              // would otherwise push Leads and Lists off the bottom of the sidebar.
+              <div
+                className={cn(
+                  "grid transition-[grid-template-rows,opacity] duration-200 ease-out",
+                  projectsOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                )}
+              >
+                <div className="overflow-hidden">
+                  <div className="thin-scroll mb-1 ml-[22px] max-h-[38vh] overflow-y-auto border-l border-border/60 pl-1.5">
+                    {projectsNav}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </Fragment>
+        );
+      })}
     </nav>
   );
 }
 
-export default function AppShell({ active, title, subtitle, actions, sidebarExtra, children, tourKey = "", tourSteps }) {
+export default function AppShell({ active, title, subtitle, actions, sidebarExtra, projectsNav, children, tourKey = "", tourSteps }) {
   const [collapsed, toggleCollapsed] = useSidebarCollapse();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
@@ -197,7 +225,7 @@ export default function AppShell({ active, title, subtitle, actions, sidebarExtr
         </div>
 
         <div className={cn("px-3 py-4", collapsed && "px-2")}>
-          <NavLinks active={active} collapsed={collapsed} />
+          <NavLinks active={active} collapsed={collapsed} projectsNav={projectsNav} />
         </div>
 
         {!collapsed && sidebarExtra ? (
@@ -218,7 +246,7 @@ export default function AppShell({ active, title, subtitle, actions, sidebarExtr
             <Brand collapsed={false} />
           </div>
           <div className="thin-scroll min-h-0 flex-1 overflow-y-auto px-3 py-4">
-            <NavLinks active={active} collapsed={false} onNavigate={() => setMobileOpen(false)} />
+            <NavLinks active={active} collapsed={false} onNavigate={() => setMobileOpen(false)} projectsNav={projectsNav} />
             {sidebarExtra ? <div className="mt-4">{sidebarExtra}</div> : null}
           </div>
           <div className="shrink-0 border-t border-border/60">

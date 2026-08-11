@@ -15,6 +15,7 @@
 const fs = require("fs");
 const path = require("path");
 const proxy = require("./web/lib/proxy.cjs");
+const trackingDetect = require("./web/lib/tracking-detect.cjs");
 let PROXY_URLS = []; // admin proxy pool, loaded at startup; random per request
 
 // ---- CLI args ----------------------------------------------------------------
@@ -272,6 +273,51 @@ function extractSocial(html, into) {
 // Links worth crawling beyond the homepage, ordered by how likely they hold an email.
 const CONTACT_WORDS = /contact|kontakt|impressum|about|team|reach|support|connect/i;
 
+// Merge the marketing-stack signals found on one page into the running result.
+// Called per crawled page because a pixel is sometimes only on the booking or
+// contact page, and a union across the crawl is the honest answer for the site.
+function mergeTracking(result, html) {
+  const found = trackingDetect.detectTracking(html);
+  const into = result.tracking || (result.tracking = {});
+  for (const [key] of trackingDetect.GROUPS) {
+    const list = into[key] || (into[key] = []);
+    for (const name of found[key]) if (!list.includes(name)) list.push(name);
+  }
+}
+
+// The site's favicon, resolved to an absolute URL. Picked up on the homepage
+// during the same fetch that looks for emails, so a lead that has been enriched
+// carries its real brand mark rather than a generic placeholder. Prefers the
+// largest declared icon, then apple-touch (usually a clean square), and falls
+// back to /favicon.ico which virtually every host serves.
+function extractFavicon(html, baseUrl) {
+  const candidates = [];
+  for (const m of html.matchAll(/<link\b[^>]*>/gi)) {
+    const tag = m[0];
+    const rel = (tag.match(/\brel\s*=\s*["']([^"']+)["']/i) || [])[1] || "";
+    if (!/\b(icon|shortcut icon|apple-touch-icon)\b/i.test(rel)) continue;
+    const href = (tag.match(/\bhref\s*=\s*["']([^"']+)["']/i) || [])[1];
+    if (!href) continue;
+    const sizes = (tag.match(/\bsizes\s*=\s*["'](\d+)/i) || [])[1];
+    candidates.push({
+      href: decodeEntities(href),
+      size: sizes ? parseInt(sizes, 10) : /apple-touch/i.test(rel) ? 180 : 0,
+    });
+  }
+  candidates.sort((a, b) => b.size - a.size);
+  for (const c of candidates) {
+    try {
+      const u = new URL(c.href, baseUrl);
+      if (/^https?:$/.test(u.protocol)) return u.href;
+    } catch {}
+  }
+  try {
+    return new URL("/favicon.ico", baseUrl).href;
+  } catch {
+    return "";
+  }
+}
+
 function extractCrawlLinks(html, baseUrl) {
   const links = [];
   const host = hostOf(baseUrl);
@@ -467,6 +513,8 @@ async function browserEmails(website, result) {
       let html = (await page.content().catch(() => "")) || "";
       for (const e of extractEmails(html)) emails.add(e);
       extractSocial(html, result);
+      mergeTracking(result, html);
+      if (!result.favicon) result.favicon = extractFavicon(html, page.url());
 
       // No email on the homepage DOM? follow the first contact-ish link and try there.
       if (!emails.size) {
@@ -479,6 +527,7 @@ async function browserEmails(website, result) {
           html = (await page.content().catch(() => "")) || "";
           for (const e of extractEmails(html)) emails.add(e);
           extractSocial(html, result);
+          mergeTracking(result, html);
         }
       }
     })();
@@ -516,6 +565,9 @@ async function enrichSite(website) {
     whatsapp: "",
     telegram: "",
     enrichStatus: "",
+    tracking: null,
+    tech: "",
+    favicon: "",
   };
   const emails = new Set();
   const siteHost = hostOf(website);
@@ -539,7 +591,9 @@ async function enrichSite(website) {
         result.contactPage = finalUrl;
       }
       extractSocial(html, result);
+      mergeTracking(result, html);
       if (fetched === 1) {
+        if (!result.favicon) result.favicon = extractFavicon(html, finalUrl);
         const links = extractCrawlLinks(html, finalUrl);
         if (!result.contactPage && links.length) result.contactPage = links[0];
         queue = links;
@@ -590,6 +644,9 @@ async function enrichSite(website) {
   result.enrichStatus = list.length
     ? `ok (${list.length} email${list.length > 1 ? "s" : ""}${viaBrowser ? ", via browser" : ""})`
     : "no email found";
+  // One JSON text column on the lead; "" when the crawl saw nothing at all, so a
+  // site we failed to fetch is never recorded as "runs no pixels".
+  result.tech = trackingDetect.serialize(result.tracking);
   return result;
 }
 

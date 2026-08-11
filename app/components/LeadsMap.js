@@ -34,6 +34,10 @@ function makeCenterIcon(L) {
  *   interactive   boolean             — if true, center marker is draggable
  *   onCenterChange ({lat,lng}) => void — fired after dragging the center marker
  *   height        number (px)         — container height (default 360)
+ *   wheelZoom     boolean             — wheel zooms the map (default true). Turn
+ *                                       it off for a map inside a scrollable
+ *                                       panel, where it would swallow the scroll
+ *                                       the user meant for the panel.
  *   className     string              — extra class on the wrapper div
  *
  * Usage:
@@ -47,6 +51,7 @@ export default function LeadsMap({
   interactive = false,
   onCenterChange,
   height = 360,
+  wheelZoom = true,
   className,
 }) {
   const containerRef = useRef(null);
@@ -71,12 +76,37 @@ export default function LeadsMap({
     const lng = center?.lng ?? 0;
     const zoom = zoomFromRadius(radiusKm);
 
-    const map = L.map(containerRef.current, { scrollWheelZoom: false });
+    const map = L.map(containerRef.current, {
+      // The wheel zooms, the way it does on Google Maps. This was off, which is
+      // why the map felt inert — the only way in or out was the +/- buttons.
+      scrollWheelZoom: wheelZoom,
+      // Leaflet snaps to whole zoom levels by default, so one wheel notch jumps
+      // a full power of two and the map lurches. Quarter steps with a smaller
+      // delta give the gradual, continuous zoom Google has.
+      zoomSnap: 0.25,
+      zoomDelta: 0.5,
+      wheelPxPerZoomLevel: 100,
+      wheelDebounceTime: 20,
+      // Controls go bottom-right like Google's, not Leaflet's default top-left.
+      zoomControl: false,
+    });
     mapRef.current = map;
+    L.control.zoom({ position: "bottomright" }).addTo(map);
+    L.control.scale({ position: "bottomleft", metric: true, imperial: true }).addTo(map);
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "&copy; OpenStreetMap contributors",
-      maxZoom: 19,
+    // CARTO Voyager rather than raw openstreetmap.org tiles. Same free OSM data,
+    // but a cartography much closer to what people expect from a map in a
+    // product: muted land, clear road hierarchy, restrained labels. The plain OSM
+    // style is why this looked like a wiki map. Attribution for both OSM and
+    // CARTO is a licence condition — it stays.
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: "abcd",
+      maxZoom: 20,
+      // Serves @2x tiles on high-DPI screens, so labels are sharp instead of the
+      // soft upscaled text the single-resolution tiles gave.
+      detectRetina: true,
     }).addTo(map);
 
     map.setView([lat, lng], zoom);

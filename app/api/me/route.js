@@ -3,11 +3,15 @@ import billing from "../../../web/lib/billing.cjs";
 import db from "../../../web/lib/db.cjs";
 import notifications from "../../../web/lib/notifications.cjs";
 import { isAdminEmail } from "../../../web/lib/session.js";
+import { DEV_AUTH_ENABLED, devMePayload } from "../../../web/lib/dev-auth.js";
 
 export const dynamic = "force-dynamic";
 
 // Current user + plan entitlement + unread notification count, for the app shell.
 export async function GET() {
+  // The app shell polls this on every page; answer it from the stub so the local
+  // session works without Postgres (dev only — see web/lib/dev-auth.js).
+  if (DEV_AUTH_ENABLED) return Response.json(devMePayload());
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return Response.json({ error: "Unauthorized" }, { status: 401 });

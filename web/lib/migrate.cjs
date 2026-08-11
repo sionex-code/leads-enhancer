@@ -115,6 +115,13 @@ const STATEMENTS = [
   `ALTER TABLE leads ADD COLUMN IF NOT EXISTS domain_rating double precision`,
   `ALTER TABLE leads ADD COLUMN IF NOT EXISTS domain_rating_checked_at text`,
 
+  // ---- Marketing stack detected during enrichment (ad pixels, analytics, CMS) ----
+  `ALTER TABLE leads ADD COLUMN IF NOT EXISTS tech text`,
+  `ALTER TABLE leads ADD COLUMN IF NOT EXISTS tech_checked_at text`,
+  `ALTER TABLE enrichment_cache ADD COLUMN IF NOT EXISTS tech text`,
+  `ALTER TABLE leads ADD COLUMN IF NOT EXISTS favicon text`,
+  `ALTER TABLE enrichment_cache ADD COLUMN IF NOT EXISTS favicon text`,
+
   // sensible defaults for the free monthly grant (only inserted if absent)
   `INSERT INTO app_settings (key, value, updated_at)
      VALUES ('free_monthly_credits_enabled', '1', now()::text)

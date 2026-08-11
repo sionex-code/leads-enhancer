@@ -38,7 +38,7 @@ export function InfoPopover({ children, className, label = "More info", align = 
         <span
           onClick={(e) => e.stopPropagation()}
           className={cn(
-            "absolute top-6 z-50 rounded-lg border border-border bg-popover p-3 text-xs font-normal normal-case leading-relaxed text-muted-foreground shadow-lg",
+            "absolute top-6 z-50 rounded-lg border border-border bg-popover p-3 text-left text-xs font-normal normal-case leading-relaxed text-muted-foreground shadow-lg",
             width,
             align === "right" ? "right-0" : "left-0"
           )}

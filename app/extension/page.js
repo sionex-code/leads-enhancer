@@ -16,10 +16,9 @@ export default function ExtensionPage() {
     >
       <div className="mx-auto max-w-3xl">
         <p className="max-w-2xl text-muted-foreground">
-          Most searches are served instantly from leads we already have. When a
-          search covers ground we haven&apos;t collected yet, the extension pulls
-          it straight from the map on your machine — no queue, and no waiting
-          behind anyone else&apos;s search.
+          Most searches come straight from leads we already have. For anything we
+          have not collected yet, the extension pulls it from the map on your own
+          machine, with no queue. Four steps, about two minutes.
         </p>
 
         <InstallGuide />

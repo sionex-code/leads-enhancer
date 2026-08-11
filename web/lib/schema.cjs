@@ -159,6 +159,10 @@ const enrichmentCache = pgTable(
     whatsapp: text("whatsapp"),
     telegram: text("telegram"),
     enrichStatus: text("enrich_status"),
+    // Shared alongside the contact data: the marketing stack and favicon found
+    // on the same crawl, so a re-scrape of the same business reuses both.
+    tech: text("tech"),
+    favicon: text("favicon"),
     source: text("source"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
@@ -329,6 +333,13 @@ const leads = pgTable(
     httpStatus: integer("http_status"),
     httpStatusText: text("http_status_text"),
     httpCheckedAt: text("http_checked_at"),
+    // Marketing stack found on the site during enrichment — JSON produced by
+    // web/lib/tracking-detect.cjs ({ adPixels, analytics, platform, ... }).
+    tech: text("tech"),
+    techCheckedAt: text("tech_checked_at"),
+    // Absolute URL of the site's own favicon, captured during enrichment so the
+    // lead shows its real brand mark instead of a generic placeholder.
+    favicon: text("favicon"),
     chatbot: text("chatbot"),
     chatbotVendors: text("chatbot_vendors"),
     chatbotMethod: text("chatbot_method"),

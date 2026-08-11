@@ -28,7 +28,7 @@ export default function ExtensionStatus({ checking, installed, version }) {
         <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
         <div className="min-w-0">
           <p className="text-sm font-semibold text-foreground">
-            Connected — extension v{version}
+            Connected, extension v{version}
           </p>
           <p className="mt-0.5 text-sm text-muted-foreground">
             Live searches will run in this browser. You&apos;re all set.
@@ -44,7 +44,7 @@ export default function ExtensionStatus({ checking, installed, version }) {
       <div className="min-w-0">
         <p className="text-sm font-semibold text-foreground">Not installed yet</p>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          Follow the six steps below — it takes about two minutes. This badge
+          Follow the four steps below. It takes about two minutes, and this badge
           turns green on its own the moment the extension connects.
         </p>
       </div>

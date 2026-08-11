@@ -215,6 +215,7 @@ function normalizeLead(lead) {
 const CACHE_FIELDS = [
   "email", "all_emails", "contact_page", "facebook", "instagram", "linkedin",
   "twitter", "youtube", "tiktok", "pinterest", "whatsapp", "telegram", "enrich_status",
+  "tech", "favicon",
 ];
 const CACHE_SOCIALS = [
   "facebook", "instagram", "linkedin", "twitter", "youtube",
@@ -244,6 +245,8 @@ function cacheFieldsFrom(src) {
     whatsapp: g("whatsapp"),
     telegram: g("telegram"),
     enrich_status: g("enrich_status", "enrichStatus"),
+    tech: g("tech"),
+    favicon: g("favicon"),
   };
 }
 
@@ -922,6 +925,7 @@ const ENRICHABLE = new Set([
   "email", "all_emails", "contact_page", "facebook", "instagram", "linkedin",
   "twitter", "youtube", "tiktok", "pinterest", "whatsapp", "telegram",
   "enrich_status", "whatsapp_status", "whatsapp_id",
+  "tech", "tech_checked_at", "favicon",
 ]);
 async function updateLeadFields(userId, id, fields = {}, { overwrite = false } = {}) {
   const current = await getLead(userId, id);

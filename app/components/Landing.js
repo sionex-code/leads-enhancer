@@ -38,7 +38,6 @@ import {
 import { GoogleSignInButton } from "./GoogleSignInButton";
 import { Button } from "./ui/button";
 import RecentSearches from "./RecentSearches";
-import PublicSearch from "./PublicSearch";
 import useSignedIn, { appHref } from "../lib/useSignedIn";
 
 // Faint diagonal hatch the template uses behind several light sections.
@@ -67,13 +66,17 @@ const PILLS = [
   { label: "Clean CSV export", desc: "Export structured leads ready for your CRM.", icon: FileSpreadsheet },
 ];
 
-// Sticky-left "Discover" pastel card stack.
+// Sticky-left card stack. This section deliberately does NOT repeat the
+// capability list from "Why LeadsFunda" above it: it walks one lead through the
+// four stages it actually passes through inside the app, then explains what
+// each stage costs, so the reader learns how the product works rather than
+// reading a second grid of features.
 const DISCOVER = [
-  { icon: Filter, title: "Smart filters", body: "Slice any niche by rating, reviews and website status so you only work the leads worth your time.", grad: "from-emerald-50 to-emerald-100/40", ring: "ring-emerald-200/70", dot: "bg-emerald-400", chip: "bg-emerald-500/10 text-emerald-600" },
-  { icon: Mail, title: "Contact enrichment", body: "Emails, socials and WhatsApp pulled from each business's own site, so your list is sendable on arrival.", grad: "from-violet-50 to-violet-100/40", ring: "ring-violet-200/70", dot: "bg-violet-400", chip: "bg-violet-500/10 text-violet-600" },
-  { icon: Gauge, title: "Website health", body: "Real-Chrome audits flag broken, slow or missing sites so the warmest pitches rise to the top.", grad: "from-sky-50 to-sky-100/40", ring: "ring-sky-200/70", dot: "bg-sky-400", chip: "bg-sky-500/10 text-sky-600" },
-  { icon: Zap, title: "Instant results", body: "Leads delivered in seconds from our database of millions of verified businesses. No waiting, no browser needed.", grad: "from-orange-50 to-orange-100/40", ring: "ring-orange-200/70", dot: "bg-orange-400", chip: "bg-orange-500/10 text-orange-600" },
-  { icon: Database, title: "One clean export", body: "Every field deduped and normalised, exported to a tidy CSV that drops straight into your CRM.", grad: "from-rose-50 to-rose-100/40", ring: "ring-rose-200/70", dot: "bg-rose-400", chip: "bg-rose-500/10 text-rose-600" },
+  { icon: Search, tag: "Stage 1 · Search", title: "Answered from leads we already hold", body: "Most niche and city combinations come straight out of our index in a few seconds. When a search covers ground we have not collected yet, the browser extension runs it live on your own machine, so you never sit behind anyone else's job.", grad: "from-emerald-50 to-emerald-100/40", ring: "ring-emerald-200/70", dot: "bg-emerald-400", chip: "bg-emerald-500/10 text-emerald-600" },
+  { icon: Mail, tag: "Stage 2 · Enrich", title: "Contacts taken from their own website", body: "Every business we return gets crawled for emails, social profiles and a WhatsApp number. That is the difference between a list of map pins and a list you can actually send to on the day it arrives.", grad: "from-violet-50 to-violet-100/40", ring: "ring-violet-200/70", dot: "bg-violet-400", chip: "bg-violet-500/10 text-violet-600" },
+  { icon: Gauge, tag: "Stage 3 · Qualify", title: "A real Chrome audit of their site", body: "SSL, load speed, mobile layout and whether they run a chatbot, checked in a real browser rather than guessed. The businesses with a broken site, or no site at all, are usually the easiest pitch, and the audit tells you which ones those are.", grad: "from-sky-50 to-sky-100/40", ring: "ring-sky-200/70", dot: "bg-sky-400", chip: "bg-sky-500/10 text-sky-600" },
+  { icon: ListChecks, tag: "Stage 4 · Work it", title: "Lists, a watch list and outreach status", body: "Save leads into named lists, keep the ones you are chasing on your watch list, mark where each conversation stands, and export a deduped CSV that drops straight into your CRM.", grad: "from-orange-50 to-orange-100/40", ring: "ring-orange-200/70", dot: "bg-orange-400", chip: "bg-orange-500/10 text-orange-600" },
+  { icon: Database, tag: "What it costs", title: "Credits, charged only for new work", body: "One credit finds a lead, a quick audit is three, a chatbot scan is five and a full website report is ten. Going back over a lead you already own costs nothing, so your own list stays free to revisit as often as you like.", grad: "from-rose-50 to-rose-100/40", ring: "ring-rose-200/70", dot: "bg-rose-400", chip: "bg-rose-500/10 text-rose-600" },
 ];
 
 const STATS = [
@@ -125,25 +128,29 @@ const PLANS = [
 const PLAN_ICONS = { free: Rocket, p19: Sparkles, p35: Star, p49: Briefcase };
 
 const FAQ = [
-  { q: "Do I need to install anything?", a: "No. LeadsFunda runs entirely in the cloud. Sign in with Google, start a scrape, and your leads appear in the dashboard, even if you close the tab." },
-  { q: "Where do the leads come from?", a: "Public business listings on the major map services, for the niche and location you choose. We then visit each business's own website to enrich emails and social profiles." },
-  { q: "Can I cancel anytime?", a: "Yes. Plans are monthly and managed through Whop. Upgrade, downgrade or cancel whenever you like, with no contracts." },
-  { q: "What counts as a credit?", a: "Finding a lead costs 1 credit; a quick audit 3, a chatbot scan 5, and a full website report 10. Re-checking a lead you already own costs nothing." },
-  { q: "Is my data safe?", a: "Every account's leads and projects are fully isolated and protected. We never share or resell your data." },
-  { q: "How fast is a scrape?", a: "Jobs run on our servers with up to six in parallel, so a few thousand leads typically finish while you grab a coffee." },
+  { q: "Do I need to install anything?", a: "No. LeadsFunda runs in the cloud, so you sign in with Google and search from the browser you already have. There is an optional Chrome extension, and it only matters for cities or niches we have not indexed yet: it runs that search live on your own machine instead of putting you in a queue." },
+  { q: "How fast do leads actually arrive?", a: "Most searches are answered from leads we already hold and land in a few seconds. A search that has to be collected fresh runs as a job on our servers, several at a time, and keeps going after you close the tab." },
+  { q: "Where do the leads come from?", a: "Public business listings for the niche and location you pick. We then visit each business's own website and pull emails, social profiles and WhatsApp numbers from it, which is where most of the contact detail comes from." },
+  { q: "What is a credit, and what does each action cost?", a: "Finding a lead costs 1 credit, a quick audit 3, a chatbot scan 5 and a full website report 10. Anything you do to a lead you already own is free, so going back over your own list never costs you twice." },
+  { q: "What does the website audit check?", a: "We open the site in a real Chrome browser and check SSL, load speed, mobile layout and whether the business runs a chatbot. It is the quickest way to find the businesses whose site is broken, slow or missing altogether." },
+  { q: "Can I organise leads, or only export them?", a: "Both. Leads go into named lists, anything you are actively chasing sits on your watch list, and every lead carries an outreach status. A deduped CSV export is available whenever you want one." },
+  { q: "How does billing work, and is there a free plan?", a: "Yes, the Starter plan needs no card and includes enough credits to run real searches and export what you find. Paid plans are monthly and billed through Whop, so you can upgrade, downgrade or cancel at any time with no contract." },
+  { q: "Is my data safe?", a: "Every account's leads, lists and projects are isolated from every other account. We do not share or resell anything you collect." },
 ];
 
-// Mock data for the product-window collage.
+// Mock data for the product-window collage. The businesses are deliberately the
+// standard fictional-company names, on 555-01xx numbers and @example.com, so
+// nothing here can be mistaken for a real company's listing or contact details.
 const SCRAPE_FEED = [
-  { n: "Lone Star Plumbing", m: "(512) 555-0182", r: "4.8", bad: true },
-  { n: "Hill Country HVAC", m: "(512) 555-0143", r: "4.6", bad: false },
-  { n: "Capital Roofing Co.", m: "(512) 555-0117", r: "4.9", bad: true },
-  { n: "Barton Electric", m: "(512) 555-0164", r: "4.4", bad: false },
+  { n: "Acme Plumbing Co.", m: "(512) 555-0182", r: "4.8", bad: true },
+  { n: "Northwind HVAC", m: "(512) 555-0143", r: "4.6", bad: false },
+  { n: "Contoso Roofing Co.", m: "(512) 555-0117", r: "4.9", bad: true },
+  { n: "Fabrikam Electric", m: "(512) 555-0164", r: "4.4", bad: false },
 ];
 const ENRICH_FEED = [
-  { name: "Hill Country HVAC", e: "office@hillcountryhvac.com", wa: true },
-  { name: "Barton Electric", e: "team@bartonelectric.com", wa: true },
-  { name: "Capital Roofing", e: "hello@capitalroofing.co", wa: false },
+  { name: "Northwind HVAC", e: "office@example.com", wa: true },
+  { name: "Fabrikam Electric", e: "team@example.com", wa: true },
+  { name: "Contoso Roofing", e: "hello@example.com", wa: false },
 ];
 
 /* --------------------------------------------------------------- helpers -- */
@@ -375,15 +382,19 @@ function HeroApp() {
       </FloatCard>
 
       <FloatCard className="-right-8 top-40 w-64" delay={900}>
+        {/* Labelled so the placeholder business reads as a sample lead, not a real one. */}
+        <div className="mb-2.5 inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Example lead
+        </div>
         <div className="flex items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600"><Building2 className="h-4 w-4" /></span>
           <div className="leading-tight">
-            <div className="text-sm font-semibold text-foreground">Capital Roofing Co.</div>
+            <div className="text-sm font-semibold text-foreground">Contoso Roofing Co.</div>
             <div className="text-[11px] text-muted-foreground">Austin, TX · ★ 4.9</div>
           </div>
         </div>
         <div className="mt-3 flex items-center gap-1.5 text-xs">
-          <Mail className="h-3.5 w-3.5 text-primary" /><span className="truncate text-foreground">hello@capitalroofing.co</span>
+          <Mail className="h-3.5 w-3.5 text-primary" /><span className="truncate text-foreground">hello@example.com</span>
         </div>
         <div className="mt-3 flex flex-wrap gap-1.5">
           {[{ t: "No SSL", c: "bg-rose-500/10 text-rose-600" }, { t: "Slow site", c: "bg-amber-500/10 text-amber-600" }, { t: "No chatbot", c: "bg-sky-500/10 text-sky-700" }].map((tag) => (
@@ -579,7 +590,7 @@ function StepMock({ step }) {
           ))}
         </div>
         <div className="mt-5 flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs text-muted-foreground shadow-sm">
-          <Mail className="h-3.5 w-3.5 text-primary" /> office@hillcountryhvac.com
+          <Mail className="h-3.5 w-3.5 text-primary" /> office@example.com
           <MessageCircle className="ml-auto h-3.5 w-3.5 text-emerald-600" />
         </div>
       </div>
@@ -592,7 +603,7 @@ function StepMock({ step }) {
         <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#fec32a]/25 px-2.5 py-1 text-xs font-semibold text-[#7a4a00]"><FileSpreadsheet className="h-3.5 w-3.5" /> Export CSV</span>
       </div>
       <div className="mt-4 space-y-2">
-        {[{ n: "Hill Country HVAC", s: "Contacted", c: "bg-sky-500/10 text-sky-600" }, { n: "Barton Electric", s: "Replied", c: "bg-emerald-500/10 text-emerald-600" }, { n: "Capital Roofing", s: "To call", c: "bg-amber-500/10 text-amber-600" }, { n: "Lone Star Plumbing", s: "Won", c: "bg-[#fec32a]/30 text-[#7a4a00]" }].map((r) => (
+        {[{ n: "Northwind HVAC", s: "Contacted", c: "bg-sky-500/10 text-sky-600" }, { n: "Fabrikam Electric", s: "Replied", c: "bg-emerald-500/10 text-emerald-600" }, { n: "Contoso Roofing", s: "To call", c: "bg-amber-500/10 text-amber-600" }, { n: "Acme Plumbing Co.", s: "Won", c: "bg-[#fec32a]/30 text-[#7a4a00]" }].map((r) => (
           <div key={r.n} className="flex items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2 text-xs shadow-sm">
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
             <span className="truncate font-medium text-foreground">{r.n}</span>
@@ -731,7 +742,10 @@ function DiscoverCards() {
             className={`relative min-h-[180px] overflow-hidden rounded-3xl border border-border bg-card bg-gradient-to-br ${d.grad} p-7 ring-1 ${d.ring} shadow-xl shadow-black/[0.07]`}
           >
             <span className={`absolute right-5 top-5 h-2.5 w-2.5 rounded-full ${d.dot} shadow-[0_0_0_4px_rgba(255,255,255,0.6)]`} />
-            <div className={`mb-4 flex h-11 w-11 items-center justify-center rounded-2xl ${d.chip}`}><d.icon className="h-5 w-5" /></div>
+            <div className={`mb-4 inline-flex items-center gap-2 rounded-2xl px-3 py-2 ${d.chip}`}>
+              <d.icon className="h-5 w-5" />
+              <span className="text-[11px] font-bold uppercase tracking-wide">{d.tag}</span>
+            </div>
             <h3 className="font-heading text-xl font-bold text-foreground">{d.title}</h3>
             <p className="mt-2 max-w-sm text-sm leading-relaxed text-foreground/70">{d.body}</p>
           </div>
@@ -808,12 +822,9 @@ export default function Landing({ recent = [], total = 0 }) {
 
       {/* ---- hero ---- */}
       {/*
-        The search box IS the hero. A visitor can run a real search here, on real
-        listing data, before they have an account — so the fastest way to
-        explain the product is to let them use it, not to describe it above a
-        pair of buttons that only lead to a sign-in screen. The headline and sub
-        stay because a page still needs to say what it is (and be indexable),
-        but they are sized to keep the search box above the fold.
+        Headline, sub and a single call to action, with the product collage
+        (HeroApp) carrying the "what it looks like" job directly underneath.
+        The inline search box that used to sit here was removed on request.
       */}
       <section className="relative px-4">
         <HeroDecor />
@@ -823,7 +834,7 @@ export default function Landing({ recent = [], total = 0 }) {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-70" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-600" />
             </span>
-            Live local search — no account needed
+            Live local search, no account needed
           </span>
           {/* Two lines, always: the break is authored rather than left to the
               container, because "in any city" is the half that carries the
@@ -837,10 +848,13 @@ export default function Landing({ recent = [], total = 0 }) {
           </h1>
           <p className="mt-6 max-w-[34.5rem] text-[1.075rem] leading-[1.7] text-muted-foreground">
             Pick a niche and a city. You get the businesses, their ratings and
-            contact details — emails, socials and WhatsApp — as one list you can export.
+            contact details, including emails, socials and WhatsApp, as one list you can export.
           </p>
 
-          <PublicSearch signedIn={signedIn} />
+          {/* The hero needs one action now that the inline search box is gone. */}
+          <div className="mt-8">
+            <Cta signedIn={signedIn} size="lg" className="lf-cta rounded-xl px-7" signedInLabel="Open dashboard">Continue with Google</Cta>
+          </div>
 
           <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
             <AvatarStack />
@@ -924,9 +938,9 @@ export default function Landing({ recent = [], total = 0 }) {
       <section className="border-y border-border/60 bg-muted/20 py-24">
         <div className="container grid grid-cols-1 gap-10 lg:grid-cols-2">
           <div className="lg:sticky lg:top-28 lg:h-fit lg:self-start">
-            <Eyebrow icon={Sparkles}>Features</Eyebrow>
-            <h2 className="font-heading mt-4 text-3xl font-bold leading-tight tracking-tight sm:text-[2.6rem]">Discover everything we built with you in mind</h2>
-            <p className="mt-4 max-w-md text-muted-foreground">From smart filters to one-click export, every detail is crafted to make lead-gen smoother, faster and more impactful, so you spend time closing, not collecting.</p>
+            <Eyebrow icon={MapPin}>The lead journey</Eyebrow>
+            <h2 className="font-heading mt-4 text-3xl font-bold leading-tight tracking-tight sm:text-[2.6rem]">Follow one lead from search to sent</h2>
+            <p className="mt-4 max-w-md text-muted-foreground">A map listing is a name and a pin. Here is exactly what LeadsFunda does to it before it reaches you, stage by stage, and what each stage costs in credits.</p>
             <div className="mt-7 hidden lg:block">
               <Cta signedIn={signedIn} size="lg" className="lf-cta rounded-xl px-7" signedInLabel="Open dashboard">Continue with Google</Cta>
             </div>
@@ -1094,7 +1108,7 @@ export default function Landing({ recent = [], total = 0 }) {
                       <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-300 shrink-0 ${isOpen ? "rotate-180 text-primary" : ""}`} />
                     </button>
                     <div
-                      className={`transition-all duration-300 ease-in-out ${isOpen ? "max-h-[300px] border-t border-border/50 opacity-100" : "max-h-0 opacity-0 pointer-events-none"}`}
+                      className={`transition-all duration-300 ease-in-out ${isOpen ? "max-h-[440px] border-t border-border/50 opacity-100" : "max-h-0 opacity-0 pointer-events-none"}`}
                     >
                       <div className="p-5 text-sm leading-relaxed text-muted-foreground bg-muted/10">
                         {item.a}

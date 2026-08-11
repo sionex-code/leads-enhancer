@@ -6,7 +6,7 @@ import { cn, waMeLink, waState } from "../lib/utils";
 // Brand-colored social chips shared by every lead view. Each entry carries the
 // lead field to read, a display label, the brand background (a CSS gradient for
 // Instagram), and a 24x24 simple-icons glyph path drawn in white.
-const SOCIALS = [
+export const SOCIALS = [
   {
     key: "facebook",
     label: "Facebook",
@@ -63,11 +63,23 @@ const SOCIALS = [
   },
 ];
 
+// Networks worth showing as an explicit gap in the workspace table. A missing
+// Facebook or Instagram page is a thing you can sell; a missing Telegram is not,
+// so `showMissing` only greys out these four rather than all nine.
+const MISSING_SHOWN = ["facebook", "instagram", "linkedin", "twitter"];
+
 // Colorful brand chips for whatever social links a lead has. Falls back to a
 // dash when there are none. Used in tables, cards and lead drawers alike.
-export function Socials({ lead }) {
+//
+// With `showMissing`, the absent networks render as flat grey chips next to the
+// present ones instead of vanishing — so a row that has nothing reads as an
+// opportunity rather than as empty space.
+export function Socials({ lead, showMissing = false }) {
   const present = SOCIALS.filter((s) => lead[s.key]);
-  if (!present.length) return <span className="text-xs text-muted-foreground">-</span>;
+  const missing = showMissing
+    ? SOCIALS.filter((s) => MISSING_SHOWN.includes(s.key) && !lead[s.key])
+    : [];
+  if (!present.length && !missing.length) return <span className="text-xs text-muted-foreground">-</span>;
   return (
     <div className="flex flex-wrap gap-1">
       {present.map((s) => (
@@ -86,6 +98,18 @@ export function Socials({ lead }) {
             <path d={s.path} />
           </svg>
         </a>
+      ))}
+      {missing.map((s) => (
+        <span
+          key={s.key}
+          title={`No ${s.label} page found`}
+          aria-label={`No ${s.label} page found`}
+          className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-muted text-muted-foreground/40"
+        >
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
+            <path d={s.path} />
+          </svg>
+        </span>
       ))}
     </div>
   );
@@ -114,7 +138,12 @@ export function WaIcon({ lead, size = 14, className = "" }) {
 // A lead's phone, rendered as a click-to-chat wa.me link (green) when the number
 // is on WhatsApp and a link can be built, otherwise as plain text. Renders null
 // when the lead has no phone so call sites can supply their own placeholder.
-export function WaPhone({ lead, className = "" }) {
+// The phone number, which doubles as the WhatsApp control. Once a number is known
+// to be on WhatsApp it opens the chat; before that, callers that pass `onCheck`
+// turn the number itself into the "is this on WhatsApp?" trigger, so the check
+// lives on the thing it is about instead of a separate icon in the actions column.
+// Callers that pass no `onCheck` keep the previous plain-text behaviour.
+export function WaPhone({ lead, className = "", onCheck, busy = false }) {
   if (!lead?.phone) return null;
   const link = waState(lead) === "yes" ? waMeLink(lead) : "";
   if (link) {
@@ -131,5 +160,38 @@ export function WaPhone({ lead, className = "" }) {
       </a>
     );
   }
+  if (onCheck) {
+    const checked = waState(lead) === "no";
+    return (
+      <button
+        type="button"
+        disabled={busy}
+        onClick={(e) => {
+          e.stopPropagation();
+          onCheck(lead);
+        }}
+        title={checked ? "Not on WhatsApp — check again" : "Check whether this number is on WhatsApp"}
+        className={cn(
+          "underline decoration-dotted underline-offset-4 transition-colors disabled:opacity-60",
+          checked ? "text-red-600" : "hover:text-primary",
+          className
+        )}
+      >
+        {busy ? "Checking…" : lead.phone}
+      </button>
+    );
+  }
   return <span className={className}>{lead.phone}</span>;
+}
+
+// Monochrome brand glyph for one network, for lists that want the shape without
+// the colored chip (e.g. the lead detail drawer's presence rows).
+export function BrandIcon({ network, size = 15, className = "" }) {
+  const s = SOCIALS.find((x) => x.key === network);
+  if (!s) return null;
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden="true" className={className}>
+      <path d={s.path} />
+    </svg>
+  );
 }

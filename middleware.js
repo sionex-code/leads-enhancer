@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { DEV_AUTH_ENABLED } from "./web/lib/dev-auth.js";
 
 // Two-host topology (see deploy-saas.yml + the VPS nginx vhosts):
 //   • Marketing landing  -> leadsfunda.com (+ www)   [NEXT_PUBLIC_MARKETING_URL]
@@ -45,6 +46,9 @@ function matchPrefix(pathname, prefixes) {
 }
 
 function hasSessionCookie(request) {
+  // Local fake session: pretend the cookie is present so the gated pages render
+  // instead of bouncing to /login. Dev only — see web/lib/dev-auth.js.
+  if (DEV_AUTH_ENABLED) return true;
   const c = request.cookies;
   return Boolean(
     c.get("authjs.session-token") || c.get("__Secure-authjs.session-token")

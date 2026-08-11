@@ -1,6 +1,8 @@
 import db from "../../../web/lib/db.cjs";
 import siteReport from "../../../web/lib/site-report.cjs";
 import { requireUser } from "../../../web/lib/session.js";
+import { DEV_AUTH_ENABLED } from "../../../web/lib/dev-auth.js";
+import devLeads from "../../../web/lib/dev-leads.cjs";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +27,24 @@ export async function GET(request) {
   if (response) return response;
   const { searchParams } = new URL(request.url);
   const country = searchParams.get("country") || "";
+  // Local dev: serve the rows straight out of the seeded project CSVs so the
+  // table has real leads in it without a database (see web/lib/dev-leads.cjs).
+  if (DEV_AUTH_ENABLED) {
+    return Response.json(
+      devLeads.leadsPayload({
+        search: searchParams.get("search") || "",
+        hasEmail: searchParams.get("hasEmail") || "",
+        hasWebsite: searchParams.get("hasWebsite") || "",
+        project: searchParams.get("project") || "",
+        country,
+        city: searchParams.get("city") || "",
+        watchlist: searchParams.get("watchlist") === "1",
+        contactList: searchParams.get("contactList") === "1",
+        limit: Number(searchParams.get("limit") || 2000),
+        offset: Number(searchParams.get("offset") || 0),
+      })
+    );
+  }
   const [result, stats, projects, countries, cities, lists] = await Promise.all([
     db.queryLeads(userId, {
       search: searchParams.get("search") || "",

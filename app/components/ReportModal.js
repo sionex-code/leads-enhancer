@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ExternalLink, FileText, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Button } from "./ui/button";
+import { SHOW_CREDITS } from "../../web/lib/credits-ui.cjs";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 const REPORT_COST = 10; // credits per report (mirrors billing.REPORT_COST)
@@ -104,16 +105,18 @@ export default function ReportModal({ lead, onClose, onCharged }) {
           </div>
         </DialogHeader>
 
-        {/* Credit / time confirmation before spending credits. */}
+        {/* Time (and, when credits are shown, cost) confirmation before running. */}
         {confirming && !generating && (
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-primary/5 px-5 py-3">
             <div className="text-sm">
               <span className="font-medium text-foreground">Generate this report?</span>{" "}
-              <span className="text-muted-foreground">Uses <strong className="text-foreground">{REPORT_COST} credits</strong> and takes ~1–2 minutes (real-Chrome audit + AI summary + chatbot check).</span>
+              <span className="text-muted-foreground">
+                {SHOW_CREDITS ? <>Uses <strong className="text-foreground">{REPORT_COST} credits</strong> and takes</> : "Takes"} ~1–2 minutes (real-Chrome audit + AI summary + chatbot check).
+              </span>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>Cancel</Button>
-              <Button size="sm" onClick={generate}><FileText size={14} /> Use {REPORT_COST} credits</Button>
+              <Button size="sm" onClick={generate}><FileText size={14} /> {SHOW_CREDITS ? `Use ${REPORT_COST} credits` : "Generate"}</Button>
             </div>
           </div>
         )}

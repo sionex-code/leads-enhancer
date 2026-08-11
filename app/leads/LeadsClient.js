@@ -44,6 +44,7 @@ import { InfoPopover } from "../components/ui/info-popover";
 import useColumnVisibility from "../components/useColumnVisibility";
 import { cn, waMeLink, waState, prettyEnrichStatus } from "../lib/utils";
 import { Socials, WaIcon, WaPhone } from "../components/SocialIcons";
+import { SHOW_CREDITS } from "../../web/lib/credits-ui.cjs";
 
 const LeadsMap = dynamic(() => import("../components/LeadsMap"), { ssr: false });
 
@@ -63,12 +64,10 @@ const COLUMNS = [
   { id: "contact", label: "Contact", defaultVisible: true, export: ["email", "all_emails", "phone", "whatsapp", "whatsapp_status"] },
   { id: "rating", label: "Rating", defaultVisible: true, export: ["rating"] },
   { id: "reviews", label: "Reviews", defaultVisible: true, export: ["reviews"] },
-  { id: "ownerReply", label: "Owner reply", defaultVisible: true, export: ["owner_replied", "owner_reply_count"] },
   { id: "domainRating", label: "Domain rating", defaultVisible: false, export: ["domain_rating", "domain_rating_checked_at"] },
   { id: "status", label: "Status", defaultVisible: true, export: ["watchlist", "contact_list", "outreach_status", "email_status", "notes"] },
   { id: "emailStatus", label: "Email status", defaultVisible: true },
   { id: "website", label: "Website", defaultVisible: true, export: ["website", "domain", "facebook", "instagram", "linkedin", "twitter", "youtube", "tiktok", "pinterest", "telegram"] },
-  { id: "health", label: "Health", defaultVisible: true, export: ["desktop_performance", "desktop_seo", "desktop_accessibility", "mobile_performance", "mobile_seo", "mobile_accessibility"] },
   { id: "location", label: "Location", defaultVisible: true, export: ["city", "country", "plus_code"] },
   { id: "address", label: "Address", defaultVisible: false, export: ["address"] },
   { id: "category", label: "Category", defaultVisible: false, export: ["category", "hours", "maps_url"] },
@@ -76,7 +75,16 @@ const COLUMNS = [
 
 // DB columns that are always included in the export regardless of column
 // visibility — they identify the row and its provenance.
-const ALWAYS_EXPORT = ["dedup_key", "first_seen", "last_updated"];
+//
+// The owner-reply and website-health fields sit here too. Their table columns
+// were removed, so there is no longer a visibility toggle to carry them, but the
+// data is still collected and the CSV would silently lose it otherwise.
+const ALWAYS_EXPORT = [
+  "dedup_key", "first_seen", "last_updated",
+  "owner_replied", "owner_reply_count",
+  "desktop_performance", "desktop_seo", "desktop_accessibility",
+  "mobile_performance", "mobile_seo", "mobile_accessibility",
+];
 
 // Resolve the visible columns' DB column list for the export endpoint.
 function visibleExportColumns(isVisible) {
@@ -88,17 +96,6 @@ function visibleExportColumns(isVisible) {
 }
 
 // Explanations surfaced behind (i) icons in the table headers.
-const HEALTH_INFO = (
-  <>
-    Real-Chrome audit score (0-100, higher is better). Perf = page speed, SEO = search readiness.
-    <span className="mt-2 flex flex-wrap gap-1">
-      <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 font-medium text-emerald-600">90-100 Good</span>
-      <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-600">50-89 Needs work</span>
-      <span className="rounded bg-red-500/15 px-1.5 py-0.5 font-medium text-red-600">0-49 Poor</span>
-    </span>
-  </>
-);
-const OWNER_REPLY_INFO = "Being updated soon — this feature will be available shortly. If you upgraded today, you'll get bonus credits when we release it to existing users.";
 const DOMAIN_RATING_INFO = (
   <>
     Ahrefs Domain Rating (0-100) — strength of the site&apos;s backlink profile on a logarithmic scale. Higher = more authority.
@@ -498,6 +495,9 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot, on
                     radiusKm={1}
                     points={[{ lat: lead.lat, lng: lead.lng, name: lead.name || "Lead" }]}
                     interactive={false}
+                    /* Inside the drawer — wheel zoom here would eat the scroll
+                       meant for the panel. Use the +/- buttons on this one. */
+                    wheelZoom={false}
                     height={200}
                     className="rounded-lg overflow-hidden border border-border"
                   />
@@ -568,7 +568,7 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot, on
           </DrawerCard>
 
           <DrawerCard title="Independent report">
-            <p className="text-xs text-muted-foreground">Fast real-Chrome audit (desktop + mobile): speed, layout, mobile, SEO, security, support-chat, summarized by AI, with the raw report attached. <span className="font-medium text-foreground">Costs {REPORT_COST} credits.</span></p>
+            <p className="text-xs text-muted-foreground">Fast real-Chrome audit (desktop + mobile): speed, layout, mobile, SEO, security, support-chat, summarized by AI, with the raw report attached.{SHOW_CREDITS ? <> <span className="font-medium text-foreground">Costs {REPORT_COST} credits.</span></> : null}</p>
             <div className="mt-2 space-y-1.5">
               {reports.map((r) => (
                 <a key={r.file} className="flex items-center gap-2 text-sm text-primary hover:underline" href={`${BASE_PATH}/api/agent/reports/${r.file}`} target="_blank" rel="noreferrer">
@@ -782,7 +782,9 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
       return;
     }
     const cost = ids.length * CHATBOT_COST;
-    if (!confirm(`Scan ${ids.length} site(s) for chatbots? This costs ${CHATBOT_COST} credits each = ${cost} credits.`)) return;
+    if (!confirm(SHOW_CREDITS
+      ? `Scan ${ids.length} site(s) for chatbots? This costs ${CHATBOT_COST} credits each = ${cost} credits.`
+      : `Scan ${ids.length} site(s) for chatbots?`)) return;
     setBulkBusy("chatbot");
     try {
       const data = await jsonFetch(`/api/leads/scan`, { method: "POST", body: JSON.stringify({ ids, action: "chatbot" }) });
@@ -854,10 +856,16 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
     const cost = ids.length * unit;
     const have = credits ?? 0;
     if (cost > have) {
-      alert(`Not enough credits. ${ids.length} ${noun}(s) need ${cost} credits and you have ${have}. Reduce your selection or top up in Billing.`);
+      // The guard stays even when credits are hidden — the run would fail
+      // server-side anyway, and failing before it starts is the kinder version.
+      alert(SHOW_CREDITS
+        ? `Not enough credits. ${ids.length} ${noun}(s) need ${cost} credits and you have ${have}. Reduce your selection or top up in Billing.`
+        : `Your plan doesn't have enough allowance left for ${ids.length} ${noun}(s). Reduce your selection or upgrade in Billing.`);
       return;
     }
-    if (!confirm(`Run ${ids.length} ${noun}${ids.length === 1 ? "" : "s"}?\n\nThis will use ${cost} credits (${ids.length} × ${unit}). You have ${have}, leaving ${have - cost}.`)) return;
+    if (!confirm(SHOW_CREDITS
+      ? `Run ${ids.length} ${noun}${ids.length === 1 ? "" : "s"}?\n\nThis will use ${cost} credits (${ids.length} × ${unit}). You have ${have}, leaving ${have - cost}.`
+      : `Run ${ids.length} ${noun}${ids.length === 1 ? "" : "s"}?`)) return;
     setBulkBusy(kind);
     try {
       const data = await jsonFetch(endpoint, { method: "POST", body: JSON.stringify({ ids }) });
@@ -892,7 +900,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
       alert("Select one or more leads that have a website first.");
       return;
     }
-    if (!confirm(`Fetch Ahrefs Domain Rating for ${ids.length} lead${ids.length === 1 ? "" : "s"}?\n\nFree public endpoint, no credits used.`)) return;
+    if (!confirm(`Fetch Ahrefs Domain Rating for ${ids.length} lead${ids.length === 1 ? "" : "s"}?\n\n${SHOW_CREDITS ? "Free public endpoint, no credits used." : "Free public endpoint."}`)) return;
     setBulkBusy("dr");
     try {
       const data = await jsonFetch(`/api/leads/domain-rating/bulk`, { method: "POST", body: JSON.stringify({ ids }) });
@@ -914,8 +922,15 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
   const auditOne = useCallback(async (lead) => {
     if (!lead.website) return;
     const have = credits ?? 0;
-    if (AUDIT_COST > have) { alert(`Not enough credits — an audit needs ${AUDIT_COST} and you have ${have}.`); return; }
-    if (!confirm(`Audit ${lead.name || "this site"} (desktop + mobile) for ${AUDIT_COST} credits?`)) return;
+    if (AUDIT_COST > have) {
+      alert(SHOW_CREDITS
+        ? `Not enough credits — an audit needs ${AUDIT_COST} and you have ${have}.`
+        : "Your plan doesn't have enough allowance left for an audit. Upgrade in Billing.");
+      return;
+    }
+    if (!confirm(SHOW_CREDITS
+      ? `Audit ${lead.name || "this site"} (desktop + mobile) for ${AUDIT_COST} credits?`
+      : `Audit ${lead.name || "this site"} (desktop + mobile)?`)) return;
     const key = `${lead.id}:audit`;
     setBusyKey(key, true);
     try {
@@ -1285,17 +1300,17 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
             <div className="ml-auto flex flex-wrap items-center gap-2">
               <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>Clear</Button>
               <Button variant="outline" size="sm" onClick={() => setListDialog({ ids: [...selected] })}><ListPlus size={15} /> Add to list</Button>
-              <Button variant="outline" size="sm" disabled={!!batchBusy || !!batch || !reportableCount} onClick={bulkReport} title={reportCost > 0 ? `Generate website reports (${REPORT_COST} credits each = ${reportCost} credits)` : "Select leads with a website first"}>
+              <Button variant="outline" size="sm" disabled={!!batchBusy || !!batch || !reportableCount} onClick={bulkReport} title={reportableCount ? (SHOW_CREDITS ? `Generate website reports (${REPORT_COST} credits each = ${reportCost} credits)` : "Generate website reports for the selected leads") : "Select leads with a website first"}>
                 {batchBusy === "report" ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
-                Report {reportableCount ? `(${reportCost})` : ""}
+                Report {SHOW_CREDITS && reportableCount ? `(${reportCost})` : ""}
               </Button>
               <Button variant="outline" size="sm" disabled={!!bulkBusy} onClick={bulkDomainRating} title="Fetch Ahrefs Domain Rating (free) for the selected leads">
                 {bulkBusy === "dr" ? <Loader2 size={15} className="animate-spin" /> : <BarChart3 size={15} />}
                 Domain rating
               </Button>
-              <Button variant="outline" size="sm" disabled={!!batchBusy || !!batch || !reportableCount} onClick={bulkAudit} title={auditCost > 0 ? `Run quick audits (${AUDIT_COST} credits each = ${auditCost} credits)` : "Select leads with a website first"}>
+              <Button variant="outline" size="sm" disabled={!!batchBusy || !!batch || !reportableCount} onClick={bulkAudit} title={reportableCount ? (SHOW_CREDITS ? `Run quick audits (${AUDIT_COST} credits each = ${auditCost} credits)` : "Run quick audits on the selected leads") : "Select leads with a website first"}>
                 {batchBusy === "audit" ? <Loader2 size={15} className="animate-spin" /> : <BarChart3 size={15} />}
-                Audit {reportableCount ? `(${auditCost})` : ""}
+                Audit {SHOW_CREDITS && reportableCount ? `(${auditCost})` : ""}
               </Button>
               <Button variant="destructive" size="sm" disabled={!!bulkBusy} onClick={bulkDelete} title={workflow === "watchlist" || workflow === "contacts" ? "Remove selected from this list" : "Delete selected permanently"}>
                 {bulkBusy === "delete" ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
@@ -1407,12 +1422,10 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                       {isVisible("contact") && <TableHead>Contact</TableHead>}
                       {isVisible("rating") && <TableHead>Rating</TableHead>}
                       {isVisible("reviews") && <TableHead>Reviews</TableHead>}
-                      {isVisible("ownerReply") && <TableHead><span className="inline-flex items-center gap-1">Owner reply <InfoPopover label="About owner reply">{OWNER_REPLY_INFO}</InfoPopover></span></TableHead>}
                       {isVisible("domainRating") && <TableHead><span className="inline-flex items-center gap-1">Domain rating <InfoPopover label="About Domain Rating">{DOMAIN_RATING_INFO}</InfoPopover></span></TableHead>}
                       {isVisible("status") && <TableHead>Status</TableHead>}
                       {isVisible("emailStatus") && <TableHead>Email status</TableHead>}
                       {isVisible("website") && <TableHead>Website</TableHead>}
-                      {isVisible("health") && <TableHead><span className="inline-flex items-center gap-1">Health <InfoPopover label="About website health">{HEALTH_INFO}</InfoPopover></span></TableHead>}
                       {isVisible("location") && <TableHead>Location</TableHead>}
                       {isVisible("address") && <TableHead>Address</TableHead>}
                       {isVisible("category") && <TableHead>Category</TableHead>}
@@ -1421,7 +1434,6 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                   </TableHeader>
                   <TableBody>
                     {rows.map((lead, idx) => {
-                      const ownerReplied = lead.owner_replied;
                       return (
                       <TableRow key={lead.id} className={cn("cursor-pointer", selected.has(lead.id) && "bg-primary/5")} onClick={() => toggleSelect(lead.id)}>
                         <TableCell className="w-8" onClick={(e) => e.stopPropagation()}>
@@ -1477,17 +1489,6 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                         {isVisible("reviews") && (
                           <TableCell className="text-xs tabular-nums">{reviewCount(lead).toLocaleString()}</TableCell>
                         )}
-                        {isVisible("ownerReply") && (
-                          <TableCell className="text-xs">
-                            {ownerReplied === 1 ? (
-                              <span className="text-emerald-600">Yes {lead.owner_reply_count != null ? `(${lead.owner_reply_count})` : ""}</span>
-                            ) : ownerReplied === 0 ? (
-                              <span className="text-muted-foreground">No</span>
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </TableCell>
-                        )}
                         {isVisible("domainRating") && (
                           <TableCell className="text-xs">
                             {lead.domain_rating != null && lead.domain_rating !== "" ? (
@@ -1534,15 +1535,6 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                               <ChatbotBadge lead={lead} />
                             </div>
                             <div className="mt-1"><Socials lead={lead} /></div>
-                          </TableCell>
-                        )}
-                        {isVisible("health") && (
-                          <TableCell>
-                            <div className="flex flex-wrap gap-1">
-                              <Score label="D" value={lead.desktop_performance} />
-                              <Score label="M" value={lead.mobile_performance} />
-                              <Score label="SEO" value={lead.desktop_seo || lead.mobile_seo} />
-                            </div>
                           </TableCell>
                         )}
                         {isVisible("location") && (

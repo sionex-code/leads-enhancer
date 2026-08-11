@@ -7,10 +7,11 @@ import Google from "next-auth/providers/google";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import pg from "./web/lib/pg.cjs";
 import billing from "./web/lib/billing.cjs";
+import { DEV_AUTH_ENABLED, devSession } from "./web/lib/dev-auth.js";
 
 const { orm, schema } = pg;
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+const nextAuth = NextAuth({
   adapter: DrizzleAdapter(orm(), {
     usersTable: schema.users,
     accountsTable: schema.accounts,
@@ -82,3 +83,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
 });
+
+export const { handlers, signIn, signOut } = nextAuth;
+
+// Single choke point for the local fake session (see web/lib/dev-auth.js): every
+// caller — /api/me, requireUser, the server components — imports `auth` from
+// here, so stubbing it here covers all of them and never reaches the database.
+// Outside dev-fake-auth mode this is Auth.js's real `auth`, untouched.
+export const auth = DEV_AUTH_ENABLED ? async () => devSession() : nextAuth.auth;
+
+if (DEV_AUTH_ENABLED) {
+  console.warn(
+    "[dev-auth] DEV_FAKE_AUTH=1 — every request is treated as signed in as " +
+      "dev@localhost. Local development only."
+  );
+}

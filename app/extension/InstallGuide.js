@@ -45,8 +45,8 @@ function Callout({ tone = "info", icon: Icon = Info, children }) {
 }
 
 // Unzipping is the only step where the operating system genuinely changes the
-// instruction, and it is also where installs most often go wrong — so it gets
-// its own step and its own wording per OS rather than a vague "unzip it".
+// instruction, and it is also where installs most often go wrong, so it keeps
+// its own wording per OS rather than a vague "unzip it".
 const UNZIP = {
   windows: (
     <>
@@ -99,10 +99,15 @@ function OtherBrowsers({ currentId }) {
   );
 }
 
+// Four steps, not six. Downloading and unzipping are one errand in the user's
+// head, and so are "open the extensions page" and "flip the switch on it", so
+// pairing them cuts the apparent length of the install without dropping a single
+// instruction. Picking the folder keeps its own step because it is where installs
+// actually fail.
 function steps(browser) {
   return [
     {
-      title: "Download the extension",
+      title: "Download and unzip",
       body: (
         <>
           <a
@@ -114,61 +119,36 @@ function steps(browser) {
             Download {ZIP_NAME}
           </a>
           <p className="mt-2 text-sm text-muted-foreground">
-            It&apos;s a small file — around 100&nbsp;KB — and lands in your
-            Downloads folder.
+            About 100&nbsp;KB. It lands in your Downloads folder.
           </p>
-        </>
-      ),
-    },
-    {
-      title: "Unzip it",
-      body: (
-        <>
-          <p className="text-sm text-muted-foreground">
+          <p className="mt-2 text-sm text-muted-foreground">
             {browser.ready ? UNZIP[browser.os] || UNZIP.other : UNZIP.other}
           </p>
           <Callout tone="warn" icon={AlertTriangle}>
-            Extract it properly — don&apos;t just double-click the zip and browse
-            around inside it. Your browser can&apos;t load an extension from
-            inside a zip, and the preview window it opens is a temporary
-            location that disappears.
-          </Callout>
-          <Callout>
-            Keep the extracted folder. Your browser re-reads it every time it
-            starts, so moving or deleting it later switches the extension off.
-            Documents is a safer home for it than Downloads.
+            Unzip it properly, don&apos;t just look inside the zip. Then keep the
+            folder somewhere permanent, like Documents. Your browser re-reads it
+            at every start, so deleting it turns the extension off.
           </Callout>
         </>
       ),
     },
     {
-      title: `Open the extensions page in ${browser.ready ? browser.name : "your browser"}`,
+      title: "Open the extensions page and turn on Developer mode",
       body: (
         <>
           <p className="text-sm text-muted-foreground">
-            Copy this address, paste it into the address bar, and press Enter.
+            Paste this into the address bar and press Enter. Browsers block links
+            to their own internal pages, so pasting is the only way in.
           </p>
           <div className="mt-2.5">
             <CopyChromeUrl url={browser.url || "chrome://extensions"} />
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Browsers block web pages from linking to their own internal pages, so
-            copy-paste is the only way in.
-          </p>
-          <OtherBrowsers currentId={browser.ready ? browser.id : null} />
-        </>
-      ),
-    },
-    {
-      title: "Turn on Developer mode",
-      body: (
-        <>
-          <p className="text-sm text-muted-foreground">
-            Flip the <strong className="text-foreground">Developer mode</strong>{" "}
-            switch in the top-right corner. This is what lets your browser load
-            an extension from a folder instead of the Web Store.
+          <p className="mt-3 text-sm text-muted-foreground">
+            Turn on <strong className="text-foreground">Developer mode</strong>,
+            top right of that page.
           </p>
           <ExtensionsPageDiagram highlight="developer" />
+          <OtherBrowsers currentId={browser.ready ? browser.id : null} />
         </>
       ),
     },
@@ -177,15 +157,13 @@ function steps(browser) {
       body: (
         <>
           <p className="text-sm text-muted-foreground">
-            Three buttons appear once Developer mode is on. Click{" "}
-            <strong className="text-foreground">Load unpacked</strong> and select
-            the <Code>{FOLDER_NAME}</Code> folder you extracted in step 2.
+            Click <strong className="text-foreground">Load unpacked</strong>, then
+            select the <Code>{FOLDER_NAME}</Code> folder you just unzipped.
           </p>
           <ExtensionsPageDiagram highlight="load" />
           <Callout tone="warn" icon={AlertTriangle}>
             <p>
-              Select the folder that has <Code>manifest.json</Code> directly
-              inside it — not the folder above it.
+              Pick the folder with <Code>manifest.json</Code> directly inside it.
             </p>
             <pre className="mt-2.5 overflow-x-auto rounded-md bg-card p-3 font-mono text-xs leading-relaxed text-muted-foreground">
               {`Downloads/
@@ -196,10 +174,8 @@ function steps(browser) {
     └── icons/`}
             </pre>
             <p className="mt-2">
-              If you see{" "}
-              <em>&quot;Manifest file is missing or unreadable&quot;</em>,
-              you&apos;ve picked the wrong level. Go one folder in, or one
-              folder out.
+              <em>&quot;Manifest file is missing or unreadable&quot;</em> means
+              you picked the wrong level. Go one folder in or out.
             </p>
           </Callout>
         </>
@@ -211,9 +187,8 @@ function steps(browser) {
         <>
           <p className="text-sm text-muted-foreground">
             <strong className="text-foreground">LeadsFunda Lead Scraper</strong>{" "}
-            should now be listed. Switch back to this tab and press the button —
-            it reloads the page, which a freshly installed extension needs
-            before it can reach a tab that was already open.
+            should now be in the list. Come back here and press the button. It
+            reloads this page, which a new extension needs before it can see it.
           </p>
           <CheckAgainButton />
         </>
@@ -222,9 +197,9 @@ function steps(browser) {
   ];
 }
 
-// The old step six just asked people to reload. Telling somebody mid-install to
-// go and press their own reload button is a step they can get wrong, or skip
-// and then conclude the install failed — so it is a button here instead.
+// The last step used to just ask people to reload. Telling somebody mid-install
+// to go and press their own reload button is a step they can get wrong, or skip
+// and then conclude the install failed, so it is a button here instead.
 function CheckAgainButton() {
   return (
     <button
@@ -233,7 +208,7 @@ function CheckAgainButton() {
       className="mt-3 inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm transition hover:bg-accent"
     >
       <RefreshCw className="h-4 w-4" />
-      I&apos;ve installed it — check now
+      I&apos;ve installed it, check now
     </button>
   );
 }
@@ -272,7 +247,7 @@ function ReadyPanel({ version }) {
         <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
         <div className="min-w-0">
           <h2 className="font-medium text-foreground">
-            Installed — you&apos;re ready to search
+            Installed, you&apos;re ready to search
           </h2>
           <p className="mt-1.5 text-sm text-muted-foreground">
             Extension v{version} is connected. Live searches now run in this
@@ -305,66 +280,50 @@ const FAQ = [
     q: "It still says not installed, but I’ve installed it",
     a: (
       <>
-        Reload this page first — the button in step 6 does it, and that alone
-        fixes it most of the time. A newly loaded extension can only reach tabs
-        opened after it. If it still says not installed, open the extensions
-        page again and check the extension&apos;s own toggle is on, and that the
-        address bar says <Code>leadsfunda.com</Code> — the extension is limited
-        to that domain, so a preview or staging address won&apos;t connect.
+        Reload this page, which the button in step 4 does. That fixes it most of
+        the time. If not, check the extension&apos;s own toggle is on and that
+        the address bar says <Code>leadsfunda.com</Code>, the only domain it
+        works on.
       </>
     ),
   },
   {
     q: "A search still says I need the extension",
-    a: (
-      <>
-        The tab running the search has to have been opened after the extension
-        was loaded, same as this one. Reload that tab too — the search itself is
-        unaffected, it just can&apos;t see the extension yet.
-      </>
-    ),
+    a: "Reload that tab too. A new extension can only see tabs opened after it.",
   },
   {
     q: "It says the manifest file is missing or unreadable",
     a: (
       <>
-        That is always the wrong folder. You want the one containing{" "}
-        <Code>manifest.json</Code> — see step 5. It also appears if you pointed
-        the browser at the zip file itself instead of an extracted folder.
+        Wrong folder. Pick the one containing <Code>manifest.json</Code>, see
+        step 3. You get the same message if you point at the zip itself.
       </>
     ),
   },
   {
     q: "My browser warns that it isn’t from the Web Store",
-    a: "Expected — this extension is distributed directly rather than through the store. Keep Developer mode switched on and dismiss the notice. Your browser may ask again after it updates.",
+    a: "Expected. We hand out the extension directly. Leave Developer mode on and dismiss the notice.",
   },
   {
     q: "The extension disappeared after I restarted my browser",
     a: (
       <>
-        The folder was moved, deleted, or was a temporary one inside the zip
-        preview. Extract <Code>{ZIP_NAME}</Code> again somewhere permanent and
-        repeat step 5.
+        Its folder was moved or deleted. Unzip <Code>{ZIP_NAME}</Code> again
+        somewhere permanent and repeat step 3.
       </>
     ),
   },
   {
     q: "How do I update it later?",
-    a: (
-      <>
-        Download the zip again, extract it over the same folder, then click the
-        circular refresh arrow on the extension&apos;s card on the extensions
-        page. No need to remove and re-add it.
-      </>
-    ),
+    a: "Download the zip again, unzip it over the same folder, then click the refresh arrow on its card. No need to remove and re-add it.",
   },
   {
     q: "Why does it need access to every site?",
-    a: "It reads map search results, then visits each business's own website to find an email and social links — the same enrichment LeadsFunda has always done, just from your browser instead of our server.",
+    a: "It reads map results, then visits each business's website for an email and social links. Same enrichment as always, just from your browser.",
   },
   {
     q: "Do I have to keep the tab open?",
-    a: "Keep the LeadsFunda tab open while a live search runs. It usually takes well under a minute.",
+    a: "Yes, while a live search runs. It usually takes under a minute.",
   },
 ];
 
@@ -383,9 +342,9 @@ function DesktopOnly() {
             machine and the steps will be waiting for you.
           </p>
           <p className="mt-2.5 text-sm text-muted-foreground">
-            You can keep searching here in the meantime — anything already in our
-            database comes back instantly. Only searches that need fresh data
-            require the extension.
+            You can keep searching here in the meantime, because anything already
+            in our database comes back instantly. Only searches that need fresh
+            data require the extension.
           </p>
         </div>
       </div>
@@ -403,7 +362,7 @@ function UnsupportedBrowser({ name, onOverride }) {
             {name} can&apos;t run this extension
           </h2>
           <p className="mt-1.5 text-sm text-muted-foreground">
-            It&apos;s built for Chrome-based browsers — Chrome, Edge, Brave,
+            It&apos;s built for Chrome-based browsers: Chrome, Edge, Brave,
             Opera, or Vivaldi. {name} uses a different extension format and
             won&apos;t load it.
           </p>
@@ -476,7 +435,7 @@ export default function InstallGuide() {
   // gates: if the extension is answering, the browser plainly runs it and no
   // amount of user-agent guessing should override that.
   //
-  // Someone who has it working doesn't need a wall of instructions — but they
+  // Someone who has it working doesn't need a wall of instructions, but they
   // might be here to reinstall or update, so the steps stay one click away
   // rather than gone.
   if (installed) {

@@ -34,6 +34,9 @@ export async function POST(_request, context) {
         whatsapp: cached.whatsapp,
         telegram: cached.telegram,
         enrich_status: cached.enrich_status || "ok (cached)",
+        tech: cached.tech,
+        tech_checked_at: cached.tech ? new Date().toISOString() : null,
+        favicon: cached.favicon,
       });
       return Response.json({ lead: updated, cached: true });
     }
@@ -53,6 +56,9 @@ export async function POST(_request, context) {
       whatsapp: r.whatsapp,
       telegram: r.telegram,
       enrich_status: r.enrichStatus,
+      tech: r.tech,
+      tech_checked_at: new Date().toISOString(),
+      favicon: r.favicon,
     });
     // Persist the fresh result to the shared cache for everyone else.
     await db.saveCachedEnrichment({ domain: lead.domain, website: lead.website, phone: lead.phone, ...r, source: "enrich" });

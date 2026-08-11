@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AppShell from "./components/app/AppShell";
 import AnimatedNumber from "./components/AnimatedNumber";
-import ReportModal from "./components/ReportModal";
 import ListsDialog from "./components/leads/ListsDialog";
 import { useMe } from "./components/AccountWidget";
 import { QUICK_COUNTRIES, QUICK_SERVICES } from "./lib/quickSearchData";
@@ -15,11 +15,9 @@ import useExtension from "./lib/useExtension";
 import ExtensionRequiredDialog from "./components/ExtensionRequiredDialog";
 import LiveSearchOverlay from "./components/LiveSearchOverlay";
 import {
-  BarChart3,
   CheckCircle2,
   X,
   Clock3,
-  FileText,
   Globe2,
   ListPlus,
   Loader2,
@@ -31,21 +29,23 @@ import {
   MessageCircle,
   PauseCircle,
   OctagonX,
-  RotateCcw,
   Search,
   Send,
   Star,
   Trash2,
   Zap,
   Database,
+  Briefcase,
   ChevronDown,
   CreditCard,
-  Crown,
   ArrowRight,
   SlidersHorizontal,
+  Share2,
+  TrendingUp,
   MapPin,
   LocateFixed,
-  Users,
+  Monitor,
+  Smartphone,
 } from "lucide-react";
 
 import { Button } from "./components/ui/button";
@@ -55,9 +55,16 @@ import { Input } from "./components/ui/input";
 import { Select } from "./components/ui/select";
 import { Progress } from "./components/ui/progress";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "./components/ui/table";
-import { InfoPopover } from "./components/ui/info-popover";
+import { Sheet, SheetContent } from "./components/ui/sheet";
 import { cn, waMeLink, waState, prettyEnrichStatus } from "./lib/utils";
 import { Socials, WaIcon, WaPhone } from "./components/SocialIcons";
+import LeadDetailPanel from "./components/leads/LeadDetailPanel";
+import LeadAvatar from "./components/leads/LeadAvatar";
+import FilterSelect from "./components/leads/FilterSelect";
+import { scoreLead, BAND_LABEL, BAND_CLASS, BAND_RING, OPPORTUNITY_HELP } from "./lib/opportunity";
+import { InfoPopover } from "./components/ui/info-popover";
+import { SHOW_CREDITS } from "../web/lib/credits-ui.cjs";
+import trackingDetect from "../web/lib/tracking-detect.cjs";
 
 const LeadsMap = dynamic(() => import("./components/LeadsMap"), { ssr: false });
 
@@ -69,7 +76,9 @@ const FIND_TOUR = [
   { key: "find-country", title: "Choose a country", body: "Pick the country to search in. The city list below updates to match." },
   { key: "find-city", title: "Pick a city", body: "Select a city, or choose \"All cities\" to search the whole country at once." },
   { key: "find-rating", title: "Filter by rating", body: "Target top-rated businesses, or pick \"Below 4.0\" to find low-rated ones that need help, which is a great angle for selling websites or reputation services." },
-  { key: "find-max", title: "How many leads", body: "Set how many leads to pull (up to 10,000). You're only charged 1 credit per brand-new lead." },
+  { key: "find-max", title: "How many leads", body: SHOW_CREDITS
+    ? "Set how many leads to pull (up to 10,000). You're only charged 1 credit per brand-new lead."
+    : "Set how many leads to pull (up to 10,000). Leads you already own are merged rather than pulled again." },
   { key: "find-radius", title: "Search radius", body: "Widen or tighten the search area around the center. \"All cities\" makes it country-wide." },
   { key: "find-map", title: "Refine the center", body: "Drag the pin to move the exact search center. The circle shows your radius." },
   { key: "find-submit", title: "Find leads", body: "Hit Find leads and we'll pull matching businesses straight into your project." },
@@ -83,7 +92,6 @@ const WORKSPACE_TOUR = [
   { key: "", title: "Your leads workspace", body: "You found leads. Here's how to enrich them, spot the weak websites, and turn them into outreach." },
   { key: "ws-enrich", title: "Enrich", body: "Grab each lead's email address and social profiles automatically by crawling their website. This button does it for every captured lead at once." },
   { key: "ws-whatsapp", title: "Check WhatsApp", body: "See which leads' phone numbers are active on WhatsApp, so you know who you can message directly." },
-  { key: "ws-stages", title: "Track progress", body: "Find, Enrich and WhatsApp each show their live status here as they run." },
   { key: "ws-leads", title: "Per-lead actions", body: "Every row has quick actions: grab email & socials, check WhatsApp, run a website page-speed audit (desktop + mobile Performance / SEO scores), and generate a full website report. Tick the checkboxes to audit or report many leads at once." },
   { key: "nav-leads", title: "All your leads", body: "Every lead you capture across projects is saved here under Leads." },
   { key: "nav-lists", title: "Build lists", body: "Group leads into Lists to organize your outreach campaigns." },
@@ -105,7 +113,7 @@ const blankForm = {
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 const AUDIT_COST = 3; // credits per quick audit (mirrors billing.AUDIT_COST)
 const REPORT_COST = 10; // credits per website report (mirrors billing.REPORT_COST)
-const WORKSPACE_PAGE_SIZE = 200; // captured-leads table page size
+const WORKSPACE_PAGE_SIZE = 50; // captured-leads table page size
 
 // Mirror of the server-side slugify so we can match the typed project name to a
 // project in the list (and know if THAT project — not the selected one — is busy).
@@ -127,17 +135,26 @@ function titleCase(s) {
 
 // Shared rating/reviews rule (matches the Leads page): show the review count
 // (0 when empty), and only show a star rating when there is at least one review.
-const OWNER_REPLY_INFO = "Being updated soon — this feature will be available shortly. If you upgraded today, you'll get bonus credits when we release it to existing users.";
-const HEALTH_INFO = (
-  <>
-    Real-Chrome audit score (0-100, higher is better). Perf = page speed, SEO = search readiness.
-    <span className="mt-2 flex flex-wrap gap-1">
-      <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 font-medium text-emerald-600">90-100 Good</span>
-      <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-600">50-89 Needs work</span>
-      <span className="rounded bg-red-500/15 px-1.5 py-0.5 font-medium text-red-600">0-49 Poor</span>
-    </span>
-  </>
-);
+// A strip pinned to the bottom-centre of the viewport.
+//
+// It has to portal out to <body>: the workspace renders inside an
+// `animate-page-in` wrapper, and that animation uses `both` fill mode, so its
+// transform sticks around after it finishes. A transformed ancestor becomes the
+// containing block for any `position: fixed` descendant, which would anchor the
+// dock to the (very tall) page instead of the screen — it ended up thousands of
+// pixels down the document. Rendering into <body> steps outside that subtree.
+function BottomDock({ children }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
+  return createPortal(
+    <div className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center px-4">
+      {children}
+    </div>,
+    document.body
+  );
+}
+
 function reviewCount(lead) {
   const n = Number(lead.reviews);
   return Number.isFinite(n) ? n : 0;
@@ -203,31 +220,19 @@ function leadMapsHref(lead) {
   return q ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}` : "";
 }
 
-function CapturedActions({ lead, busy = {}, onEnrich, onWhatsapp, onAudit, onReport, onRemove }) {
+// Per-row actions, trimmed to the two that act on the row itself: enrich, and
+// remove. The map pin went because the lead's name is already the map link, and
+// the WhatsApp check moved onto the phone number itself (see WaPhone's onCheck).
+// Audit and report are bulk operations on the selection bar rather than per row.
+function CapturedActions({ lead, busy = {}, onEnrich, onRemove }) {
   const waLink = waMeLink(lead);
-  const mapsHref = leadMapsHref(lead);
   // Enriched = the website crawl has run (email/socials found, or it reported a
   // status like "no email"). Show a green check so a finished row reads as done.
   const enriched = !!(lead.email || lead.enrichStatus || lead.enrich_status);
   return (
     <>
-      {mapsHref && (
-        <a
-          href={mapsHref}
-          target="_blank"
-          rel="noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          title="Open on the map"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
-        >
-          <MapPin size={14} />
-        </a>
-      )}
       <Button variant="ghost" size="icon" className={cn("h-8 w-8", enriched && "text-emerald-600")} title={enriched ? "Enriched — re-grab email + socials" : "Grab email + socials"} disabled={!lead.website || busy.enrich} onClick={() => onEnrich(lead)}>
         {busy.enrich ? <Loader2 size={14} className="animate-spin" /> : enriched ? <MailCheck size={14} /> : <Mail size={14} />}
-      </Button>
-      <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.whatsappExists === "yes" && "text-emerald-600", lead.whatsappExists === "no" && "text-red-600")} title={lead.phone ? (lead.whatsappExists === "yes" ? "On WhatsApp — re-check" : lead.whatsappExists === "no" ? "Not on WhatsApp — re-check" : "Check WhatsApp") : "No phone to check"} disabled={!lead.phone || busy.whatsapp} onClick={() => onWhatsapp(lead)}>
-        {busy.whatsapp ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />}
       </Button>
       {waLink && (
         <a
@@ -241,12 +246,6 @@ function CapturedActions({ lead, busy = {}, onEnrich, onWhatsapp, onAudit, onRep
           <Send size={14} />
         </a>
       )}
-      <Button variant="ghost" size="icon" className="h-8 w-8" title={lead.website ? `Quick audit — desktop + mobile scores (${AUDIT_COST} credits)` : "No website to audit"} disabled={!lead.website || busy.audit} onClick={() => onAudit(lead)}>
-        {busy.audit ? <Loader2 size={14} className="animate-spin" /> : <BarChart3 size={14} />}
-      </Button>
-      <Button variant="ghost" size="icon" className="h-8 w-8" title="Website report" disabled={!lead.website || busy.report} onClick={() => onReport(lead)}>
-        {busy.report ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
-      </Button>
       <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" title="Remove from this list" onClick={() => onRemove(lead)}>
         <Trash2 size={14} />
       </Button>
@@ -294,20 +293,6 @@ const STAGE_TONE = {
   error: "destructive",
   starting: "secondary",
 };
-
-function Stage({ title, stage }) {
-  const status = stage?.status || "idle";
-  const variant = STAGE_TONE[status] || "outline";
-  return (
-    <div className="flex items-center justify-between rounded-lg border border-border bg-card/60 px-3 py-2.5">
-      <span className="text-sm font-medium">{title}</span>
-      <Badge variant={variant} className="capitalize">
-        {status === "running" && <span className="mr-1 h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />}
-        {status}
-      </Badge>
-    </div>
-  );
-}
 
 function formatDuration(seconds) {
   const n = Number(seconds);
@@ -436,6 +421,100 @@ function projectNameFromQuery(query) {
   return `${titled || "Local"} Leads #${id}`.slice(0, 80);
 }
 
+// ── Matching what was typed against what we actually hold ──────────────────────
+//
+// The warehouse resolves a search from the service/city/country selects and never
+// reads the search box, so any typed text used to be routed live on the grounds
+// that it "might" be something we don't have. That threw away every instant
+// answer: "plumber in Austin TX" is in the database, but typing it rather than
+// picking it from the dropdowns forced a live scrape.
+//
+// These two functions read the same catalog the selects are built from, so typed
+// text can be resolved to a real service + city — which is both what powers the
+// suggestions under the box and what decides warehouse vs live.
+
+const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+
+// How well `text` matches `name`: 3 exact, 2 prefix, 1 word-boundary substring,
+// 0 no match. Ranking by this keeps "plumber" ahead of "commercial plumber".
+function matchScore(text, name) {
+  const t = norm(text);
+  const n = norm(name);
+  if (!t || !n) return 0;
+  if (t === n) return 3;
+  if (n.startsWith(t) || t.startsWith(n)) return 2;
+  if (n.includes(t) || t.includes(n)) return 1;
+  return 0;
+}
+
+// Flatten the catalog into the two lists the matcher needs. Cities carry their
+// country so a hit can set all three selects at once.
+function buildCatalogIndex(catalog) {
+  const services = (catalog?.services || []).map((s) => ({ ...s }));
+  const cities = [];
+  for (const country of catalog?.countries || []) {
+    for (const city of country.cities || []) {
+      cities.push({ city, country, leadCount: Number(city.leadCount) || 0 });
+    }
+  }
+  return { services, cities };
+}
+
+// Resolve free text to catalog entries. Splits on " in " when present — the same
+// shape the geocoder and buildQuery use — and otherwise tries the whole string as
+// a service and as a place. Returns ranked candidates; [] means we hold nothing
+// matching, which is precisely the case that has to go live.
+function matchCatalog(text, index, { limit = 6, preferCityId = null } = {}) {
+  const raw = String(text || "").trim();
+  if (raw.length < 2 || !index) return [];
+
+  const split = raw.split(/(?:^|\s)in\s/i);
+  const hasIn = split.length > 1;
+  const keyword = hasIn ? split[0].trim() : raw;
+  const place = hasIn ? split.slice(1).join(" in ").trim() : "";
+
+  const scoredServices = index.services
+    .map((s) => ({ s, score: matchScore(keyword, s.name) }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score || b.s.leadCount - a.s.leadCount);
+
+  // With no place typed, the city the user already has selected wins — otherwise
+  // typing a bare "plumber" would quietly move the search to whichever city we
+  // happen to hold the most leads for, which is not what they asked for.
+  const scoredCities = index.cities
+    .map((c) => {
+      if (!place) {
+        const isSelected = preferCityId != null && String(c.city.id ?? c.city.name) === String(preferCityId);
+        return { c, score: isSelected ? 3 : 1 };
+      }
+      const direct = matchScore(place, c.city.name);
+      const withAdmin = c.city.admin ? matchScore(place, `${c.city.name} ${c.city.admin}`) : 0;
+      const withCountry = matchScore(place, `${c.city.name} ${c.country.name}`);
+      return { c, score: Math.max(direct, withAdmin, withCountry) };
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score || b.c.leadCount - a.c.leadCount);
+
+  if (!scoredServices.length || !scoredCities.length) return [];
+
+  const out = [];
+  for (const { s, score: sScore } of scoredServices.slice(0, 3)) {
+    for (const { c, score: cScore } of scoredCities.slice(0, limit)) {
+      out.push({
+        service: s.name,
+        serviceLeads: s.leadCount,
+        city: c.city,
+        country: c.country,
+        leadCount: c.leadCount,
+        // A place the user actually typed is worth more than one we defaulted to.
+        score: sScore * 2 + cScore * (place ? 2 : 1),
+      });
+      if (out.length >= limit * 2) break;
+    }
+  }
+  return out.sort((a, b) => b.score - a.score || b.leadCount - a.leadCount).slice(0, limit);
+}
+
 function Chip({ active, children, ...props }) {
   return (
     <button
@@ -473,84 +552,6 @@ function LockedContact({ value, className }) {
         Unlock
       </Link>
     </span>
-  );
-}
-
-function CreditsPill() {
-  const me = useMe();
-  const ent = me?.entitlement;
-  const unlimited = !!ent?.unlimited;
-  const credits = Number(ent?.credits || 0);
-  const label = !me
-    ? "…"
-    : unlimited
-      ? "Unlimited credits"
-      : credits > 0 || ent?.active
-        ? `${credits.toLocaleString()} credits left`
-        : "No active plan";
-  
-  const IconComponent = ent?.active ? Crown : CreditCard;
-  
-  return (
-    <Link
-      href="/billing"
-      title="Manage plan & credits"
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-        ent?.active 
-          ? "border-primary/40 bg-primary/10 text-primary shadow-[0_0_8px_rgba(20,184,166,0.15)] hover:border-primary/60" 
-          : "border-amber-500/40 bg-amber-500/10 text-amber-600 hover:border-amber-500/60"
-      )}
-    >
-      <IconComponent className="h-3.5 w-3.5" /> {label}
-    </Link>
-  );
-}
-
-// Short "Xh Ym" until an ISO reset instant — for the searches-left tooltip.
-function untilReset(resetAt) {
-  if (!resetAt) return "";
-  const ms = new Date(resetAt).getTime() - Date.now();
-  if (!Number.isFinite(ms) || ms <= 0) return "soon";
-  const mins = Math.floor(ms / 60000);
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return h > 0 ? `${h}h ${m}m` : `${Math.max(1, m)}m`;
-}
-
-// One live "N/limit left today" pill for a daily metric (searches or leads).
-function DailyPill({ icon: Icon, metric, noun, resetAt, tz }) {
-  if (!metric || metric.unlimited) return null;
-  const remaining = metric.remaining ?? 0;
-  const exhausted = remaining <= 0;
-  const resetIn = untilReset(resetAt);
-  return (
-    <span
-      title={exhausted
-        ? `You've used all ${metric.limit.toLocaleString()} ${noun} today. Resets in ${resetIn} (at midnight ${tz}).`
-        : `${remaining.toLocaleString()} of ${metric.limit.toLocaleString()} daily ${noun} left. Resets in ${resetIn} (at midnight ${tz}).`}
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium",
-        exhausted ? "border-red-500/40 bg-red-500/10 text-red-600" : "border-border bg-card/60 text-foreground"
-      )}
-    >
-      <Icon className="h-3.5 w-3.5" /> {exhausted ? `No ${noun} left` : `${remaining.toLocaleString()} ${noun} left`}
-    </span>
-  );
-}
-
-// Live "searches left today" + "leads left today" pills (reuse the /api/me poll
-// behind useMe) so the user always sees what's left of their daily allowance.
-// Each pill hides itself for tiers with no cap (unlimited) on that metric.
-function DailyUsagePills() {
-  const me = useMe();
-  const daily = me?.daily;
-  if (!me || !daily) return null;
-  return (
-    <>
-      <DailyPill icon={Search} metric={daily.searches} noun="searches" resetAt={daily.resetAt} tz={daily.tz} />
-      <DailyPill icon={Users} metric={daily.leads} noun="leads" resetAt={daily.resetAt} tz={daily.tz} />
-    </>
   );
 }
 
@@ -657,6 +658,225 @@ function SourcePicker({ source, setSource, ext, lockedLive }) {
   );
 }
 
+// Country + city pickers for a LIVE search, backed by the world list in
+// data/geo (223 countries, 152,970 cities) rather than the warehouse catalog.
+//
+// The warehouse catalog only knows places we already hold leads for. That is the
+// right list for a warehouse lookup and the wrong one for a live scrape, which
+// can grid anywhere — so live mode used to hide these controls entirely rather
+// than show a list that did not apply.
+//
+// The city control is a typed search, not a <select>: 152,970 options is ~10MB
+// of DOM and would hang the browser.
+//
+// Picking a country loads that country's cities in ONE request; every keystroke
+// after that filters the array in memory. Nothing waits on the network while
+// typing. Worst case is the US at 16,731 cities — ~285KB gzipped, once — and
+// most countries are under 70KB. The lists are cached for the session, so
+// switching back to a country already visited is instant.
+const LIVE_CITY_CACHE = new Map(); // country code -> city[]
+
+// Same ranking the server uses: prefix matches ahead of mid-word ones, accents
+// folded so "cordoba" finds "Córdoba". The source array is population-ordered,
+// so ties resolve to the city people actually mean.
+function filterCities(all, text, cap = 50) {
+  const t = String(text || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+  if (!t) return all.slice(0, cap);
+  const starts = [];
+  const contains = [];
+  for (const c of all) {
+    const n = String(c.n).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    if (n.startsWith(t)) {
+      if (starts.length < cap) starts.push(c);
+      if (starts.length >= cap) break;
+    } else if (contains.length < cap && n.includes(t)) {
+      contains.push(c);
+    }
+  }
+  return starts.concat(contains).slice(0, cap);
+}
+
+// Business-type picker for a LIVE search. ~3,968 Google Business Profile
+// categories plus whatever the warehouse stocks (see /api/services), which is
+// ~23KB gzipped — small enough to fetch once and filter in the browser.
+//
+// Free text is deliberately still accepted. A live scrape can search anything on
+// the map, so the list is an aid, not a constraint: whatever is typed is what
+// gets searched, whether or not it appears below.
+let SERVICE_CACHE = null;
+
+function LiveServicePicker({ value, onPick }) {
+  const [services, setServices] = useState(() => SERVICE_CACHE || []);
+  const [text, setText] = useState("");
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (SERVICE_CACHE) return undefined;
+    let alive = true;
+    fetch(`${BASE_PATH}/api/services`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d?.services) return;
+        SERVICE_CACHE = d.services;
+        if (alive) setServices(d.services);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  const results = useMemo(() => {
+    const t = text.trim().toLowerCase();
+    if (!t) return services.slice(0, 50);
+    const starts = [];
+    const contains = [];
+    for (const s of services) {
+      const n = s.toLowerCase();
+      if (n.startsWith(t)) { if (starts.length < 50) starts.push(s); }
+      else if (contains.length < 50 && n.includes(t)) contains.push(s);
+      if (starts.length >= 50) break;
+    }
+    return starts.concat(contains).slice(0, 50);
+  }, [services, text]);
+
+  return (
+    <label className="relative space-y-1" data-tour="find-service">
+      <span className="text-xs text-muted-foreground">Business type</span>
+      <Input
+        className="h-9"
+        value={open ? text : value}
+        placeholder="Any business type"
+        autoComplete="off"
+        onFocus={() => { setText(""); setOpen(true); }}
+        onBlur={() => setTimeout(() => setOpen(false), 120)}
+        // Typing alone already changes the search — the list is a shortcut, not
+        // a gate, so a category we don't list still works.
+        onChange={(e) => { setText(e.target.value); onPick(e.target.value); setOpen(true); }}
+        onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
+      />
+      {open && results.length > 0 && (
+        <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-64 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-lg">
+          {results.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { onPick(s); setOpen(false); }}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent"
+            >
+              <Briefcase className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 truncate">{s}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </label>
+  );
+}
+
+function LiveAreaPicker({ countryCode, onCountry, city, onCity }) {
+  const [countries, setCountries] = useState([]);
+  const [text, setText] = useState("");
+  const [cities, setCities] = useState(() => LIVE_CITY_CACHE.get(countryCode) || []);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  // Countries are small (223) and never change; fetch once.
+  useEffect(() => {
+    let alive = true;
+    fetch(`${BASE_PATH}/api/geo/places`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && d?.countries) setCountries(d.countries); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  // One fetch per country, on selection — not per keystroke.
+  useEffect(() => {
+    if (!countryCode) return undefined;
+    const cached = LIVE_CITY_CACHE.get(countryCode);
+    if (cached) { setCities(cached); setLoading(false); return undefined; }
+    let alive = true;
+    setLoading(true);
+    setCities([]);
+    fetch(`${BASE_PATH}/api/geo/places?country=${encodeURIComponent(countryCode)}&all=1`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const list = d?.cities || [];
+        LIVE_CITY_CACHE.set(countryCode, list);
+        if (alive) { setCities(list); setLoading(false); }
+      })
+      .catch(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [countryCode]);
+
+  // Recomputed as they type, straight off the loaded array — no network, no
+  // debounce, no waiting.
+  const results = useMemo(() => filterCities(cities, text), [cities, text]);
+  const label = city ? `${city.n}${city.s ? `, ${city.s}` : ""}` : "";
+
+  return (
+    <>
+      <label className="space-y-1" data-tour="find-country">
+        <span className="text-xs text-muted-foreground">Country</span>
+        <Select
+          className="h-9"
+          value={countryCode}
+          onChange={(e) => { onCountry(e.target.value); setText(""); }}
+        >
+          {!countries.length && <option value={countryCode}>Loading…</option>}
+          {countries.map((c) => (
+            <option key={c.code} value={c.code}>{c.name}</option>
+          ))}
+        </Select>
+      </label>
+
+      <label className="relative space-y-1" data-tour="find-city">
+        <span className="text-xs text-muted-foreground">City</span>
+        <Input
+          className="h-9"
+          value={open ? text : label}
+          placeholder="Search any city"
+          autoComplete="off"
+          onFocus={() => { setText(""); setOpen(true); }}
+          onBlur={() => setTimeout(() => setOpen(false), 120)}
+          onChange={(e) => { setText(e.target.value); setOpen(true); }}
+          onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
+        />
+        {open && (
+          <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-64 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-lg">
+            {loading && !results.length ? (
+              <div className="px-3 py-2 text-xs text-muted-foreground">Loading cities…</div>
+            ) : results.length ? (
+              results.map((c) => (
+                <button
+                  key={`${c.n}-${c.s}-${c.la}`}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    // Hand the country's name up too — the parent only holds the
+                    // code, and the query text needs the name.
+                    onCity(c, countries.find((x) => x.code === countryCode)?.name || "");
+                    setOpen(false);
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent"
+                >
+                  <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 truncate">
+                    {c.n}
+                    {c.s ? <span className="text-muted-foreground">{`, ${c.s}`}</span> : null}
+                  </span>
+                </button>
+              ))
+            ) : (
+              <div className="px-3 py-2 text-xs text-muted-foreground">No city matches that</div>
+            )}
+          </div>
+        )}
+      </label>
+    </>
+  );
+}
+
 // Compact "is the extension connected?" indicator. Deliberately readable in both
 // themes: a solid-coloured dot plus foreground-weight text, rather than tinted
 // text on a tinted background.
@@ -722,7 +942,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   });
   const [citySearch, setCitySearch] = useState("");
   const [showChips, setShowChips] = useState(false);
-  const [max, setMax] = useState("30");
+  const [max, setMax] = useState("100");
   // One combined rating filter. "" = any, "gte:N" = N and up, "lt:N" = below N.
   // Mapped to the API's minRating/maxRating on submit so the backend is unchanged.
   const [rating, setRating] = useState("");
@@ -740,6 +960,13 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   // card we stop moving it under them.
   const sourceTouched = useRef(false);
   const ext = useExtension();
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  // Live-search area, chosen from the world list rather than the warehouse's.
+  // Held separately from countryCode/cityObj so switching source back to the
+  // warehouse does not find its selects pointing at a city we hold no leads for.
+  const [liveCountry, setLiveCountry] = useState("US");
+  const [liveCity, setLiveCity] = useState(null);
+  const [liveService, setLiveService] = useState("");
 
   // With the extension installed, live search is the better default: it returns
   // what Google Maps holds right now rather than what we happen to have stored.
@@ -779,14 +1006,31 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   // Recomputed as the user types. The warehouse resolves a search purely from the
   // dropdowns — service name, city id, country — and never reads this text. So
   // "Gujrat Plumber" with the city dropdown on Uppsala returns Uppsala plumbers:
-  // a non-empty, confidently wrong answer that also stops the live fallback from
-  // ever firing. Any custom text therefore has to go live, not just an unknown
-  // service keyword — the *location* is ignored exactly the same way.
+  // a non-empty, confidently wrong answer. Typed text therefore cannot be handed
+  // to the warehouse as-is; it has to be *resolved* to a real service + city
+  // first, which is what `matches` below does.
   const queryIsCustom = useMemo(() => {
     const q = query.trim();
     return q !== "" && q !== autoQuery;
   }, [query, autoQuery]);
-  const activeSource = queryIsCustom ? "live" : source;
+
+  // What we hold that looks like what was typed. Drives both the suggestion list
+  // and the routing decision.
+  const catalogIndex = useMemo(() => buildCatalogIndex(catalog), [catalog]);
+  const matches = useMemo(
+    () => (queryIsCustom ? matchCatalog(query, catalogIndex, { preferCityId: cityObj?.id ?? cityObj?.name ?? null }) : []),
+    [queryIsCustom, query, catalogIndex, cityObj]
+  );
+  // The one we'd actually run. Only a confident hit counts: a stray substring
+  // ("a" matching "salon") must not silently redirect a live search into a
+  // warehouse lookup for somewhere else.
+  const bestMatch = matches.length && matches[0].score >= 6 ? matches[0] : null;
+
+  // Typed text we can serve from the database goes to the warehouse; anything we
+  // don't hold still has to be scraped live. A query built by the dropdowns was
+  // always warehouse-able, so it keeps honouring the user's own preference.
+  const activeSource = !queryIsCustom ? source : bestMatch ? source : "live";
+  const lockedLive = queryIsCustom && !bestMatch;
 
   // Settle the form on the catalog's biggest country, city and service once it
   // loads. This used to be a 12-tick slot-machine animation that flung random
@@ -847,6 +1091,64 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
       setCenter({ lat: nextCityObj.lat, lng: nextCityObj.lng });
     }
     setQuery(buildQuery(service, nextCityObj, country));
+  }
+
+  // Aim a live search at a city from the world list.
+  //
+  // Only the *place* changes. Someone who typed "24 hour emergency plumber" and
+  // then picked Adelaide is moving that search, not asking to have their keyword
+  // replaced by whatever the Service select happens to hold — so the keyword is
+  // taken from what they typed, and only falls back to the select when the box
+  // has no keyword of its own.
+  // The search box is the single source of truth for a live search — the
+  // extension geocodes exactly this text. The live pickers therefore edit one
+  // half of it each and leave the other alone, rather than each rebuilding the
+  // whole string from their own state and clobbering the other's choice.
+  function splitQuery() {
+    const parts = query.trim().split(/(?:^|\s)in\s/i);
+    return {
+      keyword: (parts[0] || "").trim(),
+      place: parts.length > 1 ? parts.slice(1).join(" in ").trim() : "",
+    };
+  }
+
+  function pickLiveService(s) {
+    setLiveService(s);
+    const { place } = splitQuery();
+    const next = place ? `${s} in ${place}` : s;
+    setQuery(next.replace(/\s+/g, " ").trim());
+  }
+
+  function pickLiveCity(c, countryName) {
+    setLiveCity(c);
+    // Compact wire keys (n/s/la/ln) — see /api/geo/places.
+    if (Number.isFinite(c?.la) && Number.isFinite(c?.ln)) {
+      setCenter({ lat: c.la, lng: c.ln });
+    }
+    const keyword = liveService || splitQuery().keyword || service;
+    // State disambiguates: "Austin" alone is four different places, and the
+    // extension geocodes this text to decide where to grid.
+    const place = [c.n, c.s, countryName].filter(Boolean).join(", ");
+    setQuery(`${keyword} in ${place}`.replace(/\s+/g, " ").trim());
+  }
+
+  // Take a suggestion. This sets the three selects rather than only rewriting the
+  // search box, because the selects are what the warehouse lookup actually reads
+  // — rewriting the text alone would show the right thing and search the old one.
+  // With them set, the query matches `autoQuery`, so the search stops counting as
+  // custom and routes to the database on its own.
+  function applyMatch(m) {
+    setSuggestOpen(false);
+    setAllCities(false);
+    setCitySearch("");
+    setService(m.service);
+    setCountryCode(m.country.code);
+    setCityObj(m.city);
+    if (m.city.lat != null && m.city.lng != null) {
+      setCenter({ lat: m.city.lat, lng: m.city.lng });
+    }
+    setQuery(buildQuery(m.service, m.city, m.country));
+    chooseSource("warehouse");
   }
 
   // "All cities" searches the whole country (no city/radius filter).
@@ -1000,7 +1302,10 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   const [resolving, setResolving] = useState(false);
 
   useEffect(() => {
-    if (!queryIsCustom) {
+    // A query we can already answer from our own catalog needs no geocoder: we
+    // know the city, and asking Nominatim would only add latency and a second
+    // opinion that can disagree with the city we're about to query.
+    if (!queryIsCustom || bestMatch) {
       setResolvedArea(null);
       setResolving(false);
       return undefined;
@@ -1030,7 +1335,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
       clearTimeout(timer);
       setResolving(false);
     };
-  }, [queryIsCustom, query]);
+  }, [queryIsCustom, query, bestMatch]);
 
   // Move the pin onto the resolved place. Deliberately not the other way round:
   // dragging the pin afterwards still works, because this only fires when the
@@ -1041,20 +1346,42 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
     }
   }, [resolvedArea]);
 
+  // Same, for a match out of our own catalog. This is not cosmetic: centre and
+  // radius are sent as filters on the warehouse query too, so leaving the pin on
+  // the previous city would filter "plumber in Austin" by a circle drawn around
+  // somewhere else and return nothing.
+  const matchKey = bestMatch ? `${bestMatch.service}|${bestMatch.city.id ?? bestMatch.city.name}` : "";
+  useEffect(() => {
+    if (!bestMatch) return;
+    const { lat, lng } = bestMatch.city;
+    if (lat != null && lng != null) setCenter({ lat, lng });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchKey]);
+
   function submit(e) {
     e.preventDefault();
-    const effectiveCity = allCities ? null : cityObj;
-    const cleanQuery = query.trim() || buildQuery(service, effectiveCity, country);
-    const isCustom = cleanQuery !== buildQuery(service, effectiveCity, country);
-    const isUnknownKeyword = !catalogServices.some(s =>
+    // A typed query we can serve is run against the matched service + city, not
+    // against whatever the selects happen to show. Sending the selects would
+    // answer confidently for the wrong place — the exact failure that made every
+    // typed search go live in the first place.
+    const useMatch = queryIsCustom && bestMatch && source !== "live" ? bestMatch : null;
+    const matchService = useMatch ? useMatch.service : service;
+    const matchCity = useMatch ? useMatch.city : allCities ? null : cityObj;
+    const matchCountry = useMatch ? useMatch.country : country;
+
+    const cleanQuery = query.trim() || buildQuery(matchService, matchCity, matchCountry);
+    const effectiveCity = useMatch ? matchCity : allCities ? null : cityObj;
+    const isCustom = !useMatch && cleanQuery !== buildQuery(service, effectiveCity, country);
+    const isUnknownKeyword = !useMatch && !catalogServices.some(s =>
       cleanQuery.toLowerCase().includes(s.name.toLowerCase())
     );
-    // Anything typed that differs from the dropdowns can't come from the
-    // warehouse — it resolves service *and* city from the selects and ignores
-    // this text entirely. Send it live so the search matches what was typed.
-    const effectiveSource = isCustom || isUnknownKeyword ? "live" : source;
-    const cityLabel = allCities ? (country.name || "All cities") : cityObj?.name || "";
-    
+    // Only text we could not resolve has to be scraped live; a resolved match is
+    // a warehouse lookup like any dropdown-built search.
+    const effectiveSource = useMatch ? source : isCustom || isUnknownKeyword ? "live" : source;
+    const cityLabel = useMatch
+      ? matchCity?.name || ""
+      : allCities ? (country.name || "All cities") : cityObj?.name || "";
+
     let name;
     if (isUnknownKeyword) {
       const cityPart = allCities ? "" : (cityObj?.name ? `${cityObj.name}, ` : "");
@@ -1063,17 +1390,19 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
       const id = Date.now().toString(36).slice(-4);
       name = `${baseName} #${id}`;
     } else {
-      name = isCustom ? projectNameFromQuery(cleanQuery) : quickProjectName(service, cityLabel);
+      name = useMatch
+        ? quickProjectName(matchService, cityLabel)
+        : isCustom ? projectNameFromQuery(cleanQuery) : quickProjectName(service, cityLabel);
     }
 
     onFind({
       name,
       query: cleanQuery,
-      cityId: allCities ? null : cityObj?.id || null,
-      cityName: allCities ? "" : cityObj?.name || "",
-      countryCode: country.code || "",
-      countryName: country.name || "",
-      service,
+      cityId: useMatch ? matchCity?.id ?? null : allCities ? null : cityObj?.id || null,
+      cityName: useMatch ? matchCity?.name || "" : allCities ? "" : cityObj?.name || "",
+      countryCode: (useMatch ? matchCountry.code : country.code) || "",
+      countryName: (useMatch ? matchCountry.name : country.name) || "",
+      service: matchService,
       isUnknownKeyword,
       isCustomQuery: isCustom,
       minRating: rating.startsWith("gte:") ? Number(rating.slice(4)) : undefined,
@@ -1089,8 +1418,11 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
       // and grids the geocoder's own bounding box, which ignores the radius
       // entirely: a 5 km search of "restaurants in London" would quietly cover
       // all of Greater London.
+      // Only meaningful for a live scrape — a warehouse lookup is already
+      // pinned to the matched city id, and handing it a geocoder result would
+      // just be a second, weaker opinion about where to search.
       resolvedArea:
-        queryIsCustom && resolvedArea?.lat != null
+        effectiveSource === "live" && queryIsCustom && resolvedArea?.lat != null
           ? {
               place: resolvedArea.place,
               display: resolvedArea.display,
@@ -1101,7 +1433,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
               lng: resolvedArea.lng,
             }
           : undefined,
-      max: String(Math.min(10000, Math.max(1, Math.trunc(Number(max) || 30)))),
+      max: String(Math.min(10000, Math.max(1, Math.trunc(Number(max) || 100)))),
       source: effectiveSource,
     });
   }
@@ -1112,16 +1444,16 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   const citySelectVal = allCities ? "__all__" : cityObj?.id ?? cityObj?.name ?? "";
 
   return (
-    <div className="animate-page-in motion-reduce:animate-none mx-auto max-w-4xl px-4 pb-8 pt-4 sm:px-6">
-      {/* Credits and the projects link live in the topbar on desktop (see
-          `findActions` below). The topbar has no room for them on a phone, so
-          they ride here instead — and only there, because on desktop this row
-          would push the heading off the sidebar's baseline. */}
+    // The column is capped and centred. Full-bleed stretched a six-control form
+    // and a single search box across the whole monitor, which left the eye
+    // travelling the width of the screen between a label and its field.
+    <div className="animate-page-in motion-reduce:animate-none mx-auto w-full max-w-4xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
+      {/* The projects link lives in the topbar on desktop (see `findActions`
+          below). The topbar has no room for it on a phone, so it rides here
+          instead — and only there, because on desktop this row would push the
+          heading off the sidebar's baseline. */}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 md:hidden">
-        <div className="flex flex-wrap items-center gap-2">
-          <CreditsPill />
-          <DailyUsagePills />
-        </div>
+        <div className="flex flex-wrap items-center gap-2" />
         <button
           type="button"
           onClick={onOpenDashboard}
@@ -1157,17 +1489,85 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
           both places said the same thing twice and cost the query 40px of the
           only field on the page anyone actually types into. */}
       <form className="mt-4 flex flex-col gap-2 sm:flex-row" onSubmit={submit}>
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="plumber in Austin TX"
-          className="h-11 flex-1 text-base"
-          autoFocus
-        />
-        <Button type="submit" size="lg" className="h-11 shrink-0 px-6" disabled={!!busy || !query.trim()} data-tour="find-submit">
+        <div className="relative flex-1">
+          <Input
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setSuggestOpen(true); }}
+            onFocus={() => setSuggestOpen(true)}
+            onBlur={() => setTimeout(() => setSuggestOpen(false), 120)}
+            onKeyDown={(e) => { if (e.key === "Escape") setSuggestOpen(false); }}
+            placeholder="plumber in Austin TX"
+            className="h-10 w-full text-sm"
+            autoComplete="off"
+            autoFocus
+          />
+          {/* What we already hold that looks like what's being typed. Picking one
+              fills the selects, so the search runs instantly out of the database
+              instead of scraping a city we already have. */}
+          {suggestOpen && matches.length > 0 && (
+            <ul className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-lg">
+              <li className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                Ready in our database
+              </li>
+              {matches.map((m) => (
+                <li key={`${m.service}-${m.city.id ?? m.city.name}`}>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => applyMatch(m)}
+                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-accent"
+                  >
+                    <Database className="h-4 w-4 shrink-0 text-primary" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm text-foreground">
+                        <span className="font-medium capitalize">{m.service}</span>
+                        {" in "}
+                        <span className="font-medium">{m.city.name}</span>
+                        {m.city.admin ? `, ${m.city.admin}` : ""}
+                        <span className="text-muted-foreground">{` · ${m.country.name}`}</span>
+                      </span>
+                    </span>
+                    <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-primary">
+                      {m.leadCount.toLocaleString()} leads
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <Button type="submit" className="h-10 shrink-0 px-5" disabled={!!busy || !query.trim()} data-tour="find-submit">
           {busy ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />} Find leads
         </Button>
       </form>
+
+      {/* Says which way this search will actually go, before it runs. Silent for
+          a dropdown-built query, where nothing surprising is happening. */}
+      {queryIsCustom && (
+        <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+          {bestMatch && activeSource !== "live" ? (
+            <>
+              <Database className="h-3.5 w-3.5 shrink-0 text-primary" />
+              We already have <span className="font-semibold text-foreground">{bestMatch.leadCount.toLocaleString()}</span>
+              {" "}<span className="capitalize">{bestMatch.service}</span> leads in{" "}
+              <span className="font-semibold text-foreground">{bestMatch.city.name}</span> — this runs instantly from our database.
+            </>
+          ) : bestMatch ? (
+            // Matched, but the user asked for live anyway. Say so rather than
+            // claiming a database hit the search is not going to use.
+            <>
+              <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />
+              We hold <span className="font-semibold text-foreground">{bestMatch.leadCount.toLocaleString()}</span> of these in{" "}
+              <span className="font-semibold text-foreground">{bestMatch.city.name}</span>, but Lead source is set to live — this will scrape fresh results.
+            </>
+          ) : (
+            <>
+              <Zap className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+              Nothing matching in our database, so this one is scraped live in your browser.
+            </>
+          )}
+        </p>
+      )}
 
       {/* Everything that shapes the search in one card: source, the warehouse
           dropdowns, size, rating, radius. They were four separately bordered
@@ -1178,7 +1578,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
           source={source}
           setSource={chooseSource}
           ext={ext}
-          lockedLive={queryIsCustom}
+          lockedLive={lockedLive}
         />
 
         <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 sm:grid-cols-3">
@@ -1222,6 +1622,21 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
                   ))}
                 </Select>
               </label>
+            </>
+          )}
+
+          {/* A live scrape can grid anywhere, so it gets the world list instead
+              of the warehouse's coverage. These used to be hidden entirely for
+              live, which meant the only way to aim one was to type the place. */}
+          {activeSource === "live" && (
+            <>
+              <LiveServicePicker value={liveService} onPick={pickLiveService} />
+              <LiveAreaPicker
+                countryCode={liveCountry}
+                onCountry={setLiveCountry}
+                city={liveCity}
+                onCity={pickLiveCity}
+              />
             </>
           )}
 
@@ -1295,12 +1710,15 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
         </div>
       </div>
 
-      {/* Area picker map */}
+      {/* Area picker map. On a wide screen it sits beside the controls instead of
+          under them — the page is full-width now, and stacking a short form on top
+          of a short map left most of the screen empty. */}
       <div className="mt-3" data-tour="find-map">
         {/* What a typed search resolved to. Without this the map silently
             disagrees with the search box and the user has no way to tell
-            which one the search will follow. */}
-        {queryIsCustom && (
+            which one the search will follow. Suppressed for a query we matched
+            in our own catalog: that one already says where it is going, above. */}
+        {queryIsCustom && !bestMatch && (
           <div className="mb-2 rounded-lg border border-border bg-card/60 px-3 py-2 text-xs">
             {resolving ? (
               <span className="flex items-center gap-1.5 text-muted-foreground">
@@ -1359,9 +1777,9 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
             {geoNote.text}
           </p>
         )}
-        {/* Tall enough to place a pin, short enough that the whole form still
-            fits one screen — the map is a confirmation of the search area, not
-            the thing the page is for. */}
+        {/* Taller beside the controls than it was stacked under them — in the
+            side-by-side layout it has the height to spare, and the radius circle
+            is easier to judge at this size. */}
         <LeadsMap
           interactive
           center={center}
@@ -1432,12 +1850,27 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   );
 }
 
-function StatCard({ value, label, className }) {
+// A bare number over a caption told you how many rows existed but not whether
+// that was good. The icon tile makes the row scannable at a glance, and `hint`
+// carries the number that actually matters: how much of the project each stage
+// has covered so far.
+function StatCard({ value, text, label, icon: Icon, tint = "bg-muted text-muted-foreground", hint, className, children }) {
   return (
-    <Card className={className}>
-      <CardContent className="p-2.5 sm:p-3">
-        <div className="text-lg sm:text-xl font-bold leading-tight"><AnimatedNumber value={value} /></div>
-        <div className="text-[10px] sm:text-[11px] text-muted-foreground whitespace-nowrap">{label}</div>
+    <Card className={cn("transition-colors hover:border-primary/40", className)}>
+      <CardContent className="flex items-center gap-3 p-3 sm:p-4">
+        {Icon && (
+          <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", tint)}>
+            <Icon size={18} />
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="text-xl font-bold leading-tight tabular-nums sm:text-2xl">
+            {text ?? <AnimatedNumber value={value} />}
+          </div>
+          <div className="truncate text-xs text-muted-foreground">{label}</div>
+          {hint && <div className="truncate text-[11px] font-medium text-primary/80">{hint}</div>}
+        </div>
+        {children}
       </CardContent>
     </Card>
   );
@@ -1467,6 +1900,21 @@ export default function Dashboard({ view = "" }) {
     if (p.query) return p.query;
     const cityPart = p.cityName ? `${p.cityName}, ` : "";
     return cityPart || p.countryName ? `${cityPart}${p.countryName || ""} Leads` : "";
+  };
+
+  // Header crumb line: "Plumber · Sydney NSW · Australia". Reads better than the
+  // raw query string and matches how the search was actually specified. Falls
+  // back to the query when a project has no structured place on it (typed
+  // searches, older projects).
+  const getProjectCrumbs = (p, leadSample) => {
+    if (!p) return "";
+    const service = leadSample?.category || "";
+    const parts = [
+      service,
+      p.cityName || leadSample?.city,
+      p.countryName || leadSample?.country,
+    ].filter(Boolean);
+    return parts.length >= 2 ? parts.join(" · ") : getProjectDisplayQuery(p);
   };
 
   // The find-leads home vs. the projects workspace is driven by the URL (?view=projects),
@@ -1499,6 +1947,19 @@ export default function Dashboard({ view = "" }) {
   }, [scrapeProgress]);
   const [hideSyncBanner, setHideSyncBanner] = useState(false); // dismiss the dbSync banner
   const [tablePage, setTablePage] = useState(0); // captured-leads table pagination
+  // Workspace table controls. Filters narrow the captured rows, search matches
+  // across name/phone/email/address, and sort defaults to opportunity so the
+  // leads worth calling are the ones you see first.
+  const [leadSearch, setLeadSearch] = useState("");
+  const [leadSort, setLeadSort] = useState("opportunity");
+  const [leadFilters, setLeadFilters] = useState({
+    website: "all", email: "all", phone: "all", reviews: "all",
+    rating: "all", social: "all", enriched: "all",
+  });
+  const [moreFilters, setMoreFilters] = useState(false);
+  // The lead open in the right-hand detail drawer (a row click inspects; the
+  // checkbox is what selects for bulk actions).
+  const [detailKey, setDetailKey] = useState(null);
   // Per-row state for the captured-leads table actions (enrich / whatsapp / report
   // / remove). The leads list itself is rebuilt from project status on every poll,
   // so action results and removals are kept in an overlay keyed by a stable lead
@@ -1509,7 +1970,6 @@ export default function Dashboard({ view = "" }) {
   // big account doesn't render hundreds of rows on every poll.
   const [projectLimit, setProjectLimit] = useState(10);
   const [visibleChipCount, setVisibleChipCount] = useState(5);
-  const [reportLead, setReportLead] = useState(null);
   // Captured lead currently open in the shared "Add to list" dialog (saved to the
   // DB first so it has an id). Mirrors the Leads manager for a consistent flow.
   const [listsLead, setListsLead] = useState(null);
@@ -1520,7 +1980,6 @@ export default function Dashboard({ view = "" }) {
   const [bulkBusy, setBulkBusy] = useState("");
   // Progress for a realtime (queue-free) enrich/whatsapp batch: { kind, done, total }.
   const [realtimeBatch, setRealtimeBatch] = useState(null);
-  const [showDetails, setShowDetails] = useState(false);
   const [credits, setCredits] = useState(null);
   // Full plan entitlement ({ active, remaining, plan, credits }) used to pre-check
   // searches before hitting the server. remaining === null means unlimited.
@@ -1667,7 +2126,9 @@ export default function Dashboard({ view = "" }) {
     if (!ent) return true;
     if (!ent.unlimited && (ent.credits || 0) <= 0) {
       setNeedPlan(true);
-      setError("You're out of credits. Choose a plan or top up to find more leads.");
+      setError(SHOW_CREDITS
+        ? "You're out of credits. Choose a plan or top up to find more leads."
+        : "You've used up your plan's allowance. Choose a plan to keep finding leads.");
       return false;
     }
     // Per-day caps (server is authoritative; this is just instant feedback).
@@ -2191,61 +2652,6 @@ export default function Dashboard({ view = "" }) {
     }
   }
 
-  async function reportCaptured(lead) {
-    const key = leadKey(lead);
-    setRowBusyKey(key, "report", true);
-    setError("");
-    try {
-      const saved = await ensureLeadId(lead);
-      setReportLead({ id: saved.id, name: saved.name || lead.name, domain: saved.domain || lead.domain, website: saved.website || lead.website });
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setRowBusyKey(key, "report", false);
-    }
-  }
-
-  // Quick audit for a captured row: save it first (to get an id), run the single
-  // audit endpoint, poll it to completion, then drop the fresh desktop/mobile
-  // scores into the row overlay so they show in place. Mirrors the Leads manager.
-  async function auditCaptured(lead) {
-    const key = leadKey(lead);
-    if (!confirm(`Audit ${lead.name || "this site"} (desktop + mobile) for ${AUDIT_COST} credits?`)) return;
-    setRowBusyKey(key, "audit", true);
-    setError("");
-    try {
-      const saved = await ensureLeadId(lead);
-      const data = await jsonFetch(`/api/leads/${saved.id}/audit`, { method: "POST" });
-      // Audit credits are charged up front — reflect the new balance immediately.
-      if (typeof data.credits === "number") setCredits(data.credits);
-      await new Promise((resolve) => {
-        const tick = async () => {
-          const job = await jsonFetch(`/api/agent/jobs/${data.jobId}`).catch(() => null);
-          if (!job || job.status === "running") { setTimeout(tick, 2500); return; }
-          resolve();
-        };
-        tick();
-      });
-      const fresh = await jsonFetch(`/api/leads/${saved.id}`).catch(() => null);
-      const l = fresh?.lead;
-      if (l) {
-        setRowOverlay((o) => ({
-          ...o,
-          [key]: {
-            ...(o[key] || {}),
-            desktop: { performance: l.desktop_performance, seo: l.desktop_seo },
-            mobile: { performance: l.mobile_performance, seo: l.mobile_seo },
-          },
-        }));
-      }
-      showToast("Audit complete — scores updated");
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setRowBusyKey(key, "audit", false);
-    }
-  }
-
   // Save the captured row, then open the shared "Add to list" dialog for it — the
   // same flow the Leads manager uses (replaces the old prompt()).
   async function openListsForCaptured(lead) {
@@ -2262,6 +2668,48 @@ export default function Dashboard({ view = "" }) {
     }
   }
 
+  // Download what's on screen as CSV. Exports the selection when there is one,
+  // otherwise the current filtered view — so "Export" always means "the leads I
+  // am looking at". The opportunity score and its top reason ride along, since
+  // that ordering is the reason to pull the list in the first place.
+  function exportLeadsCsv() {
+    const rows = selectedCount > 0 ? selectedLeadObjs : leads;
+    if (!rows.length) return;
+    const columns = [
+      ["Name", (l) => l.name],
+      ["Category", (l) => l.category],
+      ["Phone", (l) => l.phone],
+      ["Email", (l) => l.email],
+      ["Website", (l) => l.website],
+      ["Address", (l) => l.address],
+      ["Rating", (l) => l.rating],
+      ["Reviews", (l) => l.reviews],
+      ["Facebook", (l) => l.facebook],
+      ["Instagram", (l) => l.instagram],
+      ["LinkedIn", (l) => l.linkedin],
+      ["Marketing stack", (l) => trackingDetect.summarize(trackingDetect.parse(l.tech))],
+      ["Opportunity", (l) => scoreLead(l).score],
+      ["Opportunity band", (l) => BAND_LABEL[scoreLead(l).band]],
+      ["Top reason", (l) => scoreLead(l).reasons[0] || ""],
+      ["Maps URL", (l) => l.mapsUrl || l.maps_url],
+    ];
+    const escape = (v) => {
+      const text = v === null || v === undefined ? "" : String(v);
+      return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    };
+    const csv = [
+      columns.map(([label]) => escape(label)).join(","),
+      ...rows.map((l) => columns.map(([, read]) => escape(read(l))).join(",")),
+    ].join("\n");
+    const url = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(getProjectDisplayName(selectedProject) || "leads").replace(/[^\w.-]+/g, "-").toLowerCase()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast(`Exported ${rows.length.toLocaleString()} lead${rows.length === 1 ? "" : "s"}`);
+  }
+
   // Remove from this captured list only (local hide) — it stays in the global
   // leads database, matching the rule that the overall view owns deletion.
   function hideCaptured(lead) {
@@ -2270,15 +2718,134 @@ export default function Dashboard({ view = "" }) {
   }
 
   const stages = status?.state?.stages || {};
-  const leads = (status?.leads || [])
+  const allLeads = (status?.leads || [])
     .map((l) => ({ ...l, ...(rowOverlay[leadKey(l)] || {}) }))
     .filter((l) => !l.__removed);
-  // Paginate the captured-leads table at 200/page so huge finds don't render
-  // thousands of rows at once.
+
+  // "any"/"none" plus per-network has/hasn't. Named networks matter because
+  // "no Facebook page" and "no LinkedIn" are different pitches to different
+  // businesses, and a single has-socials toggle could not express either.
+  function matchSocialFilter(lead, mode) {
+    if (mode === "all") return true;
+    const any = !!(lead.facebook || lead.instagram || lead.linkedin || lead.twitter || lead.tiktok || lead.youtube);
+    if (mode === "any") return any;
+    if (mode === "none") return !any;
+    const network = mode.replace(/^no-/, "");
+    const has = !!lead[network];
+    return mode.startsWith("no-") ? !has : has;
+  }
+
+  // Live counts shown next to each dropdown option, so you can see how many
+  // leads a filter would leave before committing to it. Counted against the
+  // OTHER active filters, which is what makes the numbers add up to what you
+  // actually get.
+  const filterCounts = useMemo(() => {
+    const base = (status?.leads || [])
+      .map((l) => ({ ...l, ...(rowOverlay[leadKey(l)] || {}) }))
+      .filter((l) => !l.__removed);
+    const yesNo = (mode, has) => mode === "all" || (mode === "yes" ? has : !has);
+    const matchesExcept = (l, skip) =>
+      (skip === "website" || yesNo(leadFilters.website, !!l.website)) &&
+      (skip === "email" || yesNo(leadFilters.email, !!l.email)) &&
+      (skip === "phone" || yesNo(leadFilters.phone, !!l.phone)) &&
+      (skip === "reviews" || leadFilters.reviews === "all" || (() => {
+        const n = reviewCount(l);
+        if (leadFilters.reviews === "none") return n === 0;
+        if (leadFilters.reviews === "some") return n >= 1 && n <= 20;
+        return n > 20;
+      })()) &&
+      (skip === "social" || matchSocialFilter(l, leadFilters.social)) &&
+      (skip === "enriched" || leadFilters.enriched === "all" ||
+        (leadFilters.enriched === "yes") === !!(l.enrichStatus || l.enrich_status || l.email));
+
+    const count = (skip, predicate) => base.filter((l) => matchesExcept(l, skip) && predicate(l)).length;
+    const ratingOf = (l) => parseFloat(l.rating);
+    return {
+      website: { all: count("website", () => true), yes: count("website", (l) => !!l.website), no: count("website", (l) => !l.website) },
+      email: { all: count("email", () => true), yes: count("email", (l) => !!l.email), no: count("email", (l) => !l.email) },
+      phone: { all: count("phone", () => true), yes: count("phone", (l) => !!l.phone), no: count("phone", (l) => !l.phone) },
+      reviews: {
+        all: count("reviews", () => true),
+        none: count("reviews", (l) => reviewCount(l) === 0),
+        some: count("reviews", (l) => reviewCount(l) >= 1 && reviewCount(l) <= 20),
+        many: count("reviews", (l) => reviewCount(l) > 20),
+      },
+      rating: {
+        all: base.length,
+        none: base.filter((l) => !Number.isFinite(ratingOf(l))).length,
+        low: base.filter((l) => ratingOf(l) < 4).length,
+        good: base.filter((l) => ratingOf(l) >= 4 && ratingOf(l) < 4.5).length,
+        top: base.filter((l) => ratingOf(l) >= 4.5).length,
+      },
+      enriched: {
+        all: count("enriched", () => true),
+        yes: count("enriched", (l) => !!(l.enrichStatus || l.enrich_status || l.email)),
+        no: count("enriched", (l) => !(l.enrichStatus || l.enrich_status || l.email)),
+      },
+      social: Object.fromEntries(
+        ["all", "any", "none", "facebook", "instagram", "linkedin", "no-facebook", "no-instagram", "no-linkedin"].map(
+          (mode) => [mode, count("social", (l) => matchSocialFilter(l, mode))]
+        )
+      ),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status?.leads, rowOverlay, leadFilters]);
+
+  // Filter -> search -> sort, then paginate. Kept as one pass over the captured
+  // rows; `leads` below is what every count, selection and export works from, so
+  // a filtered view acts on exactly the rows you can see.
+  const leads = useMemo(() => {
+    const yesNo = (mode, has) => mode === "all" || (mode === "yes" ? has : !has);
+    const q = leadSearch.trim().toLowerCase();
+    let rows = allLeads.filter((l) => {
+      if (!yesNo(leadFilters.website, !!l.website)) return false;
+      if (!yesNo(leadFilters.email, !!l.email)) return false;
+      if (!yesNo(leadFilters.phone, !!l.phone)) return false;
+      if (leadFilters.reviews !== "all") {
+        const n = reviewCount(l);
+        if (leadFilters.reviews === "none" && n !== 0) return false;
+        if (leadFilters.reviews === "some" && (n < 1 || n > 20)) return false;
+        if (leadFilters.reviews === "many" && n <= 20) return false;
+      }
+      if (leadFilters.rating !== "all") {
+        const r = parseFloat(l.rating);
+        if (leadFilters.rating === "none" && Number.isFinite(r)) return false;
+        if (leadFilters.rating === "low" && !(Number.isFinite(r) && r < 4)) return false;
+        if (leadFilters.rating === "good" && !(Number.isFinite(r) && r >= 4 && r < 4.5)) return false;
+        if (leadFilters.rating === "top" && !(Number.isFinite(r) && r >= 4.5)) return false;
+      }
+      if (!matchSocialFilter(l, leadFilters.social)) return false;
+      if (!yesNo(leadFilters.enriched, !!(l.enrichStatus || l.enrich_status || l.email))) return false;
+      if (q) {
+        const hay = [l.name, l.phone, l.email, l.address, l.website, l.category].filter(Boolean).join(" ").toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+    if (leadSort === "opportunity") {
+      rows = rows.map((l) => [l, scoreLead(l).score]).sort((a, b) => b[1] - a[1]).map(([l]) => l);
+    } else if (leadSort === "name") {
+      rows = [...rows].sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+    } else if (leadSort === "reviews") {
+      rows = [...rows].sort((a, b) => reviewCount(b) - reviewCount(a));
+    } else if (leadSort === "rating") {
+      rows = [...rows].sort((a, b) => (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0));
+    }
+    // "found" (default scrape order) needs no sort — that's the incoming order.
+    return rows;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status?.leads, rowOverlay, leadFilters, leadSearch, leadSort]);
+
+  const filtersActive =
+    !!leadSearch.trim() || Object.values(leadFilters).some((v) => v !== "all");
+
+  // Paginate at 50/page — enough to scan, small enough that the drawer and the
+  // row actions stay responsive on a 300-lead find.
   const tablePageCount = Math.max(1, Math.ceil(leads.length / WORKSPACE_PAGE_SIZE));
   const safeTablePage = Math.min(tablePage, tablePageCount - 1);
   const pagedLeads = leads.slice(safeTablePage * WORKSPACE_PAGE_SIZE, safeTablePage * WORKSPACE_PAGE_SIZE + WORKSPACE_PAGE_SIZE);
   const pageOffset = safeTablePage * WORKSPACE_PAGE_SIZE;
+  const detailLead = detailKey ? leads.find((l) => leadKey(l) === detailKey) || null : null;
   // Trust either source: the projects list (authoritative, refreshed every tick)
   // or the selected project's status. This keeps the Stop button enabled even
   // when a status fetch is mid-flight or briefly stale after switching projects.
@@ -2308,14 +2875,7 @@ export default function Dashboard({ view = "" }) {
   const leadKeysOnPage = pagedLeads.map(leadKey);
   const selectedLeadObjs = leads.filter((l) => selectedLeads.has(leadKey(l)));
   const selectedCount = selectedLeadObjs.length;
-  const reportableLeads = selectedLeadObjs.filter((l) => l.website);
-  const reportableCount = reportableLeads.length;
-  const auditCost = reportableCount * AUDIT_COST;
-  const reportCost = reportableCount * REPORT_COST;
   const allLeadsSelected = leadKeysOnPage.length > 0 && leadKeysOnPage.every((k) => selectedLeads.has(k));
-  const notEnoughForAudit = credits != null && auditCost > credits;
-  const notEnoughForReport = credits != null && reportCost > credits;
-  const batchRunning = !!batch && !batch.finished;
   const toggleLead = (key) => setSelectedLeads((s) => { const n = new Set(s); if (n.has(key)) n.delete(key); else n.add(key); return n; });
   const toggleAllLeads = () => setSelectedLeads((s) => {
     const n = new Set(s);
@@ -2394,9 +2954,13 @@ export default function Dashboard({ view = "" }) {
 
   // Charge + launch a bulk batch (audit or report) over an explicit set of leads
   // that have a website. Saves them to the DB first (for ids), then drives the
-  // shared progress card. Used by BOTH the bulk-selection bar (selected rows) and
-  // the project toolbar Audit/Report buttons (every captured lead) — one code path
-  // so the two never drift apart.
+  // shared progress card.
+  //
+  // NOTE: nothing calls this right now. Audit and report were removed from the
+  // per-row actions and then from the bulk selection dock, so the workspace has no
+  // entry point into it. Kept intact (with pollBatch and the progress card) so the
+  // buttons can be re-homed without rebuilding the flow; delete the chain if audit
+  // and report are meant to be gone from this page for good.
   async function runBatchForLeads(kind, leadObjs) {
     const billable = (leadObjs || []).filter((l) => l.website);
     const noun = kind === "audit" ? "audit" : "report";
@@ -2405,8 +2969,15 @@ export default function Dashboard({ view = "" }) {
     const endpoint = kind === "audit" ? "/api/leads/audit/bulk" : "/api/leads/report/bulk";
     const cost = billable.length * unit;
     const have = credits ?? 0;
-    if (cost > have) { alert(`Not enough credits. ${billable.length} ${noun}(s) need ${cost} credits and you have ${have}.`); return; }
-    if (!confirm(`Run ${billable.length} ${noun}${billable.length === 1 ? "" : "s"}?\n\nThis will use ${cost} credits (${billable.length} × ${unit}). You have ${have}, leaving ${have - cost}.`)) return;
+    if (cost > have) {
+      alert(SHOW_CREDITS
+        ? `Not enough credits. ${billable.length} ${noun}(s) need ${cost} credits and you have ${have}.`
+        : `Your plan doesn't have enough allowance left for ${billable.length} ${noun}(s). Reduce your selection or upgrade in Billing.`);
+      return;
+    }
+    if (!confirm(SHOW_CREDITS
+      ? `Run ${billable.length} ${noun}${billable.length === 1 ? "" : "s"}?\n\nThis will use ${cost} credits (${billable.length} × ${unit}). You have ${have}, leaving ${have - cost}.`
+      : `Run ${billable.length} ${noun}${billable.length === 1 ? "" : "s"}?`)) return;
     setBulkBusy(kind);
     try {
       const pairs = await ensureSelectedIds(billable);
@@ -2426,9 +2997,6 @@ export default function Dashboard({ view = "" }) {
       setBulkBusy("");
     }
   }
-
-  // Bulk-selection bar entry point: run over just the checked rows.
-  const runBulkBatch = (kind) => runBatchForLeads(kind, reportableLeads);
 
   // Realtime (queue-free) batch enrich / WhatsApp over the captured leads. Reuses
   // the same per-lead realtime endpoints as the single-row buttons — nothing is
@@ -2503,55 +3071,60 @@ export default function Dashboard({ view = "" }) {
     setSelectedLeads(new Set());
   }
 
-  // Sidebar project list (rendered into AppShell's sidebarExtra slot).
+  // Sidebar project list, nested under the Projects nav item (AppShell's
+  // projectsNav slot). It sits inside the nav rather than in its own block, so
+  // each row is a single compact line: name, and the lead count as a quiet
+  // trailing number. The audit counts moved to the workspace header, because at
+  // this size they cost a second line per project and were rarely the reason
+  // somebody scanned this list.
   const projectList = (
-    <div className="space-y-3 pb-4">
+    <div className="space-y-0.5 py-0.5">
       {runningCount > 1 && (
-        <div className="rounded-md bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary">{runningCount} projects running</div>
+        <div className="rounded bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary">{runningCount} running</div>
       )}
-      <div className="space-y-1">
-        {projects.slice(0, projectLimit).map((project) => (
-          <div
-            key={project.slug}
-            role="button"
-            tabIndex={0}
-            onClick={() => setSelected(project.slug)}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelected(project.slug); } }}
-            className={cn(
-              "flex w-full cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors",
-              project.slug === selected ? "border-primary/50 bg-primary/10" : "border-transparent hover:bg-accent"
-            )}
-          >
-            <span className="min-w-0 flex-1">
-              <span className="flex items-center gap-1.5 truncate text-sm font-medium">
-                {project.running && <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-emerald-500" title="Running" />}
-                <span className="truncate">{getProjectDisplayName(project) || project.name}</span>
-              </span>
-              <span className="text-[11px] text-muted-foreground">
-                <AnimatedNumber value={project.counts?.raw || 0} /> leads · {project.counts?.desktopAudits || 0}/{project.counts?.mobileAudits || 0} audits
-              </span>
-            </span>
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); toggleProjectWatch(project); }}
-              className={cn("shrink-0 pt-0.5", project.watchlist ? "text-amber-500" : "text-muted-foreground hover:text-amber-500")}
-              title={project.watchlist ? "Remove from favorites" : "Add to favorites"}
-            >
-              <Star size={16} fill={project.watchlist ? "currentColor" : "none"} />
-            </button>
-          </div>
-        ))}
-        {!projects.length && <div className="px-2.5 text-sm text-muted-foreground">No projects yet</div>}
-        {projects.length > projectLimit && (
+      {projects.slice(0, projectLimit).map((project) => (
+        <div
+          key={project.slug}
+          role="button"
+          tabIndex={0}
+          onClick={() => setSelected(project.slug)}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelected(project.slug); } }}
+          title={getProjectDisplayName(project) || project.name}
+          className={cn(
+            "group/proj flex w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs transition-colors",
+            project.slug === selected ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+          )}
+        >
+          {project.running && <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-emerald-500" title="Running" />}
+          <span className="min-w-0 flex-1 truncate">{getProjectDisplayName(project) || project.name}</span>
+          <span className="shrink-0 tabular-nums text-[10px] text-muted-foreground/70">
+            <AnimatedNumber value={project.counts?.raw || 0} />
+          </span>
           <button
             type="button"
-            onClick={() => setProjectLimit((n) => n + 10)}
-            className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+            onClick={(e) => { e.stopPropagation(); toggleProjectWatch(project); }}
+            className={cn(
+              "shrink-0 transition-opacity",
+              project.watchlist
+                ? "text-amber-500"
+                : "text-muted-foreground opacity-0 hover:text-amber-500 focus:opacity-100 group-hover/proj:opacity-100"
+            )}
+            title={project.watchlist ? "Remove from favorites" : "Add to favorites"}
           >
-            <ChevronDown size={14} /> Load more ({projects.length - projectLimit})
+            <Star size={12} fill={project.watchlist ? "currentColor" : "none"} />
           </button>
-        )}
-      </div>
+        </div>
+      ))}
+      {!projects.length && <div className="px-2 py-1 text-xs text-muted-foreground">No projects yet</div>}
+      {projects.length > projectLimit && (
+        <button
+          type="button"
+          onClick={() => setProjectLimit((n) => n + 10)}
+          className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-primary"
+        >
+          <ChevronDown size={12} /> {projects.length - projectLimit} more
+        </button>
+      )}
     </div>
   );
 
@@ -2562,14 +3135,12 @@ export default function Dashboard({ view = "" }) {
         router.push("/dashboard?view=projects");
       }, 300);
     };
-    // Balance and "where are my projects?" are account state, not part of the
-    // search, so they belong in the topbar — not in a strip above the heading,
-    // where they pushed the heading and the entire form down a row before the
-    // user had read a word of it.
+    // "Where are my projects?" is account state, not part of the search, so it
+    // belongs in the topbar — not in a strip above the heading, where it pushed
+    // the heading and the entire form down a row before the user had read a
+    // word of it.
     const findActions = (
       <div className="hidden items-center gap-2 md:flex">
-        <CreditsPill />
-        <DailyUsagePills />
         <Button variant="outline" size="sm" onClick={openProjects}>
           View my projects <ArrowRight className="h-3.5 w-3.5" />
         </Button>
@@ -2597,8 +3168,6 @@ export default function Dashboard({ view = "" }) {
 
   const actions = (
     <div className="hidden md:flex items-center gap-2">
-      <CreditsPill />
-      <DailyUsagePills />
       <Button
         variant="outline"
         size="sm"
@@ -2619,9 +3188,9 @@ export default function Dashboard({ view = "" }) {
     <AppShell
       active="dashboard"
       title={getProjectDisplayName(status || selectedProject) || status?.name || selectedProject?.name || "Lead Generation"}
-      subtitle={getProjectDisplayQuery(status || selectedProject) || status?.query || form.query}
+      subtitle={getProjectCrumbs(status || selectedProject, leads[0]) || status?.query || form.query}
       actions={actions}
-      sidebarExtra={projectList}
+      projectsNav={projectList}
       tourKey="workspace"
       tourSteps={WORKSPACE_TOUR}
     >
@@ -2660,38 +3229,54 @@ export default function Dashboard({ view = "" }) {
           </div>
         )}
 
-        {/* Stats — at the top of the workspace */}
-        <div className="flex gap-2 overflow-x-auto pb-1 -mx-3 px-3 md:mx-0 md:px-0 md:grid md:grid-cols-5 md:gap-2 scrollbar-none">
-          <StatCard className="w-[110px] shrink-0 md:w-auto md:shrink" value={status?.counts?.raw || 0} label="Scraped leads" />
-          <StatCard className="w-[110px] shrink-0 md:w-auto md:shrink" value={status?.counts?.websites || 0} label="Websites" />
-          <StatCard className="w-[110px] shrink-0 md:w-auto md:shrink" value={status?.counts?.enriched || 0} label="Enriched rows" />
-          <StatCard className="w-[110px] shrink-0 md:w-auto md:shrink" value={status?.counts?.desktopAudits || 0} label="Desktop audits" />
-          <StatCard className="w-[110px] shrink-0 md:w-auto md:shrink" value={status?.counts?.mobileAudits || 0} label="Mobile audits" />
-        </div>
+        {/* Stats — at the top of the workspace. Scraped leads is the denominator
+            for the other four, so each of those also shows its coverage. */}
+        {(() => {
+          const c = status?.counts || {};
+          const raw = c.raw || 0;
+          const cover = (n) => (raw > 0 && n > 0 ? `${Math.min(100, Math.round((n / raw) * 100))}% of leads` : null);
+          const cellClass = "w-[190px] shrink-0 md:w-auto md:shrink";
+          // Average opportunity across the rows currently in view — a word, not a
+          // number, because "High" is the thing you act on.
+          const avg = leads.length
+            ? Math.round(leads.reduce((s, l) => s + scoreLead(l).score, 0) / leads.length)
+            : 0;
+          const avgBand = avg >= 65 ? "high" : avg >= 40 ? "medium" : "low";
+          const saved = leads.filter((l) => l.__favorited).length;
+          return (
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-3 px-3 md:mx-0 md:px-0 md:grid md:grid-cols-2 lg:grid-cols-4 md:gap-3 scrollbar-none">
+              <StatCard className={cellClass} icon={Database} tint="bg-primary/10 text-primary"
+                value={raw} label="Leads found" hint={c.enriched ? `${c.enriched} enriched` : null} />
+              <StatCard className={cellClass} icon={Globe2} tint="bg-sky-500/10 text-sky-600"
+                value={c.websites || 0} label="With website" hint={cover(c.websites || 0)} />
+              <StatCard className={cellClass} icon={Star} tint="bg-amber-500/10 text-amber-600"
+                value={saved} label="Already saved" hint={cover(saved)} />
+              <StatCard className={cellClass} icon={ArrowRight} tint="bg-violet-500/10 text-violet-600"
+                text={BAND_LABEL[avgBand]} label="Avg. opportunity"
+                hint={leads.length ? `${avg}/100 across ${leads.length.toLocaleString()} leads` : null} />
+            </div>
+          );
+        })()}
 
-        {/* Project details (read-only on an existing project) */}
+        {/* Project-level controls. Only rendered when it has something to say —
+            after Enrich/WhatsApp moved into the table toolbar this card was an
+            empty white band on a project that is simply sitting idle. The mobile
+            favorite/delete pair keeps it alive on small screens. */}
+        {(running || isQueued || busy || formRunning) && (
         <Card>
           <CardContent className="space-y-3 p-3">
             {/* Action buttons (placed at the top on mobile, bottom on desktop) */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-border/40 pb-3 sm:border-0 sm:pb-0">
               <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" data-tour="ws-enrich" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("enrich")} title="Grab email + socials for captured leads not enriched yet (realtime, no queue; shared with all users)">
-                  {bulkBusy === "enrich" ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />} Enrich{realtimeBatch?.kind === "enrich" ? ` (${realtimeBatch.done}/${realtimeBatch.total})` : ""}
-                </Button>
-                <Button variant="secondary" data-tour="ws-whatsapp" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("whatsapp")} title="Check WhatsApp for captured numbers not checked yet (realtime, no queue; cached for all users)">
-                  {bulkBusy === "whatsapp" ? <Loader2 size={16} className="animate-spin" /> : <MessageCircle size={16} />} WhatsApp{realtimeBatch?.kind === "whatsapp" ? ` (${realtimeBatch.done}/${realtimeBatch.total})` : ""}
-                </Button>
-                {running ? (
+                {/* Enrich / WhatsApp now live in the table toolbar, next to the
+                    selection they act on. What stays here is project-level: stop
+                    a running job, and the mobile favorite/delete pair. */}
+                {/* Stop only shows while a job is actually running. Resume used to
+                    take this slot the rest of the time, offering to restart a
+                    project that had already finished everything it was asked for. */}
+                {running && (
                   <Button variant="outline" disabled={!!busy} onClick={() => projectAction("stop")}><PauseCircle size={16} /> Stop</Button>
-                ) : (
-                  <Button variant="outline" disabled={!!busy || !selected} onClick={() => projectAction("resume")}><RotateCcw size={16} /> Resume</Button>
                 )}
-                {status?.files?.report && (
-                  <Button asChild variant="outline">
-                    <a href={`${BASE_PATH}/api/projects/${encodeURIComponent(selected)}/report`} target="_blank" rel="noreferrer"><Globe2 size={16} /> Open report</a>
-                  </Button>
-                )}
-
                 {/* Mobile-only Favorite/Delete buttons */}
                 <Button
                   variant="outline"
@@ -2714,39 +3299,6 @@ export default function Dashboard({ view = "" }) {
                   <Trash2 size={15} />
                 </Button>
               </div>
-
-              {/* Mobile details toggle */}
-              <button
-                type="button"
-                onClick={() => setShowDetails(!showDetails)}
-                className="flex items-center justify-between rounded-md border border-border px-3 h-9 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground sm:hidden"
-              >
-                <span>{showDetails ? "Hide settings" : "Show settings"}</span>
-                <ChevronDown className={cn("ml-1.5 h-3.5 w-3.5 transition-transform duration-200", showDetails && "rotate-180")} />
-              </button>
-            </div>
-
-            {/* Inputs grid (collapsible on mobile, always visible on desktop) */}
-            <div className={cn(
-              "grid gap-3 sm:grid-cols-[1.2fr_2fr_0.6fr_0.9fr]",
-              showDetails ? "grid grid-cols-1" : "hidden sm:grid"
-            )}>
-              <label className="space-y-1">
-                <span className="text-xs font-medium text-muted-foreground">Project</span>
-                <Input value={form.name} readOnly className="cursor-default bg-muted/40" title={form.name} />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-medium text-muted-foreground">Search query</span>
-                <Input value={getProjectDisplayQuery(status) || form.query} readOnly className="cursor-default bg-muted/40" title={getProjectDisplayQuery(status) || form.query} />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-medium text-muted-foreground">Leads</span>
-                <Input value={form.max} readOnly className="cursor-default bg-muted/40" />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-medium text-muted-foreground">Project ID</span>
-                <Input value={status?.state?.publicId || selected || ""} readOnly className="cursor-default bg-muted/40 font-mono uppercase tracking-wide" title="Share this ID with support" />
-              </label>
             </div>
 
             {formRunning && (
@@ -2755,20 +3307,25 @@ export default function Dashboard({ view = "" }) {
               </div>
             )}
 
-            <div className={cn(
-              "text-xs",
-              isQueued && !busy ? "font-medium text-amber-600" : "text-muted-foreground"
-            )}>
-              {busy
-                ? busy
-                : running
-                  ? "Running…"
-                  : isQueued
-                    ? <span>Queued — waiting for a free slot{queuedFor ? <span className="ml-1 text-muted-foreground font-normal">· {queuedFor < 60 ? `${queuedFor}s` : `${Math.floor(queuedFor / 60)}m ${queuedFor % 60}s`} so far</span> : ""}</span>
-                    : status?.state?.message || "Ready"}
-            </div>
+            {/* Only shown while something is actually happening. At rest this line
+                said "Ready" or "Done", which is what the page already looks like;
+                the states worth a line are an action in flight, a running job, or
+                a job sitting in the queue. */}
+            {(busy || running || isQueued) && (
+              <div className={cn(
+                "text-xs",
+                isQueued && !busy ? "font-medium text-amber-600" : "text-muted-foreground"
+              )}>
+                {busy
+                  ? busy
+                  : running
+                    ? "Running…"
+                    : <span>Queued, waiting for a free slot{queuedFor ? <span className="ml-1 text-muted-foreground font-normal">· {queuedFor < 60 ? `${queuedFor}s` : `${Math.floor(queuedFor / 60)}m ${queuedFor % 60}s`} so far</span> : ""}</span>}
+              </div>
+            )}
           </CardContent>
         </Card>
+        )}
 
         {error && (
           <div className={cn(
@@ -2802,41 +3359,7 @@ export default function Dashboard({ view = "" }) {
           </div>
         )}
 
-        <div className="grid grid-cols-3 gap-3" data-tour="ws-stages">
-          <Stage title="Find leads" stage={busy?.includes("scrape") && !stages.scrape ? { status: "starting" } : stages.scrape} />
-          <Stage title="Enrich" stage={stages.enrich} />
-          <Stage title="WhatsApp" stage={stages.whatsapp} />
-        </div>
-
         <EnrichProgress progress={status?.enrichProgress} stage={stages.enrich} />
-
-        {/* Bulk action bar — add to a list, audit, report, or remove the selection */}
-        {selectedCount > 0 && (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-primary/40 bg-primary/5 px-4 py-2.5 text-sm">
-            <span className="font-medium">{selectedCount} selected</span>
-            {reportableCount > 0 && (
-              <span className="text-muted-foreground">
-                {reportableCount} with site · audit <strong className="text-foreground">{auditCost}</strong> / report <strong className="text-foreground">{reportCost}</strong> credits
-                {credits != null && <> · balance {credits}</>}
-              </span>
-            )}
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setSelectedLeads(new Set())}>Clear</Button>
-              <Button variant="outline" size="sm" disabled={!!bulkBusy} onClick={bulkAddToList} title="Add the selected leads to a list">
-                {bulkBusy === "list" ? <Loader2 size={15} className="animate-spin" /> : <ListPlus size={15} />} Add to list
-              </Button>
-              <Button variant="outline" size="sm" disabled={!!bulkBusy || batchRunning || reportableCount === 0 || notEnoughForAudit} onClick={() => runBulkBatch("audit")} title={notEnoughForAudit ? "Not enough credits" : `Audit ${reportableCount} site(s) — ${auditCost} credits`}>
-                {bulkBusy === "audit" ? <Loader2 size={15} className="animate-spin" /> : <BarChart3 size={15} />} Audit {reportableCount}
-              </Button>
-              <Button size="sm" disabled={!!bulkBusy || batchRunning || reportableCount === 0 || notEnoughForReport} onClick={() => runBulkBatch("report")} title={notEnoughForReport ? "Not enough credits" : `Generate ${reportableCount} report(s) — ${reportCost} credits`}>
-                {bulkBusy === "report" ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />} Report {reportableCount}
-              </Button>
-              <Button variant="destructive" size="sm" disabled={!!bulkBusy} onClick={bulkRemove} title="Remove the selected leads from this list">
-                {bulkBusy === "remove" ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />} Remove
-              </Button>
-            </div>
-          </div>
-        )}
 
         {/* Workspace results map — shows when at least one lead has lat/lng */}
         {(() => {
@@ -2857,7 +3380,170 @@ export default function Dashboard({ view = "" }) {
           );
         })()}
 
+        {/* Filters + search + sort. Every control narrows the same `leads` list
+            the table, the counts and the bulk actions all read from, so what you
+            filter to is exactly what you act on. */}
+        {allLeads.length > 0 && (
+          <Card>
+            <CardContent className="space-y-3 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Filters</span>
+                {[
+                  { key: "website", label: "Has website", icon: Globe2, options: [["all", "All"], ["yes", "Yes"], ["no", "No"]] },
+                  { key: "email", label: "Has email", icon: Mail, options: [["all", "All"], ["yes", "Yes"], ["no", "No"]] },
+                  { key: "phone", label: "Has phone", icon: MessageCircle, options: [["all", "All"], ["yes", "Yes"], ["no", "No"]] },
+                  { key: "reviews", label: "Reviews", icon: Star, options: [["all", "All"], ["none", "None"], ["some", "1-20"], ["many", "20+"]] },
+                ].map((f) => (
+                  <FilterSelect
+                    key={f.key}
+                    label={f.label}
+                    icon={f.icon}
+                    value={leadFilters[f.key]}
+                    options={f.options.map(([value, label]) => ({ value, label, hint: filterCounts[f.key]?.[value] }))}
+                    onChange={(v) => { setLeadFilters((st) => ({ ...st, [f.key]: v })); setTablePage(0); }}
+                  />
+                ))}
+                <button
+                  onClick={() => setMoreFilters((v) => !v)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                    moreFilters ? "border-primary/50 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted/60"
+                  )}
+                >
+                  <SlidersHorizontal size={12} /> More filters
+                  <ChevronDown size={12} className={cn("transition-transform", moreFilters && "rotate-180")} />
+                </button>
+                {filtersActive && (
+                  <button
+                    onClick={() => {
+                      setLeadFilters({ website: "all", email: "all", phone: "all", reviews: "all", rating: "all", social: "all", enriched: "all" });
+                      setLeadSearch("");
+                      setTablePage(0);
+                    }}
+                    className="ml-auto text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    Clear all
+                  </button>
+                )}
+              </div>
+
+              {/* Second row — the filters that matter once you've narrowed the
+                  obvious ones. Hidden by default so the bar stays one line. */}
+              {moreFilters && (
+                <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
+                  {[
+                    { key: "rating", label: "Rating", icon: Star, options: [["all", "All"], ["none", "Unrated"], ["low", "Under 4.0"], ["good", "4.0-4.4"], ["top", "4.5+"]] },
+                    { key: "enriched", label: "Enriched", icon: Zap, options: [["all", "All"], ["yes", "Yes"], ["no", "Not yet"]] },
+                  ].map((f) => (
+                    <FilterSelect
+                      key={f.key}
+                      label={f.label}
+                      icon={f.icon}
+                      value={leadFilters[f.key]}
+                      options={f.options.map(([value, label]) => ({ value, label, hint: filterCounts[f.key]?.[value] }))}
+                      onChange={(v) => { setLeadFilters((st) => ({ ...st, [f.key]: v })); setTablePage(0); }}
+                    />
+                  ))}
+                  {/* Which network, not just "any". Chasing businesses with no
+                      Facebook page is a different job from chasing ones with no
+                      LinkedIn, so the filter has to name the network. */}
+                  <FilterSelect
+                    label="Socials"
+                    icon={Share2}
+                    value={leadFilters.social}
+                    options={[
+                      { value: "all", label: "All", hint: filterCounts.social?.all },
+                      { value: "any", label: "Has any social", hint: filterCounts.social?.any },
+                      { value: "none", label: "Has none", hint: filterCounts.social?.none },
+                      { value: "no-facebook", label: "No Facebook", hint: filterCounts.social?.["no-facebook"] },
+                      { value: "no-instagram", label: "No Instagram", hint: filterCounts.social?.["no-instagram"] },
+                      { value: "no-linkedin", label: "No LinkedIn", hint: filterCounts.social?.["no-linkedin"] },
+                      { value: "facebook", label: "Has Facebook", hint: filterCounts.social?.facebook },
+                      { value: "instagram", label: "Has Instagram", hint: filterCounts.social?.instagram },
+                      { value: "linkedin", label: "Has LinkedIn", hint: filterCounts.social?.linkedin },
+                    ]}
+                    onChange={(v) => { setLeadFilters((st) => ({ ...st, social: v })); setTablePage(0); }}
+                  />
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="relative flex-1">
+                  <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={leadSearch}
+                    onChange={(e) => { setLeadSearch(e.target.value); setTablePage(0); }}
+                    placeholder="Search business name, phone, email, address…"
+                    className="pl-9"
+                  />
+                </div>
+                <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                  Sort by
+                  <Select
+                    value={leadSort}
+                    onChange={(e) => { setLeadSort(e.target.value); setTablePage(0); }}
+                    className="h-10 w-[170px]"
+                  >
+                    <option value="opportunity">Opportunity</option>
+                    <option value="found">Order found</option>
+                    <option value="name">Name</option>
+                    <option value="reviews">Reviews</option>
+                    <option value="rating">Rating</option>
+                  </Select>
+                </label>
+              </div>
+
+              {filtersActive && (
+                <p className="text-xs text-muted-foreground">
+                  Showing {leads.length.toLocaleString()} of {allLeads.length.toLocaleString()} leads
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         <Card className="overflow-hidden" data-tour="ws-leads">
+          {/* Toolbar — select-all plus the actions, sitting directly on top of the
+              rows they act on. With nothing ticked the buttons work on every lead
+              in the current (filtered) view; ticking rows narrows them to those. */}
+          {leads.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/30 px-3 py-2">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  aria-label="Select all leads on this page"
+                  checked={allLeadsSelected}
+                  disabled={!leadKeysOnPage.length}
+                  onChange={toggleAllLeads}
+                  className="accent-[hsl(var(--primary))]"
+                />
+                {selectedCount > 0 ? `${selectedCount} selected` : `${leads.length.toLocaleString()} leads`}
+              </label>
+              <span className="mx-1 h-5 w-px bg-border" />
+              <Button variant="outline" size="sm" data-tour="ws-enrich" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("enrich")} title="Grab email + socials for leads not enriched yet (realtime, no queue; shared with all users)">
+                {bulkBusy === "enrich" ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />} Enrich{realtimeBatch?.kind === "enrich" ? ` (${realtimeBatch.done}/${realtimeBatch.total})` : ""}
+              </Button>
+              <Button variant="outline" size="sm" data-tour="ws-whatsapp" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("whatsapp")} title="Check WhatsApp for numbers not checked yet (realtime, no queue; cached for all users)">
+                {bulkBusy === "whatsapp" ? <Loader2 size={15} className="animate-spin" /> : <MessageCircle size={15} />} WhatsApp{realtimeBatch?.kind === "whatsapp" ? ` (${realtimeBatch.done}/${realtimeBatch.total})` : ""}
+              </Button>
+              <Button variant="outline" size="sm" disabled={!!bulkBusy || !selectedCount} onClick={bulkAddToList} title="Add the selected leads to a list">
+                {bulkBusy === "list" ? <Loader2 size={15} className="animate-spin" /> : <ListPlus size={15} />} Add to list
+              </Button>
+              <Button variant="outline" size="sm" disabled={!leads.length} onClick={exportLeadsCsv} title="Download the leads in view as CSV">
+                <Download size={15} /> Export{selectedCount > 0 ? ` (${selectedCount})` : ""}
+              </Button>
+              {selectedCount > 0 && (
+                <>
+                  <Button variant="outline" size="sm" className="border-destructive/40 text-destructive hover:bg-destructive/10" disabled={!!bulkBusy} onClick={bulkRemove} title="Remove the selected leads from this project">
+                    {bulkBusy === "remove" ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />} Remove
+                  </Button>
+                  <button onClick={() => setSelectedLeads(new Set())} className="ml-auto text-xs text-muted-foreground transition-colors hover:text-foreground">
+                    Clear selection
+                  </button>
+                </>
+              )}
+            </div>
+          )}
           {!leads.length ? (
             <div className="p-10 text-center text-sm text-muted-foreground">No leads loaded</div>
           ) : (
@@ -2869,7 +3555,7 @@ export default function Dashboard({ view = "" }) {
                   const key = leadKey(lead);
                   const ownerReplied = lead.owner_replied;
                   return (
-                  <div className={cn("cursor-pointer rounded-lg border bg-card/60 p-3", selectedLeads.has(key) ? "border-primary/50 bg-primary/5" : "border-border")} key={`m-${lead.name}-${index}`} onClick={() => toggleLead(key)}>
+                  <div className={cn("cursor-pointer rounded-lg border bg-card/60 p-3", selectedLeads.has(key) ? "border-primary/50 bg-primary/5" : "border-border")} key={`m-${lead.name}-${index}`} onClick={() => setDetailKey(key)}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-start gap-2">
                         <input type="checkbox" aria-label={`Select ${lead.name || "lead"}`} checked={selectedLeads.has(key)} onClick={(e) => e.stopPropagation()} onChange={() => toggleLead(key)} className="mt-0.5 accent-[hsl(var(--primary))]" />
@@ -2906,14 +3592,18 @@ export default function Dashboard({ view = "" }) {
                     <div className="mt-2 flex flex-wrap items-center gap-1" onClick={(e) => e.stopPropagation()}>
                       <Button variant="ghost" size="sm" className={cn(lead.__favorited && "text-amber-500")} onClick={() => addCapturedLead(lead, "watchlist")} title={lead.__favorited ? "Added to favorites" : "Add to favorites"}><Star size={14} fill={lead.__favorited ? "currentColor" : "none"} /> Favorite</Button>
                       <Button variant="ghost" size="sm" className={cn(lead.__listed && "text-primary")} disabled={(rowBusy[leadKey(lead)] || {}).list} onClick={() => openListsForCaptured(lead)} title="Add to a list">{(rowBusy[leadKey(lead)] || {}).list ? <Loader2 size={14} className="animate-spin" /> : <ListPlus size={14} />} List</Button>
-                      <CapturedActions lead={lead} busy={rowBusy[leadKey(lead)] || {}} onEnrich={enrichCaptured} onWhatsapp={whatsappCaptured} onAudit={auditCaptured} onReport={reportCaptured} onRemove={hideCaptured} />
+                      <CapturedActions lead={lead} busy={rowBusy[leadKey(lead)] || {}} onEnrich={enrichCaptured} onRemove={hideCaptured} />
                     </div>
                   </div>
                   );
                 })}
               </div>
 
-              {/* Desktop table — columns: # | Name | Contact | Rating | Reviews | Owner reply | Website | Socials | Health | Actions */}
+              {/* Desktop table. Columns follow what a seller scans for, in order:
+                  who they are -> how to reach them -> what they run online ->
+                  social proof -> where -> how good a prospect. The online-presence
+                  cell shows greyed-out icons for what is MISSING as prominently as
+                  what is there — the absence is the sales hook. */}
               <div className="hidden md:block overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -2921,87 +3611,120 @@ export default function Dashboard({ view = "" }) {
                       <TableHead className="w-8">
                         <input type="checkbox" aria-label="Select all leads" checked={allLeadsSelected} disabled={!leadKeysOnPage.length} onChange={toggleAllLeads} className="accent-[hsl(var(--primary))]" />
                       </TableHead>
-                      {/* #3 row index column */}
-                      <TableHead className="w-8 text-center">#</TableHead>
-                      <TableHead>Name</TableHead>
+                      <TableHead>Lead</TableHead>
                       <TableHead>Contact</TableHead>
-                      <TableHead>Rating</TableHead>
+                      <TableHead>Online presence</TableHead>
                       <TableHead>Reviews</TableHead>
-                      <TableHead><span className="inline-flex items-center gap-1">Owner reply <InfoPopover label="About owner reply">{OWNER_REPLY_INFO}</InfoPopover></span></TableHead>
-                      <TableHead>Website</TableHead>
-                      <TableHead>Socials</TableHead>
-                      <TableHead><span className="inline-flex items-center gap-1">Desktop health <InfoPopover label="About website health">{HEALTH_INFO}</InfoPopover></span></TableHead>
-                      <TableHead>Mobile health</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableHead>Location</TableHead>
+                      <TableHead className="text-right">
+                        <span className="inline-flex items-center gap-1">
+                          Opportunity
+                          <InfoPopover label="How the opportunity score works" align="right" width="w-80">
+                            {OPPORTUNITY_HELP.map((line) => (
+                              <span key={line} className="mb-2 block last:mb-0">{line}</span>
+                            ))}
+                          </InfoPopover>
+                        </span>
+                      </TableHead>
+                      <TableHead className="w-[92px]" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {pagedLeads.map((lead, idx) => {
                       const index = pageOffset + idx;
                       const key = leadKey(lead);
-                      const ownerReplied = lead.owner_replied;
+                      const opp = scoreLead(lead);
+                      const reviews = reviewCount(lead);
                       return (
-                      <TableRow key={`${lead.name}-${index}`} className={cn("cursor-pointer", selectedLeads.has(key) && "bg-primary/5")} onClick={() => toggleLead(key)}>
+                      <TableRow
+                        key={`${lead.name}-${index}`}
+                        className={cn("cursor-pointer", selectedLeads.has(key) && "bg-primary/5", detailKey === key && "bg-primary/10")}
+                        onClick={() => setDetailKey(key)}
+                      >
                         <TableCell className="w-8" onClick={(e) => e.stopPropagation()}>
                           <input type="checkbox" aria-label={`Select ${lead.name || "lead"}`} checked={selectedLeads.has(key)} onChange={() => toggleLead(key)} className="accent-[hsl(var(--primary))]" />
                         </TableCell>
-                        {/* #3 row number */}
-                        <TableCell className="w-8 text-center text-xs text-muted-foreground">{index + 1}</TableCell>
-                        {/* #4 truncate long name */}
-                        <TableCell className="max-w-[200px]">
-                          <div className="truncate font-medium" title={lead.name || "Unknown"}>
-                            {leadMapsHref(lead) ? <a className="text-primary hover:underline" href={leadMapsHref(lead)} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{lead.name || "Unknown"}</a> : lead.name || "Unknown"}
+
+                        {/* Lead — avatar + name + category */}
+                        <TableCell className="max-w-[240px]">
+                          <div className="flex items-center gap-2.5">
+                            <LeadAvatar lead={lead} size={32} />
+                            <div className="min-w-0">
+                              <div className="truncate font-medium" title={lead.name || "Unknown"}>{lead.name || "Unknown"}</div>
+                              <div className="truncate text-xs text-muted-foreground" title={lead.category || ""}>{lead.category || "—"}</div>
+                            </div>
                           </div>
-                          <div className="truncate text-xs text-muted-foreground" title={lead.category || lead.address || ""}>{lead.category || lead.address || ""}</div>
                         </TableCell>
-                        {/* #11 Contact = email + phone only (no rating, no WA text) */}
+
+                        {/* Contact — phone (with the WhatsApp verdict) over email */}
                         <TableCell>
                           <div className="flex items-center gap-1.5 text-sm">
-                            {lead.phone ? <WaPhone lead={lead} /> : <span className="text-xs text-muted-foreground">-</span>}
-                            {/* #9 WhatsApp badge: green check on WhatsApp, red X if not */}
+                            {lead.phone
+                              ? <WaPhone lead={lead} onCheck={whatsappCaptured} busy={(rowBusy[leadKey(lead)] || {}).whatsapp} />
+                              : <span className="text-xs text-muted-foreground">—</span>}
                             <WaIcon lead={lead} />
                           </div>
-                          {/* #12 email truncated with tooltip */}
                           {lead.email
                             ? (contactLocked
-                                ? <LockedContact value={lead.email} className="block max-w-[160px] truncate text-xs" />
-                                : <a className="block max-w-[160px] truncate text-xs text-primary hover:underline" href={`mailto:${lead.email}`} title={lead.email} onClick={(e) => e.stopPropagation()}>{lead.email}</a>)
-                            : <span className="text-xs text-muted-foreground">{prettyEnrichStatus(lead.enrichStatus) || "-"}</span>
+                                ? <LockedContact value={lead.email} className="block max-w-[170px] truncate text-xs" />
+                                : <a className="block max-w-[170px] truncate text-xs text-primary hover:underline" href={`mailto:${lead.email}`} title={lead.email} onClick={(e) => e.stopPropagation()}>{lead.email}</a>)
+                            : <span className="text-xs text-muted-foreground">{prettyEnrichStatus(lead.enrichStatus) || "—"}</span>
                           }
                         </TableCell>
-                        {/* #11 Rating column — only meaningful with reviews */}
-                        <TableCell className="text-sm">
-                          {showRating(lead)
-                            ? <span className="inline-flex items-center gap-0.5 font-medium"><Star size={12} className="text-amber-500" fill="currentColor" /> {lead.rating}</span>
-                            : <span className="text-xs text-muted-foreground">-</span>
-                          }
-                        </TableCell>
-                        {/* #11 Reviews column — 0 when empty */}
-                        <TableCell className="text-sm tabular-nums">{reviewCount(lead).toLocaleString()}</TableCell>
-                        {/* #11 Owner reply column */}
-                        <TableCell className="text-sm">
-                          {ownerReplied === 1
-                            ? <span className="text-emerald-600">Yes ({lead.owner_reply_count || 0})</span>
-                            : ownerReplied === 0
-                              ? <span className="text-muted-foreground">No</span>
-                              : <span className="text-muted-foreground">-</span>
-                          }
-                        </TableCell>
-                        {/* #12 Website truncated with tooltip */}
+
+                        {/* Online presence — website + socials, present vs missing */}
                         <TableCell onClick={(e) => e.stopPropagation()}>
-                          {lead.website
-                            ? <a className="block max-w-[140px] truncate text-primary hover:underline" href={lead.website} target="_blank" rel="noreferrer" title={lead.website}>{lead.domain || lead.website}</a>
-                            : <span className="text-xs text-muted-foreground">-</span>
+                          <div className="flex items-center gap-1.5">
+                            {lead.website ? (
+                              <a href={lead.website} target="_blank" rel="noreferrer" title={lead.website} className="text-sky-600 transition-opacity hover:opacity-70">
+                                <Globe2 size={16} />
+                              </a>
+                            ) : (
+                              <Globe2 size={16} className="text-muted-foreground/30" aria-label="No website" />
+                            )}
+                            <Socials lead={lead} showMissing />
+                          </div>
+                        </TableCell>
+
+                        {/* Reviews — count over rating, "No reviews" spelled out */}
+                        <TableCell className="text-sm">
+                          <div className="tabular-nums">{reviews.toLocaleString()}</div>
+                          {showRating(lead) && reviews > 0 ? (
+                            <div className="flex items-center gap-0.5 text-xs text-muted-foreground">
+                              <Star size={10} className="text-amber-500" fill="currentColor" /> {lead.rating}
+                            </div>
+                          ) : (
+                            <div className="text-xs text-muted-foreground">No reviews</div>
+                          )}
+                        </TableCell>
+
+                        <TableCell className="max-w-[190px] text-sm">
+                          {lead.address
+                            ? <span className="flex items-start gap-1"><MapPin size={13} className="mt-0.5 shrink-0 text-muted-foreground" /><span className="truncate" title={lead.address}>{lead.address}</span></span>
+                            : <span className="text-xs text-muted-foreground">—</span>
                           }
                         </TableCell>
-                        <TableCell onClick={(e) => e.stopPropagation()}><Socials lead={lead} /></TableCell>
-                        <TableCell><div className="flex flex-wrap gap-1"><Score label="Perf" value={lead.desktop?.performance} /><Score label="SEO" value={lead.desktop?.seo} /></div></TableCell>
-                        <TableCell><div className="flex flex-wrap gap-1"><Score label="Perf" value={lead.mobile?.performance} /><Score label="SEO" value={lead.mobile?.seo} /></div></TableCell>
+
+                        {/* Opportunity — band word plus the score behind it */}
+                        <TableCell>
+                          <div className="flex items-center justify-end gap-2">
+                            <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium", BAND_CLASS[opp.band])}>
+                              <TrendingUp size={11} /> {BAND_LABEL[opp.band]}
+                            </span>
+                            <span
+                              className={cn("flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-semibold tabular-nums", BAND_RING[opp.band])}
+                              title={`${opp.score}/100 from ${opp.coverage}% signal coverage — ${opp.reasons[0] || "no gaps found"}`}
+                            >
+                              {opp.score}
+                            </span>
+                          </div>
+                        </TableCell>
+
                         <TableCell onClick={(e) => e.stopPropagation()}>
-                          <div className="flex flex-wrap items-center gap-0.5">
+                          <div className="flex items-center justify-end gap-0.5">
                             <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.__favorited && "text-amber-500")} onClick={() => addCapturedLead(lead, "watchlist")} title={lead.__favorited ? "Added to favorites" : "Add to favorites"}><Star size={14} fill={lead.__favorited ? "currentColor" : "none"} /></Button>
                             <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.__listed && "text-primary")} disabled={(rowBusy[leadKey(lead)] || {}).list} onClick={() => openListsForCaptured(lead)} title="Add to a list">{(rowBusy[leadKey(lead)] || {}).list ? <Loader2 size={14} className="animate-spin" /> : <ListPlus size={14} />}</Button>
-                            <CapturedActions lead={lead} busy={rowBusy[leadKey(lead)] || {}} onEnrich={enrichCaptured} onWhatsapp={whatsappCaptured} onAudit={auditCaptured} onReport={reportCaptured} onRemove={hideCaptured} />
+                            <CapturedActions lead={lead} busy={rowBusy[leadKey(lead)] || {}} onEnrich={enrichCaptured} onRemove={hideCaptured} />
                           </div>
                         </TableCell>
                       </TableRow>
@@ -3014,18 +3737,67 @@ export default function Dashboard({ view = "" }) {
           )}
         </Card>
 
-        {/* Pager — 200 leads per page */}
-        {tablePageCount > 1 && (
-          <div className="flex items-center justify-center gap-4">
-            <Button variant="outline" size="sm" disabled={safeTablePage === 0} onClick={() => setTablePage((n) => Math.max(0, n - 1))}>Previous</Button>
+        {/* Pager — 50 leads per page, with the range spelled out on the left the
+            way a results footer normally reads. */}
+        {leads.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 px-1">
             <span className="text-xs text-muted-foreground">
-              {pageOffset + 1}-{Math.min(pageOffset + WORKSPACE_PAGE_SIZE, leads.length)} of {leads.length.toLocaleString()} · page {safeTablePage + 1} of {tablePageCount}
+              Showing {(pageOffset + 1).toLocaleString()} to {Math.min(pageOffset + WORKSPACE_PAGE_SIZE, leads.length).toLocaleString()} of {leads.length.toLocaleString()} leads
             </span>
-            <Button variant="outline" size="sm" disabled={safeTablePage >= tablePageCount - 1} onClick={() => setTablePage((n) => Math.min(tablePageCount - 1, n + 1))}>Next</Button>
+            {tablePageCount > 1 && (() => {
+              // First, last, and a window around the current page; gaps collapse
+              // to an ellipsis so 60 pages stay a single row of controls.
+              const pages = [];
+              for (let i = 0; i < tablePageCount; i++) {
+                if (i === 0 || i === tablePageCount - 1 || Math.abs(i - safeTablePage) <= 1) pages.push(i);
+                else if (pages[pages.length - 1] !== "…") pages.push("…");
+              }
+              return (
+                <div className="flex items-center gap-1">
+                  <Button variant="outline" size="icon" className="h-8 w-8" aria-label="Previous page" disabled={safeTablePage === 0} onClick={() => setTablePage((n) => Math.max(0, n - 1))}>
+                    <ChevronDown size={15} className="rotate-90" />
+                  </Button>
+                  {pages.map((pageNum, i) =>
+                    pageNum === "…" ? (
+                      <span key={`gap-${i}`} className="px-1 text-xs text-muted-foreground">…</span>
+                    ) : (
+                      <button
+                        key={pageNum}
+                        onClick={() => setTablePage(pageNum)}
+                        aria-current={pageNum === safeTablePage ? "page" : undefined}
+                        className={cn(
+                          "h-8 min-w-8 rounded-md px-2 text-xs font-medium tabular-nums transition-colors",
+                          pageNum === safeTablePage ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"
+                        )}
+                      >
+                        {pageNum + 1}
+                      </button>
+                    )
+                  )}
+                  <Button variant="outline" size="icon" className="h-8 w-8" aria-label="Next page" disabled={safeTablePage >= tablePageCount - 1} onClick={() => setTablePage((n) => Math.min(tablePageCount - 1, n + 1))}>
+                    <ChevronDown size={15} className="-rotate-90" />
+                  </Button>
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>
-      {reportLead && <ReportModal lead={reportLead} onClose={() => setReportLead(null)} onCharged={(c) => { if (typeof c === "number") setCredits(c); }} />}
+      {/* Lead detail drawer — opens on a row click. Rendered as a slide-over so
+          the table keeps its full width; on desktop it docks to the right edge. */}
+      <Sheet open={!!detailLead} onOpenChange={(o) => !o && setDetailKey(null)}>
+        <SheetContent side="right" showClose={false} className="max-w-sm p-0">
+          <LeadDetailPanel
+            lead={detailLead}
+            locked={contactLocked}
+            enriching={!!(rowBusy[detailKey] || {}).enrich}
+            onClose={() => setDetailKey(null)}
+            onEnrich={enrichCaptured}
+            onToggleFavorite={(l) => addCapturedLead(l, "watchlist")}
+          />
+        </SheetContent>
+      </Sheet>
+
       {listsLead && (
         <ListsDialog
           lead={listsLead}
