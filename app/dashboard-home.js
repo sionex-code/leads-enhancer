@@ -1960,6 +1960,16 @@ export default function Dashboard({ view = "" }) {
   // The lead open in the right-hand detail drawer (a row click inspects; the
   // checkbox is what selects for bulk actions).
   const [detailKey, setDetailKey] = useState(null);
+  // The results map starts collapsed: it is a 320px band of Leaflet above the
+  // table that most sessions scroll straight past, and leaving it shut also
+  // means the map bundle and its tiles are never fetched until asked for.
+  // Remembered per browser, so someone who works from the map keeps it open.
+  const [mapOpen, setMapOpen] = useState(false);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("lf_map_open") === "1") setMapOpen(true);
+    } catch {}
+  }, []);
   // Per-row state for the captured-leads table actions (enrich / whatsapp / report
   // / remove). The leads list itself is rebuilt from project status on every poll,
   // so action results and removals are kept in an overlay keyed by a stable lead
@@ -3361,7 +3371,9 @@ export default function Dashboard({ view = "" }) {
 
         <EnrichProgress progress={status?.enrichProgress} stage={stages.enrich} />
 
-        {/* Workspace results map — shows when at least one lead has lat/lng */}
+        {/* Workspace results map — shows when at least one lead has lat/lng.
+            Collapsed by default behind a one-click header; the <LeadsMap> is only
+            mounted once opened, so Leaflet and its tiles cost nothing until then. */}
         {(() => {
           const geoLeads = leads.filter((l) => Number.isFinite(parseFloat(l.lat)) && Number.isFinite(parseFloat(l.lng)));
           if (!geoLeads.length) return null;
@@ -3370,13 +3382,38 @@ export default function Dashboard({ view = "" }) {
           const mapCenter = { lat: avgLat, lng: avgLng };
           const mapPoints = geoLeads.map((l) => ({ lat: parseFloat(l.lat), lng: parseFloat(l.lng), name: l.name || "" }));
           return (
-            <LeadsMap
-              center={mapCenter}
-              radiusKm={10}
-              points={mapPoints}
-              height={320}
-              className="w-full"
-            />
+            <Card className="overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setMapOpen((open) => {
+                  try { localStorage.setItem("lf_map_open", open ? "0" : "1"); } catch {}
+                  return !open;
+                })}
+                aria-expanded={mapOpen}
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-muted/40"
+              >
+                <MapPin size={15} className="shrink-0 text-primary" />
+                <span className="text-sm font-medium">Map</span>
+                <span className="text-xs text-muted-foreground">
+                  {geoLeads.length.toLocaleString()} of {leads.length.toLocaleString()} leads plotted
+                </span>
+                <ChevronDown
+                  size={16}
+                  className={cn("ml-auto shrink-0 text-muted-foreground transition-transform duration-200", mapOpen && "rotate-180")}
+                />
+              </button>
+              {mapOpen && (
+                <div className="border-t border-border">
+                  <LeadsMap
+                    center={mapCenter}
+                    radiusKm={10}
+                    points={mapPoints}
+                    height={320}
+                    className="w-full"
+                  />
+                </div>
+              )}
+            </Card>
           );
         })()}
 
