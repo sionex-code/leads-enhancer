@@ -3764,7 +3764,7 @@ export default function Dashboard({ view = "" }) {
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-1.5">
                             {lead.website ? (
-                              <a href={lead.website} target="_blank" rel="noreferrer" title={lead.website} className="text-sky-600 transition-opacity hover:opacity-70">
+                              <a href={lead.website} target="_blank" rel="noreferrer" title={lead.website} className="text-primary transition-opacity hover:opacity-70">
                                 <Globe2 size={16} />
                               </a>
                             ) : (

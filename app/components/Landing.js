@@ -72,11 +72,11 @@ const PILLS = [
 // each stage costs, so the reader learns how the product works rather than
 // reading a second grid of features.
 const DISCOVER = [
-  { icon: Search, tag: "Stage 1 · Search", title: "Answered from leads we already hold", body: "Most niche and city combinations come straight out of our index in a few seconds. When a search covers ground we have not collected yet, the browser extension runs it live on your own machine, so you never sit behind anyone else's job.", grad: "from-emerald-50 to-emerald-100/40", ring: "ring-emerald-200/70", dot: "bg-emerald-400", chip: "bg-emerald-500/10 text-emerald-600" },
-  { icon: Mail, tag: "Stage 2 · Enrich", title: "Contacts taken from their own website", body: "Every business we return gets crawled for emails, social profiles and a WhatsApp number. That is the difference between a list of map pins and a list you can actually send to on the day it arrives.", grad: "from-violet-50 to-violet-100/40", ring: "ring-violet-200/70", dot: "bg-violet-400", chip: "bg-violet-500/10 text-violet-600" },
-  { icon: Gauge, tag: "Stage 3 · Qualify", title: "A real Chrome audit of their site", body: "SSL, load speed, mobile layout and whether they run a chatbot, checked in a real browser rather than guessed. The businesses with a broken site, or no site at all, are usually the easiest pitch, and the audit tells you which ones those are.", grad: "from-sky-50 to-sky-100/40", ring: "ring-sky-200/70", dot: "bg-sky-400", chip: "bg-sky-500/10 text-sky-600" },
-  { icon: ListChecks, tag: "Stage 4 · Work it", title: "Lists, a watch list and outreach status", body: "Save leads into named lists, keep the ones you are chasing on your watch list, mark where each conversation stands, and export a deduped CSV that drops straight into your CRM.", grad: "from-orange-50 to-orange-100/40", ring: "ring-orange-200/70", dot: "bg-orange-400", chip: "bg-orange-500/10 text-orange-600" },
-  { icon: Database, tag: "What it costs", title: "Credits, charged only for new work", body: "One credit finds a lead, a quick audit is three, a chatbot scan is five and a full website report is ten. Going back over a lead you already own costs nothing, so your own list stays free to revisit as often as you like.", grad: "from-rose-50 to-rose-100/40", ring: "ring-rose-200/70", dot: "bg-rose-400", chip: "bg-rose-500/10 text-rose-600" },
+  { icon: Search, tag: "Stage 1 · Search", title: "Answered from leads we already hold", body: "Most niche and city combinations come straight out of our index in a few seconds. When a search covers ground we have not collected yet, the browser extension runs it live on your own machine, so you never sit behind anyone else's job.", grad: "from-amber-50 to-amber-100/40", ring: "ring-amber-200/70", dot: "bg-amber-400", chip: "bg-amber-500/10 text-amber-700" },
+  { icon: Mail, tag: "Stage 2 · Enrich", title: "Contacts taken from their own website", body: "Every business we return gets crawled for emails, social profiles and a WhatsApp number. That is the difference between a list of map pins and a list you can actually send to on the day it arrives.", grad: "from-orange-50 to-orange-100/40", ring: "ring-orange-200/70", dot: "bg-orange-400", chip: "bg-orange-500/10 text-orange-700" },
+  { icon: Gauge, tag: "Stage 3 · Qualify", title: "A real Chrome audit of their site", body: "SSL, load speed, mobile layout and whether they run a chatbot, checked in a real browser rather than guessed. The businesses with a broken site, or no site at all, are usually the easiest pitch, and the audit tells you which ones those are.", grad: "from-stone-50 to-stone-100/60", ring: "ring-stone-200/70", dot: "bg-stone-400", chip: "bg-stone-500/10 text-stone-700" },
+  { icon: ListChecks, tag: "Stage 4 · Work it", title: "Lists, a watch list and outreach status", body: "Save leads into named lists, keep the ones you are chasing on your watch list, mark where each conversation stands, and export a deduped CSV that drops straight into your CRM.", grad: "from-amber-50 to-orange-100/40", ring: "ring-orange-200/60", dot: "bg-primary", chip: "bg-primary/10 text-primary" },
+  { icon: Database, tag: "What it costs", title: "Credits, charged only for new work", body: "One credit finds a lead, a quick audit is three, a chatbot scan is five and a full website report is ten. Going back over a lead you already own costs nothing, so your own list stays free to revisit as often as you like.", grad: "from-stone-50 to-stone-100/60", ring: "ring-stone-200/70", dot: "bg-stone-400", chip: "bg-stone-500/10 text-stone-700" },
 ];
 
 const STATS = [
@@ -387,7 +387,7 @@ function HeroApp() {
           Example lead
         </div>
         <div className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600"><Building2 className="h-4 w-4" /></span>
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary"><Building2 className="h-4 w-4" /></span>
           <div className="leading-tight">
             <div className="text-sm font-semibold text-foreground">Contoso Roofing Co.</div>
             <div className="text-[11px] text-muted-foreground">Austin, TX · ★ 4.9</div>
@@ -397,7 +397,7 @@ function HeroApp() {
           <Mail className="h-3.5 w-3.5 text-primary" /><span className="truncate text-foreground">hello@example.com</span>
         </div>
         <div className="mt-3 flex flex-wrap gap-1.5">
-          {[{ t: "No SSL", c: "bg-rose-500/10 text-rose-600" }, { t: "Slow site", c: "bg-amber-500/10 text-amber-600" }, { t: "No chatbot", c: "bg-sky-500/10 text-sky-700" }].map((tag) => (
+          {[{ t: "No SSL", c: "bg-rose-500/10 text-rose-600" }, { t: "Slow site", c: "bg-amber-500/10 text-amber-600" }, { t: "No chatbot", c: "bg-stone-500/10 text-stone-700" }].map((tag) => (
             <span key={tag.t} className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${tag.c}`}>{tag.t}</span>
           ))}
         </div>
@@ -529,7 +529,7 @@ function EnrichChat() {
       </div>
       {/* collaboration cursors */}
       <span className="absolute right-6 top-6 rounded-md bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground shadow">You</span>
-      <span className="absolute bottom-8 left-6 rounded-md bg-violet-500 px-2 py-0.5 text-[10px] font-semibold text-white shadow">Team</span>
+      <span className="absolute bottom-8 left-6 rounded-md bg-foreground px-2 py-0.5 text-[10px] font-semibold text-background shadow">Team</span>
     </div>
   );
 }
@@ -603,7 +603,7 @@ function StepMock({ step }) {
         <span className="inline-flex items-center gap-1.5 rounded-lg bg-flare/25 px-2.5 py-1 text-xs font-semibold text-flare-ink"><FileSpreadsheet className="h-3.5 w-3.5" /> Export CSV</span>
       </div>
       <div className="mt-4 space-y-2">
-        {[{ n: "Northwind HVAC", s: "Contacted", c: "bg-sky-500/10 text-sky-600" }, { n: "Fabrikam Electric", s: "Replied", c: "bg-emerald-500/10 text-emerald-600" }, { n: "Contoso Roofing", s: "To call", c: "bg-amber-500/10 text-amber-600" }, { n: "Acme Plumbing Co.", s: "Won", c: "bg-flare/30 text-flare-ink" }].map((r) => (
+        {[{ n: "Northwind HVAC", s: "Contacted", c: "bg-amber-500/10 text-amber-700" }, { n: "Fabrikam Electric", s: "Replied", c: "bg-emerald-500/10 text-emerald-600" }, { n: "Contoso Roofing", s: "To call", c: "bg-amber-500/10 text-amber-600" }, { n: "Acme Plumbing Co.", s: "Won", c: "bg-flare/30 text-flare-ink" }].map((r) => (
           <div key={r.n} className="flex items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2 text-xs shadow-sm">
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
             <span className="truncate font-medium text-foreground">{r.n}</span>
@@ -957,7 +957,7 @@ export default function Landing({ recent = [], total = 0 }) {
           sub="Scrape, enrich, audit and organize. The whole outreach workflow, with no stitching tools together." className="mb-12" /></Reveal>
         <div className="grid grid-cols-1 auto-rows-fr gap-5 lg:grid-cols-6">
           {/* row 1: three equal cells */}
-          <Reveal className="lg:col-span-2"><BentoCell icon={MapPin} tile="bg-violet-500/10 text-violet-600" title="Scrape the map" body="Name, phone, website, rating, reviews and hours for any niche + city.">
+          <Reveal className="lg:col-span-2"><BentoCell icon={MapPin} tile="bg-primary/10 text-primary" title="Scrape the map" body="Name, phone, website, rating, reviews and hours for any niche + city.">
             <div className="space-y-2">
               {SCRAPE_FEED.slice(0, 3).map((r) => (
                 <div key={r.n} className="flex items-center gap-2 rounded-xl border border-border bg-background px-2.5 py-1.5 text-[11px] shadow-sm">
@@ -968,9 +968,9 @@ export default function Landing({ recent = [], total = 0 }) {
             </div>
           </BentoCell></Reveal>
 
-          <Reveal delay={90} className="lg:col-span-2"><BentoCell icon={Mail} tile="bg-violet-500/10 text-violet-600" title="Enrich every contact" body="Emails, socials and WhatsApp crawled from each business's own website.">
+          <Reveal delay={90} className="lg:col-span-2"><BentoCell icon={Mail} tile="bg-primary/10 text-primary" title="Enrich every contact" body="Emails, socials and WhatsApp crawled from each business's own website.">
             <div className="flex flex-wrap gap-2">
-              {[{ t: "Email", c: "bg-violet-500/10 text-violet-600" }, { t: "WhatsApp", c: "bg-emerald-500/10 text-emerald-600" }, { t: "Instagram", c: "bg-rose-500/10 text-rose-600" }, { t: "Facebook", c: "bg-primary/10 text-primary" }, { t: "LinkedIn", c: "bg-sky-500/10 text-sky-600" }].map((s) => (
+              {[{ t: "Email", c: "bg-primary/10 text-primary" }, { t: "WhatsApp", c: "bg-emerald-500/10 text-emerald-600" }, { t: "Instagram", c: "bg-rose-500/10 text-rose-600" }, { t: "Facebook", c: "bg-primary/10 text-primary" }, { t: "LinkedIn", c: "bg-sky-500/10 text-sky-600" }].map((s) => (
                 <span key={s.t} className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold ${s.c}`}>{s.t}</span>
               ))}
             </div>
@@ -986,7 +986,7 @@ export default function Landing({ recent = [], total = 0 }) {
           </BentoCell></Reveal>
 
           {/* row 2: two wide cells */}
-          <Reveal delay={120} className="lg:col-span-2"><BentoCell icon={Zap} tile="bg-cyan-500/10 text-cyan-600" title="Instant delivery" body="Leads arrive in seconds from our pre-built database. No scraping delays, no browser needed.">
+          <Reveal delay={120} className="lg:col-span-2"><BentoCell icon={Zap} tile="bg-flare-tint text-flare-ink" title="Instant delivery" body="Leads arrive in seconds from our pre-built database. No scraping delays, no browser needed.">
             <div className="flex items-center justify-between rounded-xl border border-border bg-background px-3 py-3">
               <div><div className="text-[11px] text-muted-foreground">Avg. delivery</div><div className="font-heading text-lg font-bold text-foreground">&lt; 5s</div></div>
               <Sparkline />
