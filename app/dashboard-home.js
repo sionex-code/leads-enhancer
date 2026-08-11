@@ -42,6 +42,7 @@ import {
   Share2,
   TrendingUp,
   MapPin,
+  MoreHorizontal,
   LocateFixed,
   Monitor,
   Smartphone,
@@ -61,6 +62,7 @@ import { Socials, WaIcon, WaPhone } from "./components/SocialIcons";
 import LeadDetailPanel from "./components/leads/LeadDetailPanel";
 import LeadAvatar from "./components/leads/LeadAvatar";
 import FilterSelect from "./components/leads/FilterSelect";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "./components/ui/dropdown-menu";
 import { scoreLead, BAND_LABEL, BAND_CLASS, BAND_RING, OPPORTUNITY_HELP } from "./lib/opportunity";
 import { InfoPopover } from "./components/ui/info-popover";
 import { SHOW_CREDITS } from "../web/lib/credits-ui.cjs";
@@ -204,6 +206,53 @@ function leadMapsHref(lead) {
 // remove. The map pin went because the lead's name is already the map link, and
 // the WhatsApp check moved onto the phone number itself (see WaPhone's onCheck).
 // Audit and report are bulk operations on the selection bar rather than per row.
+// Everything a row can do that isn't save-to-favorites or add-to-list. Those two
+// stay on the row because they happen constantly; enrich, message and remove
+// live behind a menu, because three more icon buttons per row multiplied by
+// fifty rows is what made the old table read as noise rather than data.
+function RowActionsMenu({ lead, busy = {}, onEnrich, onRemove }) {
+  const waLink = waMeLink(lead);
+  // Enriched = the website crawl has run (email/socials found, or it reported a
+  // status like "no email"), so a finished row can say so rather than inviting
+  // the same click again.
+  const enriched = !!(lead.email || lead.enrichStatus || lead.enrich_status);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          title="More actions"
+          aria-label="More actions"
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <MoreHorizontal size={15} />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="min-w-[13rem]">
+        <DropdownMenuItem
+          disabled={!lead.website || busy.enrich}
+          onClick={() => onEnrich(lead)}
+          className={cn(!lead.website && "pointer-events-none opacity-50")}
+        >
+          {busy.enrich ? <Loader2 size={14} className="animate-spin" /> : enriched ? <MailCheck size={14} className="text-emerald-600" /> : <Mail size={14} />}
+          {enriched ? "Re-grab email + socials" : "Grab email + socials"}
+        </DropdownMenuItem>
+        {waLink && (
+          <DropdownMenuItem asChild>
+            <a href={waLink} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+              <Send size={14} className="text-emerald-600" /> Message on WhatsApp
+            </a>
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem className="text-destructive hover:bg-destructive/10" onClick={() => onRemove(lead)}>
+          <Trash2 size={14} /> Remove from project
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function CapturedActions({ lead, busy = {}, onEnrich, onRemove }) {
   const waLink = waMeLink(lead);
   // Enriched = the website crawl has run (email/socials found, or it reported a
@@ -1880,25 +1929,27 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
 // that was good. The icon tile makes the row scannable at a glance, and `hint`
 // carries the number that actually matters: how much of the project each stage
 // has covered so far.
-function StatCard({ value, text, label, icon: Icon, tint = "bg-muted text-muted-foreground", hint, className, children }) {
+// One cell of the KPI strip. Deliberately not a card: four cards meant four
+// borders, four shadows and four sets of padding to say four numbers, which is
+// most of a screenful spent before the first lead. Here the strip is one
+// bordered row and the cells are divided by a hairline.
+//
+// The number leads, the label sits under it, and the third line is context for
+// the number rather than a second metric — coverage as a percentage, or the
+// band behind a score. Anything more and the strip starts competing with the
+// table for attention.
+function Kpi({ value, text, label, icon: Icon, hint, tone = "" }) {
   return (
-    <Card className={cn("transition-colors hover:border-primary/40", className)}>
-      <CardContent className="flex items-center gap-3 p-3 sm:p-4">
-        {Icon && (
-          <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", tint)}>
-            <Icon size={18} />
-          </span>
-        )}
-        <div className="min-w-0 flex-1">
-          <div className="text-xl font-bold leading-tight tabular-nums sm:text-2xl">
-            {text ?? <AnimatedNumber value={value} />}
-          </div>
-          <div className="truncate text-xs text-muted-foreground">{label}</div>
-          {hint && <div className="truncate text-[11px] font-medium text-primary/80">{hint}</div>}
+    <div className="flex min-w-0 items-start gap-2.5 px-3 py-2.5 sm:px-4">
+      {Icon && <Icon size={15} className="mt-0.5 shrink-0 text-muted-foreground/70" />}
+      <div className="min-w-0">
+        <div className={cn("text-[21px] font-semibold leading-none tracking-tight tabular-nums", tone)}>
+          {text ?? <AnimatedNumber value={value} />}
         </div>
-        {children}
-      </CardContent>
-    </Card>
+        <div className="mt-1 truncate text-[11px] font-medium text-muted-foreground">{label}</div>
+        {hint ? <div className="mt-0.5 truncate text-[11px] text-muted-foreground/70">{hint}</div> : null}
+      </div>
+    </div>
   );
 }
 
@@ -1998,14 +2049,14 @@ export default function Dashboard({ view = "" }) {
     setDetailKey(null);
     setDetailSnapshot(null);
   };
-  // The results map starts collapsed: it is a 320px band of Leaflet above the
-  // table that most sessions scroll straight past, and leaving it shut also
-  // means the map bundle and its tiles are never fetched until asked for.
-  // Remembered per browser, so someone who works from the map keeps it open.
-  const [mapOpen, setMapOpen] = useState(false);
+  // Which view of this project's leads is showing: the table or the map. The map
+  // is a tab rather than a permanently docked panel, so Leaflet and its tiles are
+  // never fetched until somebody asks for them. Remembered per browser, because
+  // someone who works from the map keeps working from the map.
+  const [workspaceTab, setWorkspaceTab] = useState("leads");
   useEffect(() => {
     try {
-      if (localStorage.getItem("lf_map_open") === "1") setMapOpen(true);
+      if (localStorage.getItem("lf_ws_tab") === "map") setWorkspaceTab("map");
     } catch {}
   }, []);
   // Per-row state for the captured-leads table actions (enrich / whatsapp / report
@@ -3131,10 +3182,16 @@ export default function Dashboard({ view = "" }) {
   // trailing number. The audit counts moved to the workspace header, because at
   // this size they cost a second line per project and were rarely the reason
   // somebody scanned this list.
+  // Sidebar project list. Navigation, not a data table: the name carries the
+  // weight, the count sits back, and the selected row is marked with a rule and
+  // a faint tint rather than a filled orange block.
   const projectList = (
-    <div className="space-y-0.5 py-0.5">
+    <div className="space-y-px py-0.5">
       {runningCount > 1 && (
-        <div className="rounded bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary">{runningCount} running</div>
+        <div className="mb-1 flex items-center gap-1.5 px-2 py-1 text-[11px] font-medium text-primary">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+          {runningCount} running
+        </div>
       )}
       {projects.slice(0, projectLimit).map((project) => (
         <div
@@ -3145,15 +3202,17 @@ export default function Dashboard({ view = "" }) {
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelected(project.slug); } }}
           title={getProjectDisplayName(project) || project.name}
           className={cn(
-            "group/proj flex w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs transition-colors",
-            project.slug === selected ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+            "group/proj relative flex w-full cursor-pointer items-center gap-1.5 rounded-md py-1.5 pl-2.5 pr-2 text-left text-[12.5px] transition-colors",
+            project.slug === selected
+              ? "bg-primary/[0.07] font-medium text-foreground"
+              : "text-muted-foreground hover:bg-accent hover:text-foreground"
           )}
         >
+          {project.slug === selected && (
+            <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-primary" />
+          )}
           {project.running && <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-emerald-500" title="Running" />}
           <span className="min-w-0 flex-1 truncate">{getProjectDisplayName(project) || project.name}</span>
-          <span className="shrink-0 tabular-nums text-[10px] text-muted-foreground/70">
-            <AnimatedNumber value={project.counts?.raw || 0} />
-          </span>
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); toggleProjectWatch(project); }}
@@ -3161,22 +3220,29 @@ export default function Dashboard({ view = "" }) {
               "shrink-0 transition-opacity",
               project.watchlist
                 ? "text-amber-500"
-                : "text-muted-foreground opacity-0 hover:text-amber-500 focus:opacity-100 group-hover/proj:opacity-100"
+                : "text-muted-foreground/50 opacity-0 hover:text-amber-500 focus:opacity-100 group-hover/proj:opacity-100"
             )}
             title={project.watchlist ? "Remove from favorites" : "Add to favorites"}
           >
-            <Star size={12} fill={project.watchlist ? "currentColor" : "none"} />
+            <Star size={11} fill={project.watchlist ? "currentColor" : "none"} />
           </button>
+          <span className="w-8 shrink-0 text-right tabular-nums text-[10.5px] text-muted-foreground/60">
+            <AnimatedNumber value={project.counts?.raw || 0} />
+          </span>
         </div>
       ))}
       {!projects.length && <div className="px-2 py-1 text-xs text-muted-foreground">No projects yet</div>}
+      {/* "105 more" read as a count of something missing and had to be clicked
+          over and over, ten at a time. One click now shows the lot — the list
+          scrolls inside its own pane, so a long one costs nothing. */}
       {projects.length > projectLimit && (
         <button
           type="button"
-          onClick={() => setProjectLimit((n) => n + 10)}
-          className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-primary"
+          onClick={() => setProjectLimit(projects.length)}
+          className="mt-0.5 flex w-full items-center gap-1 rounded-md px-2.5 py-1.5 text-[11.5px] font-medium text-muted-foreground transition-colors hover:text-primary"
         >
-          <ChevronDown size={12} /> {projects.length - projectLimit} more
+          View all projects
+          <span className="tabular-nums text-muted-foreground/60">({projects.length.toLocaleString()})</span>
         </button>
       )}
     </div>
@@ -3220,20 +3286,41 @@ export default function Dashboard({ view = "" }) {
     );
   }
 
+  // Leads that can actually be plotted. Computed here rather than inside the map
+  // panel because the Map tab has to know whether it is worth offering at all —
+  // a project of leads without coordinates should not grow a dead tab.
+  const geoLeads = leads.filter((l) => Number.isFinite(parseFloat(l.lat)) && Number.isFinite(parseFloat(l.lng)));
+  const mapCenter = geoLeads.length
+    ? {
+        lat: geoLeads.reduce((sum, l) => sum + parseFloat(l.lat), 0) / geoLeads.length,
+        lng: geoLeads.reduce((sum, l) => sum + parseFloat(l.lng), 0) / geoLeads.length,
+      }
+    : null;
+  const mapPoints = geoLeads.map((l) => ({ lat: parseFloat(l.lat), lng: parseFloat(l.lng), name: l.name || "" }));
+
+  // Favourite is secondary and Delete is destructive, but neither should shout
+  // over the project name they sit beside: both are outlined, and Delete earns
+  // its red from the text and border rather than a filled block.
   const actions = (
     <div className="hidden md:flex items-center gap-2">
       <Button
         variant="outline"
         size="sm"
-        className={cn(selectedProject?.watchlist && "border-amber-500/50 text-amber-600")}
+        className={cn("h-8 text-muted-foreground hover:text-foreground", selectedProject?.watchlist && "border-amber-500/40 text-amber-600 hover:text-amber-600")}
         disabled={!selectedProject}
         onClick={() => toggleProjectWatch()}
         title={selectedProject?.watchlist ? "Remove project from favorites" : "Add project to favorites"}
       >
-        <Star size={15} fill={selectedProject?.watchlist ? "currentColor" : "none"} /> <span className="hidden sm:inline">Favorite</span>
+        <Star size={14} fill={selectedProject?.watchlist ? "currentColor" : "none"} /> <span className="hidden sm:inline">Favorite</span>
       </Button>
-      <Button variant="destructive" size="sm" disabled={!!busy || running || !selected} onClick={() => projectAction("delete")}>
-        <Trash2 size={15} /> <span className="hidden sm:inline">Delete</span>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 border-destructive/30 text-destructive hover:border-destructive/50 hover:bg-destructive/10 hover:text-destructive"
+        disabled={!!busy || running || !selected}
+        onClick={() => projectAction("delete")}
+      >
+        <Trash2 size={14} /> <span className="hidden sm:inline">Delete</span>
       </Button>
     </div>
   );
@@ -3283,34 +3370,32 @@ export default function Dashboard({ view = "" }) {
           </div>
         )}
 
-        {/* Stats — at the top of the workspace. Scraped leads is the denominator
-            for the other four, so each of those also shows its coverage. */}
+        {/* KPI strip — one bordered row, four numbers, roughly half the height
+            the four cards used to take. What each number counts is the whole
+            project, not the filtered view: these are the project's vitals, and
+            they should not move every time somebody types in the search box.
+            What is in view is stated once, by the table's own count. */}
         {(() => {
           const c = status?.counts || {};
-          const raw = c.raw || 0;
-          const cover = (n) => (raw > 0 && n > 0 ? `${Math.min(100, Math.round((n / raw) * 100))}% of leads` : null);
-          const cellClass = "w-[190px] shrink-0 md:w-auto md:shrink";
-          // Average opportunity across the rows currently in view — a word, not a
-          // number, because "High" is the thing you act on.
-          const avg = leads.length
-            ? Math.round(leads.reduce((s, l) => s + scoreLead(l).score, 0) / leads.length)
+          const total = c.raw || allLeads.length || 0;
+          const pct = (n) => (total > 0 && n > 0 ? `${Math.min(100, Math.round((n / total) * 100))}% of leads` : null);
+          const websites = c.websites ?? allLeads.filter((l) => l.website).length;
+          const emails = allLeads.filter((l) => l.email).length;
+          // Averaged over the whole project for the same reason as the rest of
+          // the strip. A word alone ("Medium") is not actionable, and a number
+          // alone means nothing, so the score leads and the band explains it.
+          const avg = allLeads.length
+            ? Math.round(allLeads.reduce((sum, l) => sum + scoreLead(l).score, 0) / allLeads.length)
             : 0;
           const avgBand = avg >= 65 ? "high" : avg >= 40 ? "medium" : "low";
-          const saved = leads.filter((l) => l.__favorited).length;
           return (
-            <div className="flex gap-2 overflow-x-auto pb-1 -mx-3 px-3 md:mx-0 md:px-0 md:grid md:grid-cols-2 lg:grid-cols-4 md:gap-3 scrollbar-none">
-              <StatCard className={cellClass} icon={Database} tint="bg-primary/10 text-primary"
-                value={raw} label="Leads found" hint={c.enriched ? `${c.enriched} enriched` : null} />
-              {/* Warm tints only. A sky-blue and a violet tile next to the brand
-                  orange read as three unrelated apps sharing a row; keeping the
-                  strip within the palette lets the numbers do the talking. */}
-              <StatCard className={cellClass} icon={Globe2} tint="bg-flare-tint text-flare-ink"
-                value={c.websites || 0} label="With website" hint={cover(c.websites || 0)} />
-              <StatCard className={cellClass} icon={Star} tint="bg-amber-500/10 text-amber-600"
-                value={saved} label="Already saved" hint={cover(saved)} />
-              <StatCard className={cellClass} icon={ArrowRight} tint="bg-secondary text-secondary-foreground"
-                text={BAND_LABEL[avgBand]} label="Avg. opportunity"
-                hint={leads.length ? `${avg}/100 across ${leads.length.toLocaleString()} leads` : null} />
+            <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-border bg-card sm:grid-cols-4 sm:divide-x sm:divide-border [&>*:nth-child(-n+2)]:border-b [&>*:nth-child(-n+2)]:border-border [&>*:nth-child(odd)]:border-r [&>*:nth-child(odd)]:border-border sm:[&>*]:border-b-0 sm:[&>*:nth-child(odd)]:border-r-0">
+              <Kpi icon={Database} value={total} label="Leads found"
+                hint={c.enriched ? `${Number(c.enriched).toLocaleString()} enriched` : null} />
+              <Kpi icon={Globe2} value={websites} label="With website" hint={pct(websites)} />
+              <Kpi icon={Mail} value={emails} label="With email" hint={pct(emails)} />
+              <Kpi icon={TrendingUp} text={`${avg}/100`} label="Opportunity score"
+                hint={allLeads.length ? `${BAND_LABEL[avgBand]} across ${allLeads.length.toLocaleString()} leads` : null} />
             </div>
           );
         })()}
@@ -3398,240 +3483,241 @@ export default function Dashboard({ view = "" }) {
           </div>
         )}
 
-        {/* Credit clarity: only leads new to your account are charged; duplicates you
-            already have (matched by website/phone/name) are merged for free. */}
-        {status?.state?.dbSync && !hideSyncBanner && (
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs text-muted-foreground">
-            <CreditCard size={13} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
-            {/* Two different facts, so they get two different colours: green for
-                what you gained, amber for what was already yours and therefore
-                free. As one flat grey line the charge/no-charge split — the whole
-                point of the banner — was invisible. */}
-            <span>
-              <b className="font-semibold text-emerald-700 dark:text-emerald-400">{Number(status.state.dbSync.inserted || 0).toLocaleString()} new leads</b>
-              {" "}added to this project
-            </span>
-            <span className="text-muted-foreground/50">·</span>
-            <span>
-              <b className="font-semibold text-amber-700 dark:text-amber-400">{Number(status.state.dbSync.updated || 0).toLocaleString()}</b>
-              {" "}were already in your saved leads (no extra charge)
-            </span>
-            <button onClick={() => setHideSyncBanner(true)} aria-label="Dismiss" className="ml-auto text-muted-foreground transition-colors hover:text-foreground"><X size={13} /></button>
-          </div>
-        )}
-
         <EnrichProgress progress={status?.enrichProgress} stage={stages.enrich} />
 
-        {/* Workspace results map — shows when at least one lead has lat/lng.
-            Collapsed by default behind a one-click header; the <LeadsMap> is only
-            mounted once opened, so Leaflet and its tiles cost nothing until then. */}
-        {(() => {
-          const geoLeads = leads.filter((l) => Number.isFinite(parseFloat(l.lat)) && Number.isFinite(parseFloat(l.lng)));
-          if (!geoLeads.length) return null;
-          const avgLat = geoLeads.reduce((s, l) => s + parseFloat(l.lat), 0) / geoLeads.length;
-          const avgLng = geoLeads.reduce((s, l) => s + parseFloat(l.lng), 0) / geoLeads.length;
-          const mapCenter = { lat: avgLat, lng: avgLng };
-          const mapPoints = geoLeads.map((l) => ({ lat: parseFloat(l.lat), lng: parseFloat(l.lng), name: l.name || "" }));
-          return (
-            <Card className="overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setMapOpen((open) => {
-                  try { localStorage.setItem("lf_map_open", open ? "0" : "1"); } catch {}
-                  return !open;
-                })}
-                aria-expanded={mapOpen}
-                className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-muted/40"
-              >
-                <MapPin size={15} className="shrink-0 text-primary" />
-                <span className="text-sm font-medium">Map</span>
-                <span className="text-xs text-muted-foreground">
-                  {geoLeads.length.toLocaleString()} of {leads.length.toLocaleString()} leads plotted
-                </span>
-                <ChevronDown
-                  size={16}
-                  className={cn("ml-auto shrink-0 text-muted-foreground transition-transform duration-200", mapOpen && "rotate-180")}
-                />
-              </button>
-              {mapOpen && (
-                <div className="border-t border-border">
-                  <LeadsMap
-                    center={mapCenter}
-                    radiusKm={10}
-                    points={mapPoints}
-                    height={320}
-                    className="w-full"
-                  />
-                </div>
-              )}
-            </Card>
-          );
-        })()}
-
-        {/* Filters + search + sort. Every control narrows the same `leads` list
-            the table, the counts and the bulk actions all read from, so what you
-            filter to is exactly what you act on. */}
-        {allLeads.length > 0 && (
-          <Card>
-            <CardContent className="space-y-3 p-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Filters</span>
-                {[
-                  { key: "website", label: "Has website", icon: Globe2, options: [["all", "All"], ["yes", "Yes"], ["no", "No"]] },
-                  { key: "email", label: "Has email", icon: Mail, options: [["all", "All"], ["yes", "Yes"], ["no", "No"]] },
-                  { key: "phone", label: "Has phone", icon: MessageCircle, options: [["all", "All"], ["yes", "Yes"], ["no", "No"]] },
-                  { key: "reviews", label: "Reviews", icon: Star, options: [["all", "All"], ["none", "None"], ["some", "1-20"], ["many", "20+"]] },
-                ].map((f) => (
-                  <FilterSelect
-                    key={f.key}
-                    label={f.label}
-                    icon={f.icon}
-                    value={leadFilters[f.key]}
-                    options={f.options.map(([value, label]) => ({ value, label, hint: filterCounts[f.key]?.[value] }))}
-                    onChange={(v) => { setLeadFilters((st) => ({ ...st, [f.key]: v })); setTablePage(0); }}
-                  />
-                ))}
-                <button
-                  onClick={() => setMoreFilters((v) => !v)}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                    moreFilters ? "border-primary/50 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted/60"
-                  )}
-                >
-                  <SlidersHorizontal size={12} /> More filters
-                  <ChevronDown size={12} className={cn("transition-transform", moreFilters && "rotate-180")} />
-                </button>
-                {filtersActive && (
-                  <button
-                    onClick={() => {
-                      setLeadFilters({ website: "all", email: "all", phone: "all", reviews: "all", rating: "all", social: "all", enriched: "all" });
-                      setLeadSearch("");
-                      setTablePage(0);
-                    }}
-                    className="ml-auto text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    Clear all
-                  </button>
-                )}
-              </div>
-
-              {/* Second row — the filters that matter once you've narrowed the
-                  obvious ones. Hidden by default so the bar stays one line. */}
-              {moreFilters && (
-                <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
-                  {[
-                    { key: "rating", label: "Rating", icon: Star, options: [["all", "All"], ["none", "Unrated"], ["low", "Under 4.0"], ["good", "4.0-4.4"], ["top", "4.5+"]] },
-                    { key: "enriched", label: "Enriched", icon: Zap, options: [["all", "All"], ["yes", "Yes"], ["no", "Not yet"]] },
-                  ].map((f) => (
-                    <FilterSelect
-                      key={f.key}
-                      label={f.label}
-                      icon={f.icon}
-                      value={leadFilters[f.key]}
-                      options={f.options.map(([value, label]) => ({ value, label, hint: filterCounts[f.key]?.[value] }))}
-                      onChange={(v) => { setLeadFilters((st) => ({ ...st, [f.key]: v })); setTablePage(0); }}
-                    />
+        {/* The workspace: tabs, filters, search, the rows, the pager. One
+            bordered surface instead of five stacked cards — the map, the
+            filters, the toolbar and the table were all describing the same list,
+            and each border around them was another thing to look at before
+            reaching a lead. The table is the point of the page, so everything
+            above it is a control bar attached to it rather than a card of its
+            own. */}
+        <section className="overflow-hidden rounded-lg border border-border bg-card">
+          {/* Row 1 — where you are, what just happened, and what you can do to
+              the selection. */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-3 py-2">
+            {(() => {
+              // Map is a view of this same list, not a section above it. As a
+              // permanently docked card it spent a strip of every screen saying
+              // how many pins it would draw if you opened it.
+              const tabs = [
+                { key: "leads", label: "Leads", count: leads.length },
+                ...(geoLeads.length ? [{ key: "map", label: "Map", count: geoLeads.length }] : []),
+              ];
+              return (
+                <div className="inline-flex items-center rounded-md border border-border bg-muted/40 p-0.5">
+                  {tabs.map((t) => (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => {
+                        setWorkspaceTab(t.key);
+                        try { localStorage.setItem("lf_ws_tab", t.key); } catch {}
+                      }}
+                      aria-current={workspaceTab === t.key ? "page" : undefined}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-[5px] px-2.5 py-1 text-xs font-medium transition-colors",
+                        workspaceTab === t.key
+                          ? "bg-card text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {t.key === "map" && <MapPin size={12} />}
+                      {t.label}
+                      <span className="tabular-nums text-[11px] text-muted-foreground">{t.count.toLocaleString()}</span>
+                    </button>
                   ))}
-                  {/* Which network, not just "any". Chasing businesses with no
-                      Facebook page is a different job from chasing ones with no
-                      LinkedIn, so the filter has to name the network. */}
-                  <FilterSelect
-                    label="Socials"
-                    icon={Share2}
-                    value={leadFilters.social}
-                    options={[
-                      { value: "all", label: "All", hint: filterCounts.social?.all },
-                      { value: "any", label: "Has any social", hint: filterCounts.social?.any },
-                      { value: "none", label: "Has none", hint: filterCounts.social?.none },
-                      { value: "no-facebook", label: "No Facebook", hint: filterCounts.social?.["no-facebook"] },
-                      { value: "no-instagram", label: "No Instagram", hint: filterCounts.social?.["no-instagram"] },
-                      { value: "no-linkedin", label: "No LinkedIn", hint: filterCounts.social?.["no-linkedin"] },
-                      { value: "facebook", label: "Has Facebook", hint: filterCounts.social?.facebook },
-                      { value: "instagram", label: "Has Instagram", hint: filterCounts.social?.instagram },
-                      { value: "linkedin", label: "Has LinkedIn", hint: filterCounts.social?.linkedin },
-                    ]}
-                    onChange={(v) => { setLeadFilters((st) => ({ ...st, social: v })); setTablePage(0); }}
-                  />
                 </div>
-              )}
+              );
+            })()}
 
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <div className="relative flex-1">
-                  <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={leadSearch}
-                    onChange={(e) => { setLeadSearch(e.target.value); setTablePage(0); }}
-                    placeholder="Search business name, phone, email, address…"
-                    className="pl-9"
-                  />
-                </div>
-                <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-                  Sort by
-                  <Select
-                    value={leadSort}
-                    onChange={(e) => { setLeadSort(e.target.value); setTablePage(0); }}
-                    className="h-10 w-[170px]"
-                  >
-                    <option value="opportunity">Opportunity</option>
-                    <option value="found">Order found</option>
-                    <option value="name">Name</option>
-                    <option value="reviews">Reviews</option>
-                    <option value="rating">Rating</option>
-                  </Select>
-                </label>
+            {/* What the last scrape actually cost, as a line rather than a
+                banner. The split between new (charged) and already-yours (free)
+                is the only part worth colour. */}
+            {status?.state?.dbSync && !hideSyncBanner && (
+              <div className="flex min-w-0 items-center gap-1.5 text-xs">
+                <CheckCircle2 size={13} className="shrink-0 text-emerald-600" />
+                <span className="truncate">
+                  <b className="font-semibold text-emerald-700">{Number(status.state.dbSync.inserted || 0).toLocaleString()} new</b>
+                  <span className="text-muted-foreground">
+                    {" · "}{Number(status.state.dbSync.updated || 0).toLocaleString()} already saved, not charged
+                  </span>
+                </span>
+                <button
+                  onClick={() => setHideSyncBanner(true)}
+                  aria-label="Dismiss"
+                  className="shrink-0 text-muted-foreground/60 transition-colors hover:text-foreground"
+                >
+                  <X size={12} />
+                </button>
               </div>
+            )}
 
-              {filtersActive && (
-                <p className="text-xs text-muted-foreground">
-                  Showing {leads.length.toLocaleString()} of {allLeads.length.toLocaleString()} leads
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        <Card className="overflow-hidden" data-tour="ws-leads">
-          {/* Toolbar — select-all plus the actions, sitting directly on top of the
-              rows they act on. With nothing ticked the buttons work on every lead
-              in the current (filtered) view; ticking rows narrows them to those. */}
-          {leads.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/30 px-3 py-2">
-              <label className="flex items-center gap-2 text-sm font-medium">
-                <input
-                  type="checkbox"
-                  aria-label="Select all leads on this page"
-                  checked={allLeadsSelected}
-                  disabled={!leadKeysOnPage.length}
-                  onChange={toggleAllLeads}
-                  className="accent-[hsl(var(--primary))]"
-                />
-                {selectedCount > 0 ? `${selectedCount} selected` : `${leads.length.toLocaleString()} leads`}
-              </label>
-              <span className="mx-1 h-5 w-px bg-border" />
-              <Button variant="outline" size="sm" data-tour="ws-enrich" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("enrich")} title="Grab email + socials for leads not enriched yet (realtime, no queue; shared with all users)">
-                {bulkBusy === "enrich" ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />} Enrich{realtimeBatch?.kind === "enrich" ? ` (${realtimeBatch.done}/${realtimeBatch.total})` : ""}
-              </Button>
-              <Button variant="outline" size="sm" data-tour="ws-whatsapp" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("whatsapp")} title="Check WhatsApp for numbers not checked yet (realtime, no queue; cached for all users)">
-                {bulkBusy === "whatsapp" ? <Loader2 size={15} className="animate-spin" /> : <MessageCircle size={15} />} WhatsApp{realtimeBatch?.kind === "whatsapp" ? ` (${realtimeBatch.done}/${realtimeBatch.total})` : ""}
-              </Button>
-              <Button variant="outline" size="sm" disabled={!!bulkBusy || !selectedCount} onClick={bulkAddToList} title="Add the selected leads to a list">
-                {bulkBusy === "list" ? <Loader2 size={15} className="animate-spin" /> : <ListPlus size={15} />} Add to list
-              </Button>
-              <Button variant="outline" size="sm" disabled={!leads.length} onClick={exportLeadsCsv} title="Download the leads in view as CSV">
-                <Download size={15} /> Export{selectedCount > 0 ? ` (${selectedCount})` : ""}
-              </Button>
+            {/* Bulk actions. Enrich and WhatsApp work on everything in view;
+                the rest need a selection, which is why they only appear once
+                there is one. */}
+            <div className="ml-auto flex flex-wrap items-center gap-1.5">
               {selectedCount > 0 && (
                 <>
-                  <Button variant="outline" size="sm" className="border-destructive/40 text-destructive hover:bg-destructive/10" disabled={!!bulkBusy} onClick={bulkRemove} title="Remove the selected leads from this project">
-                    {bulkBusy === "remove" ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />} Remove
-                  </Button>
-                  <button onClick={() => setSelectedLeads(new Set())} className="ml-auto text-xs text-muted-foreground transition-colors hover:text-foreground">
-                    Clear selection
+                  <span className="text-xs font-medium tabular-nums">{selectedCount.toLocaleString()} selected</span>
+                  <button
+                    onClick={() => setSelectedLeads(new Set())}
+                    className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    Clear
                   </button>
+                  <span className="mx-0.5 h-4 w-px bg-border" />
                 </>
+              )}
+              <Button variant="outline" size="sm" className="h-8" data-tour="ws-enrich" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("enrich")} title="Grab email + socials for leads not enriched yet (realtime, no queue; shared with all users)">
+                {bulkBusy === "enrich" ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />} Enrich{realtimeBatch?.kind === "enrich" ? ` (${realtimeBatch.done}/${realtimeBatch.total})` : ""}
+              </Button>
+              <Button variant="outline" size="sm" className="h-8" data-tour="ws-whatsapp" disabled={!!bulkBusy || !leads.length} onClick={() => runRealtimeBatch("whatsapp")} title="Check WhatsApp for numbers not checked yet (realtime, no queue; cached for all users)">
+                {bulkBusy === "whatsapp" ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />} WhatsApp
+              </Button>
+              {selectedCount > 0 && (
+                <Button variant="outline" size="sm" className="h-8" disabled={!!bulkBusy} onClick={bulkAddToList} title="Add the selected leads to a list">
+                  {bulkBusy === "list" ? <Loader2 size={14} className="animate-spin" /> : <ListPlus size={14} />} Add to list
+                </Button>
+              )}
+              <Button variant="outline" size="sm" className="h-8" disabled={!leads.length} onClick={exportLeadsCsv} title="Download the leads in view as CSV">
+                <Download size={14} /> Export{selectedCount > 0 ? ` (${selectedCount})` : ""}
+              </Button>
+              {selectedCount > 0 && (
+                <Button variant="outline" size="sm" className="h-8 border-destructive/40 text-destructive hover:bg-destructive/10" disabled={!!bulkBusy} onClick={bulkRemove} title="Remove the selected leads from this project">
+                  {bulkBusy === "remove" ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Remove
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Row 2 — search and qualification filters on one line. These narrow
+              the same list the table, the counts and the bulk actions all read
+              from, so what you filter to is exactly what you act on. */}
+          {allLeads.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/20 px-3 py-2">
+              <div className="relative min-w-[200px] flex-1 sm:max-w-[320px]">
+                <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/70" />
+                <Input
+                  value={leadSearch}
+                  onChange={(e) => { setLeadSearch(e.target.value); setTablePage(0); }}
+                  placeholder="Search businesses, contacts, phone, email or address…"
+                  className="h-8 border-border bg-card pl-8 text-xs"
+                />
+              </div>
+              {[
+                { key: "website", label: "Website", icon: Globe2, options: [["all", "All"], ["yes", "Yes"], ["no", "No"]] },
+                { key: "email", label: "Email", icon: Mail, options: [["all", "All"], ["yes", "Yes"], ["no", "No"]] },
+                { key: "phone", label: "Phone", icon: MessageCircle, options: [["all", "All"], ["yes", "Yes"], ["no", "No"]] },
+                { key: "reviews", label: "Reviews", icon: Star, options: [["all", "All"], ["none", "None"], ["some", "1-20"], ["many", "20+"]] },
+              ].map((f) => (
+                <FilterSelect
+                  key={f.key}
+                  label={f.label}
+                  icon={f.icon}
+                  value={leadFilters[f.key]}
+                  options={f.options.map(([value, label]) => ({ value, label, hint: filterCounts[f.key]?.[value] }))}
+                  onChange={(v) => { setLeadFilters((st) => ({ ...st, [f.key]: v })); setTablePage(0); }}
+                />
+              ))}
+              <button
+                onClick={() => setMoreFilters((v) => !v)}
+                className={cn(
+                  "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
+                  moreFilters ? "border-primary/60 bg-primary/[0.06] text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <SlidersHorizontal size={12} /> More
+                <ChevronDown size={12} className={cn("transition-transform", moreFilters && "rotate-180")} />
+              </button>
+              {filtersActive && (
+                <button
+                  onClick={() => {
+                    setLeadFilters({ website: "all", email: "all", phone: "all", reviews: "all", rating: "all", social: "all", enriched: "all" });
+                    setLeadSearch("");
+                    setTablePage(0);
+                  }}
+                  className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  Clear
+                </button>
+              )}
+              <label className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                Sort
+                <Select
+                  value={leadSort}
+                  onChange={(e) => { setLeadSort(e.target.value); setTablePage(0); }}
+                  className="h-8 w-[130px] border-border bg-card text-xs"
+                >
+                  <option value="opportunity">Opportunity</option>
+                  <option value="found">Order found</option>
+                  <option value="name">Name</option>
+                  <option value="reviews">Reviews</option>
+                  <option value="rating">Rating</option>
+                </Select>
+              </label>
+            </div>
+          )}
+
+          {/* Row 3 — the filters that matter once the obvious ones are set.
+              Hidden by default so the bar stays a single line. */}
+          {allLeads.length > 0 && moreFilters && (
+            <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/20 px-3 pb-2">
+              {[
+                { key: "rating", label: "Rating", icon: Star, options: [["all", "All"], ["none", "Unrated"], ["low", "Under 4.0"], ["good", "4.0-4.4"], ["top", "4.5+"]] },
+                { key: "enriched", label: "Enriched", icon: Zap, options: [["all", "All"], ["yes", "Yes"], ["no", "Not yet"]] },
+              ].map((f) => (
+                <FilterSelect
+                  key={f.key}
+                  label={f.label}
+                  icon={f.icon}
+                  value={leadFilters[f.key]}
+                  options={f.options.map(([value, label]) => ({ value, label, hint: filterCounts[f.key]?.[value] }))}
+                  onChange={(v) => { setLeadFilters((st) => ({ ...st, [f.key]: v })); setTablePage(0); }}
+                />
+              ))}
+              {/* Which network, not just "any". Chasing businesses with no
+                  Facebook page is a different job from chasing ones with no
+                  LinkedIn, so the filter has to name the network. */}
+              <FilterSelect
+                label="Socials"
+                icon={Share2}
+                value={leadFilters.social}
+                options={[
+                  { value: "all", label: "All", hint: filterCounts.social?.all },
+                  { value: "any", label: "Has any social", hint: filterCounts.social?.any },
+                  { value: "none", label: "Has none", hint: filterCounts.social?.none },
+                  { value: "no-facebook", label: "No Facebook", hint: filterCounts.social?.["no-facebook"] },
+                  { value: "no-instagram", label: "No Instagram", hint: filterCounts.social?.["no-instagram"] },
+                  { value: "no-linkedin", label: "No LinkedIn", hint: filterCounts.social?.["no-linkedin"] },
+                  { value: "facebook", label: "Has Facebook", hint: filterCounts.social?.facebook },
+                  { value: "instagram", label: "Has Instagram", hint: filterCounts.social?.instagram },
+                  { value: "linkedin", label: "Has LinkedIn", hint: filterCounts.social?.linkedin },
+                ]}
+                onChange={(v) => { setLeadFilters((st) => ({ ...st, social: v })); setTablePage(0); }}
+              />
+              {filtersActive && (
+                <span className="text-[11px] text-muted-foreground">
+                  {leads.length.toLocaleString()} of {allLeads.length.toLocaleString()} match
+                </span>
               )}
             </div>
           )}
+
+          {/* Map view — mounted only while its tab is open, so Leaflet and its
+              tiles still cost nothing until somebody asks for them. */}
+          {workspaceTab === "map" && geoLeads.length > 0 && (
+            <LeadsMap
+              center={mapCenter}
+              radiusKm={10}
+              points={mapPoints}
+              height={520}
+              className="w-full"
+            />
+          )}
+
+          {workspaceTab === "leads" && (
+        <div data-tour="ws-leads">
           {!leads.length ? (
             <div className="p-10 text-center text-sm text-muted-foreground">No leads loaded</div>
           ) : (
@@ -3676,7 +3762,7 @@ export default function Dashboard({ view = "" }) {
                       <Score label="SEO" value={lead.desktop?.seo} />
                       <Score label="M-Perf" value={lead.mobile?.performance} />
                     </div>
-                    <div className="mt-2" onClick={(e) => e.stopPropagation()}><Socials lead={lead} /></div>
+                    <div className="mt-2" onClick={(e) => e.stopPropagation()}><Socials lead={lead} tone="brand" /></div>
                     <div className="mt-2 flex flex-wrap items-center gap-1" onClick={(e) => e.stopPropagation()}>
                       <Button variant="ghost" size="sm" className={cn(lead.__favorited && "text-amber-500")} onClick={() => addCapturedLead(lead, "watchlist")} title={lead.__favorited ? "Added to favorites" : "Add to favorites"}><Star size={14} fill={lead.__favorited ? "currentColor" : "none"} /> Favorite</Button>
                       <Button variant="ghost" size="sm" className={cn(lead.__listed && "text-primary")} disabled={(rowBusy[leadKey(lead)] || {}).list} onClick={() => openListsForCaptured(lead)} title="Add to a list">{(rowBusy[leadKey(lead)] || {}).list ? <Loader2 size={14} className="animate-spin" /> : <ListPlus size={14} />} List</Button>
@@ -3689,22 +3775,24 @@ export default function Dashboard({ view = "" }) {
 
               {/* Desktop table. Columns follow what a seller scans for, in order:
                   who they are -> how to reach them -> what they run online ->
-                  social proof -> where -> how good a prospect. The online-presence
-                  cell shows greyed-out icons for what is MISSING as prominently as
-                  what is there — the absence is the sales hook. */}
+                  social proof -> where -> how good a prospect.
+
+                  Rows are tight (h-12) and separated by a hairline rather than
+                  boxed: at fifty rows a page, every border and every extra pixel
+                  of padding is paid for fifty times. */}
               <div className="hidden md:block overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-8">
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="h-9 w-8">
                         <input type="checkbox" aria-label="Select all leads" checked={allLeadsSelected} disabled={!leadKeysOnPage.length} onChange={toggleAllLeads} className="accent-[hsl(var(--primary))]" />
                       </TableHead>
-                      <TableHead>Lead</TableHead>
-                      <TableHead>Contact</TableHead>
-                      <TableHead>Online presence</TableHead>
-                      <TableHead>Reviews</TableHead>
-                      <TableHead>Location</TableHead>
-                      <TableHead className="text-right">
+                      <TableHead className="h-9">Lead</TableHead>
+                      <TableHead className="h-9">Contact</TableHead>
+                      <TableHead className="h-9">Presence</TableHead>
+                      <TableHead className="h-9">Reviews</TableHead>
+                      <TableHead className="h-9">Location</TableHead>
+                      <TableHead className="h-9 text-right">
                         <span className="inline-flex items-center gap-1">
                           Opportunity
                           <InfoPopover label="How the opportunity score works" align="right" width="w-80">
@@ -3714,7 +3802,7 @@ export default function Dashboard({ view = "" }) {
                           </InfoPopover>
                         </span>
                       </TableHead>
-                      <TableHead className="w-[92px]" />
+                      <TableHead className="h-9 w-[104px] text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -3726,81 +3814,102 @@ export default function Dashboard({ view = "" }) {
                       return (
                       <TableRow
                         key={`${lead.name}-${index}`}
-                        className={cn("cursor-pointer", selectedLeads.has(key) && "bg-primary/5", detailKey === key && "bg-primary/10")}
+                        className={cn(
+                          "group/row h-12 cursor-pointer",
+                          // Selected and open are different states and have to
+                          // look different: a tinted row for selected, plus a
+                          // brand rule down the edge for the one that is open.
+                          selectedLeads.has(key) && "bg-primary/[0.045]",
+                          detailKey === key && "bg-primary/[0.08]"
+                        )}
                         onClick={() => openLeadDetail(lead, key)}
                       >
-                        <TableCell className="w-8" onClick={(e) => e.stopPropagation()}>
+                        <TableCell className="w-8 py-0" onClick={(e) => e.stopPropagation()}>
                           <input type="checkbox" aria-label={`Select ${lead.name || "lead"}`} checked={selectedLeads.has(key)} onChange={() => toggleLead(key)} className="accent-[hsl(var(--primary))]" />
                         </TableCell>
 
-                        {/* Lead — avatar + name + category */}
-                        <TableCell className="max-w-[240px]">
+                        {/* Lead — the strongest text on the row, with the category
+                            muted underneath it. */}
+                        <TableCell className="max-w-[260px] py-0">
                           <div className="flex items-center gap-2.5">
-                            <LeadAvatar lead={lead} size={32} />
+                            <LeadAvatar lead={lead} size={26} />
                             <div className="min-w-0">
-                              <div className="truncate font-medium" title={lead.name || "Unknown"}>{lead.name || "Unknown"}</div>
-                              <div className="truncate text-xs text-muted-foreground" title={lead.category || ""}>{lead.category || "—"}</div>
+                              <div className="truncate text-[13.5px] font-medium leading-tight text-foreground" title={lead.name || "Unknown"}>{lead.name || "Unknown"}</div>
+                              <div className="truncate text-[11px] leading-tight text-muted-foreground" title={lead.category || ""}>{lead.category || "—"}</div>
                             </div>
                           </div>
                         </TableCell>
 
-                        {/* Contact — phone (with the WhatsApp verdict) over email */}
-                        <TableCell>
-                          <div className="flex items-center gap-1.5 text-sm">
+                        {/* Contact — the phone is what gets dialled, so it is the
+                            scannable line; the email sits under it. */}
+                        <TableCell className="py-0">
+                          <div className="flex items-center gap-1.5 text-[13px] font-medium tabular-nums leading-tight">
                             {lead.phone
                               ? <WaPhone lead={lead} onCheck={whatsappCaptured} busy={(rowBusy[leadKey(lead)] || {}).whatsapp} />
-                              : <span className="text-xs text-muted-foreground">—</span>}
+                              : <span className="text-[11px] font-normal text-muted-foreground">No phone</span>}
                             <WaIcon lead={lead} />
                           </div>
                           {lead.email
                             ? (contactLocked
-                                ? <LockedContact value={lead.email} className="block max-w-[170px] truncate text-xs" />
-                                : <a className="block max-w-[170px] truncate text-xs text-primary hover:underline" href={`mailto:${lead.email}`} title={lead.email} onClick={(e) => e.stopPropagation()}>{lead.email}</a>)
-                            : <span className="text-xs text-muted-foreground">{prettyEnrichStatus(lead.enrichStatus) || "—"}</span>
+                                ? <LockedContact value={lead.email} className="block max-w-[180px] truncate text-[11px] leading-tight" />
+                                : <a className="block max-w-[180px] truncate text-[11px] leading-tight text-muted-foreground transition-colors hover:text-primary" href={`mailto:${lead.email}`} title={lead.email} onClick={(e) => e.stopPropagation()}>{lead.email}</a>)
+                            : <span className="text-[11px] leading-tight text-muted-foreground/70">{prettyEnrichStatus(lead.enrichStatus) || "No email"}</span>
                           }
                         </TableCell>
 
-                        {/* Online presence — website + socials, present vs missing */}
-                        <TableCell onClick={(e) => e.stopPropagation()}>
+                        {/* Presence — what they actually run. A row of greyed-out
+                            icons for every network they don't have was mostly
+                            filler; the one absence that sells a service is the
+                            website, so that one is spelled out in words and the
+                            rest simply aren't drawn. */}
+                        <TableCell className="py-0" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-1.5">
                             {lead.website ? (
-                              <a href={lead.website} target="_blank" rel="noreferrer" title={lead.website} className="text-primary transition-opacity hover:opacity-70">
-                                <Globe2 size={16} />
+                              <a href={lead.website} target="_blank" rel="noreferrer" title={lead.website} className="inline-flex h-5 w-5 items-center justify-center rounded text-primary transition-colors hover:bg-primary/10">
+                                <Globe2 size={14} />
                               </a>
                             ) : (
-                              <Globe2 size={16} className="text-muted-foreground/30" aria-label="No website" />
+                              <span className="rounded border border-amber-500/30 bg-amber-500/[0.07] px-1.5 py-px text-[10px] font-medium text-amber-700">No site</span>
                             )}
-                            <Socials lead={lead} showMissing />
+                            <Socials lead={lead} />
                           </div>
                         </TableCell>
 
-                        {/* Reviews — count over rating, "No reviews" spelled out */}
-                        <TableCell className="text-sm">
-                          <div className="tabular-nums">{reviews.toLocaleString()}</div>
-                          {showRating(lead) && reviews > 0 ? (
-                            <div className="flex items-center gap-0.5 text-xs text-muted-foreground">
-                              <Star size={10} className="text-amber-500" fill="currentColor" /> {lead.rating}
-                            </div>
+                        {/* Reviews — social proof, so the count leads and the
+                            rating qualifies it. */}
+                        <TableCell className="py-0">
+                          {reviews > 0 ? (
+                            <>
+                              <div className="text-[13px] font-medium leading-tight tabular-nums">{reviews.toLocaleString()}</div>
+                              {showRating(lead) ? (
+                                <div className="flex items-center gap-0.5 text-[11px] leading-tight text-muted-foreground">
+                                  <Star size={9} className="text-amber-500" fill="currentColor" /> {lead.rating}
+                                </div>
+                              ) : null}
+                            </>
                           ) : (
-                            <div className="text-xs text-muted-foreground">No reviews</div>
+                            <span className="text-[11px] text-muted-foreground/70">None</span>
                           )}
                         </TableCell>
 
-                        <TableCell className="max-w-[190px] text-sm">
+                        <TableCell className="max-w-[200px] py-0">
                           {lead.address
-                            ? <span className="flex items-start gap-1"><MapPin size={13} className="mt-0.5 shrink-0 text-muted-foreground" /><span className="truncate" title={lead.address}>{lead.address}</span></span>
-                            : <span className="text-xs text-muted-foreground">—</span>
+                            ? <span className="block truncate text-[12px] text-muted-foreground" title={lead.address}>{lead.address}</span>
+                            : <span className="text-[11px] text-muted-foreground/70">—</span>
                           }
                         </TableCell>
 
-                        {/* Opportunity — band word plus the score behind it */}
-                        <TableCell>
-                          <div className="flex items-center justify-end gap-2">
-                            <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium", BAND_CLASS[opp.band])}>
-                              <TrendingUp size={11} /> {BAND_LABEL[opp.band]}
+                        {/* Opportunity — a qualification signal, not a coloured
+                            cell: a dot in the band's colour, the word, then the
+                            score. The tint stays on the chip. */}
+                        <TableCell className="py-0">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <span className={cn("inline-flex items-center gap-1.5 rounded border px-1.5 py-0.5 text-[11px] font-medium", BAND_CLASS[opp.band], BAND_RING[opp.band])}>
+                              <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
+                              {BAND_LABEL[opp.band]}
                             </span>
                             <span
-                              className={cn("flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-semibold tabular-nums", BAND_RING[opp.band])}
+                              className="w-6 text-right text-[12px] font-semibold tabular-nums text-foreground"
                               title={`${opp.score}/100 from ${opp.coverage}% signal coverage — ${opp.reasons[0] || "no gaps found"}`}
                             >
                               {opp.score}
@@ -3808,11 +3917,15 @@ export default function Dashboard({ view = "" }) {
                           </div>
                         </TableCell>
 
-                        <TableCell onClick={(e) => e.stopPropagation()}>
+                        {/* Actions — save and list stay on the row because they
+                            are the two things done constantly; everything else
+                            moved behind the menu so eight rows don't add up to a
+                            wall of small icons. */}
+                        <TableCell className="py-0" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-0.5">
-                            <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.__favorited && "text-amber-500")} onClick={() => addCapturedLead(lead, "watchlist")} title={lead.__favorited ? "Added to favorites" : "Add to favorites"}><Star size={14} fill={lead.__favorited ? "currentColor" : "none"} /></Button>
-                            <Button variant="ghost" size="icon" className={cn("h-8 w-8", lead.__listed && "text-primary")} disabled={(rowBusy[leadKey(lead)] || {}).list} onClick={() => openListsForCaptured(lead)} title="Add to a list">{(rowBusy[leadKey(lead)] || {}).list ? <Loader2 size={14} className="animate-spin" /> : <ListPlus size={14} />}</Button>
-                            <CapturedActions lead={lead} busy={rowBusy[leadKey(lead)] || {}} onEnrich={enrichCaptured} onRemove={hideCaptured} />
+                            <Button variant="ghost" size="icon" className={cn("h-7 w-7 text-muted-foreground hover:text-foreground", lead.__favorited && "text-amber-500 hover:text-amber-500")} onClick={() => addCapturedLead(lead, "watchlist")} title={lead.__favorited ? "Saved to favorites" : "Save to favorites"}><Star size={14} fill={lead.__favorited ? "currentColor" : "none"} /></Button>
+                            <Button variant="ghost" size="icon" className={cn("h-7 w-7 text-muted-foreground hover:text-foreground", lead.__listed && "text-primary hover:text-primary")} disabled={(rowBusy[leadKey(lead)] || {}).list} onClick={() => openListsForCaptured(lead)} title="Add to a list">{(rowBusy[leadKey(lead)] || {}).list ? <Loader2 size={14} className="animate-spin" /> : <ListPlus size={14} />}</Button>
+                            <RowActionsMenu lead={lead} busy={rowBusy[leadKey(lead)] || {}} onEnrich={enrichCaptured} onRemove={hideCaptured} />
                           </div>
                         </TableCell>
                       </TableRow>
@@ -3823,12 +3936,14 @@ export default function Dashboard({ view = "" }) {
               </div>
             </>
           )}
-        </Card>
+        </div>
+          )}
 
-        {/* Pager — 50 leads per page, with the range spelled out on the left the
-            way a results footer normally reads. */}
-        {leads.length > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+        {/* Pager — the section's footer rather than a floating strip below it,
+            with the range spelled out on the left the way a results footer
+            normally reads. */}
+        {workspaceTab === "leads" && leads.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-muted/20 px-3 py-2">
             <span className="text-xs text-muted-foreground">
               Showing {(pageOffset + 1).toLocaleString()} to {Math.min(pageOffset + WORKSPACE_PAGE_SIZE, leads.length).toLocaleString()} of {leads.length.toLocaleString()} leads
             </span>
@@ -3870,6 +3985,7 @@ export default function Dashboard({ view = "" }) {
             })()}
           </div>
         )}
+        </section>
       </div>
       {/* Bulk selection dock. The checkboxes, the selection state and every bulk
           handler already existed, but nothing ever rendered them — BottomDock was

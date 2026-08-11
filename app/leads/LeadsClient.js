@@ -511,7 +511,7 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot, on
           </DrawerCard>
 
           <DrawerCard title="Socials">
-            <Socials lead={lead} full />
+            <Socials lead={lead} tone="brand" />
           </DrawerCard>
 
           <DrawerCard title="Website status & chatbot">
@@ -1621,7 +1621,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                               <StatusPill lead={lead} />
                               <ChatbotBadge lead={lead} />
                             </div>
-                            <div className="mt-1"><Socials lead={lead} /></div>
+                            <div className="mt-1"><Socials lead={lead} tone="brand" /></div>
                           </TableCell>
                         )}
                         {isVisible("location") && (

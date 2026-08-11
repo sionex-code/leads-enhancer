@@ -158,16 +158,18 @@ export function scoreLead(lead) {
 
 export const BAND_LABEL = { high: "High", medium: "Medium", low: "Low" };
 
+// Restrained on purpose: a tint at 6-8% plus coloured text, never a filled
+// cell. Fifty rows of solid green would drown the one row that matters.
 export const BAND_CLASS = {
-  high: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-  medium: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
-  low: "bg-muted text-muted-foreground",
+  high: "bg-emerald-500/[0.07] text-emerald-700 dark:text-emerald-400",
+  medium: "bg-amber-500/[0.07] text-amber-700 dark:text-amber-400",
+  low: "bg-muted/60 text-muted-foreground",
 };
 
 export const BAND_RING = {
-  high: "border-emerald-500/40 text-emerald-700 dark:text-emerald-400",
-  medium: "border-amber-500/40 text-amber-700 dark:text-amber-400",
-  low: "border-border text-muted-foreground",
+  high: "border-emerald-500/30",
+  medium: "border-amber-500/30",
+  low: "border-border",
 };
 
 // Shared copy for the (i) in the Opportunity column header and the drawer.

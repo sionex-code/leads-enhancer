@@ -1,13 +1,18 @@
 "use client";
 
-// A filter pill with a real dropdown.
+// A filter control with a real dropdown.
 //
 // This replaces a bare <select> nested inside a styled label. That version
 // inherited the OS widget: no room for icons, no check on the active row, a
 // native popup that ignores the app's theme, and — worst — the selected value
 // rendered in the same weight as the label, so you could not tell an active
 // filter from an idle one at a glance. Here the pill itself carries the state
-// (tinted when narrowed), and the menu is ordinary DOM we control.
+// (bordered and inked when narrowed), and the menu is ordinary DOM we control.
+
+// Shaped as a squared-off control rather than a pill: a row of pills reads as
+// tags you might type into, where these are persistent state. The active state
+// leans on border + label weight, not a block of brand colour — six tinted
+// pills in a row is exactly how a filter bar starts to look like decoration.
 
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
@@ -40,18 +45,18 @@ export default function FilterSelect({ label, value, options, onChange, icon: Ic
         aria-expanded={open}
         aria-haspopup="listbox"
         className={cn(
-          "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs transition-colors",
+          "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors",
           active
-            ? "border-primary/50 bg-primary/10 text-foreground"
-            : "border-border text-muted-foreground hover:bg-muted/60"
+            ? "border-primary/60 bg-primary/[0.06] text-foreground shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.12)]"
+            : "border-border bg-card text-muted-foreground hover:border-border hover:bg-muted/50 hover:text-foreground"
         )}
       >
-        {Icon && <Icon size={13} className={active ? "text-primary" : ""} />}
+        {Icon && <Icon size={13} className={active ? "text-primary" : "text-muted-foreground/70"} />}
         <span>{label}</span>
-        <span className={cn("font-semibold", active ? "text-primary" : "text-foreground")}>
+        <span className={cn("font-semibold", active ? "text-primary" : "text-foreground/80")}>
           {current?.label ?? "All"}
         </span>
-        <ChevronDown size={13} className={cn("transition-transform", open && "rotate-180")} />
+        <ChevronDown size={12} className={cn("text-muted-foreground/60 transition-transform", open && "rotate-180")} />
       </button>
 
       {open && (

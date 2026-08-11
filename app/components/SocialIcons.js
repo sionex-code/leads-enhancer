@@ -63,23 +63,28 @@ export const SOCIALS = [
   },
 ];
 
-// Networks worth showing as an explicit gap in the workspace table. A missing
-// Facebook or Instagram page is a thing you can sell; a missing Telegram is not,
-// so `showMissing` only greys out these four rather than all nine.
+// Networks worth showing as an explicit gap. A missing Facebook or Instagram
+// page is a thing you can sell; a missing Telegram is not, so `showMissing` only
+// greys out these four rather than all nine.
 const MISSING_SHOWN = ["facebook", "instagram", "linkedin", "twitter"];
 
-// Colorful brand chips for whatever social links a lead has. Falls back to a
-// dash when there are none. Used in tables, cards and lead drawers alike.
+// The social links a lead has. Drawn as monochrome glyphs that take their brand
+// colour on hover, rather than as a row of saturated chips: in a table of fifty
+// rows, eight full-colour badges per row is the loudest thing on screen and it
+// is never the thing anyone is looking for. `tone="brand"` keeps the old filled
+// chips for surfaces where a couple of them read as a detail rather than noise —
+// the lead drawer, the mobile cards.
 //
-// With `showMissing`, the absent networks render as flat grey chips next to the
-// present ones instead of vanishing — so a row that has nothing reads as an
+// With `showMissing`, absent networks render as faint outlines next to the
+// present ones instead of vanishing, so a row with nothing reads as an
 // opportunity rather than as empty space.
-export function Socials({ lead, showMissing = false }) {
+export function Socials({ lead, showMissing = false, tone = "subtle" }) {
   const present = SOCIALS.filter((s) => lead[s.key]);
   const missing = showMissing
     ? SOCIALS.filter((s) => MISSING_SHOWN.includes(s.key) && !lead[s.key])
     : [];
   if (!present.length && !missing.length) return <span className="text-xs text-muted-foreground">-</span>;
+  const brand = tone === "brand";
   return (
     <div className="flex flex-wrap gap-1">
       {present.map((s) => (
@@ -91,10 +96,24 @@ export function Socials({ lead, showMissing = false }) {
           title={s.label}
           aria-label={s.label}
           onClick={(e) => e.stopPropagation()}
-          className="inline-flex h-5 w-5 items-center justify-center rounded-md text-white shadow-sm transition hover:opacity-80"
-          style={{ background: s.bg }}
+          className={
+            brand
+              ? "inline-flex h-5 w-5 items-center justify-center rounded-md text-white shadow-sm transition hover:opacity-80"
+              : "group/soc inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground/70 transition-colors hover:bg-muted"
+          }
+          style={brand ? { background: s.bg } : undefined}
         >
-          <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            width={brand ? 12 : 13}
+            height={brand ? 12 : 13}
+            fill="currentColor"
+            aria-hidden="true"
+            className={brand ? undefined : "transition-colors"}
+            style={brand ? undefined : { color: "inherit" }}
+            onMouseEnter={brand ? undefined : (e) => { e.currentTarget.style.color = s.bg; }}
+            onMouseLeave={brand ? undefined : (e) => { e.currentTarget.style.color = "inherit"; }}
+          >
             <path d={s.path} />
           </svg>
         </a>
@@ -104,9 +123,9 @@ export function Socials({ lead, showMissing = false }) {
           key={s.key}
           title={`No ${s.label} page found`}
           aria-label={`No ${s.label} page found`}
-          className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-muted text-muted-foreground/40"
+          className="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground/20"
         >
-          <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true">
             <path d={s.path} />
           </svg>
         </span>
