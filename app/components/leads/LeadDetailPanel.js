@@ -10,6 +10,7 @@
 // page or missing pixel is the opening line, not an empty cell.
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import {
   Bookmark,
   Check,
@@ -32,6 +33,21 @@ import LeadAvatar from "./LeadAvatar";
 import { scoreLead, isEnriched, BAND_LABEL, OPPORTUNITY_HELP } from "../../lib/opportunity";
 import { InfoPopover } from "../ui/info-popover";
 import trackingDetect from "../../../web/lib/tracking-detect.cjs";
+
+// Leaflet touches `window` on import, so it can only load in the browser.
+const LeadsMap = dynamic(() => import("../LeadsMap"), { ssr: false });
+
+// Coordinates arrive from the CSV as strings, and older scrapes have none at all
+// (the parser only started reading them recently), so this returns null unless
+// both values are real numbers inside the valid range.
+function coordsOf(lead) {
+  const lat = parseFloat(lead?.lat ?? lead?.latitude);
+  const lng = parseFloat(lead?.lng ?? lead?.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  if (lat === 0 && lng === 0) return null; // null island — a dropped coordinate
+  return { lat, lng };
+}
 
 function CopyButton({ value }) {
   const [copied, setCopied] = useState(false);
@@ -122,7 +138,10 @@ export default function LeadDetailPanel({
   const stack = tracking ? trackingDetect.summarize(tracking) : "";
   const reviews = parseInt(String(lead.reviews ?? "").replace(/[^\d]/g, ""), 10) || 0;
   const email = lead.email || "";
-  const waHref = lead.phone ? waMeLink(lead.phone) : "";
+  // waMeLink takes the lead, not a phone string — handing it `lead.phone` made it
+  // read .whatsapp off a String, so the button was dead for every lead.
+  const waHref = waMeLink(lead);
+  const coords = coordsOf(lead);
   const mapsHref = mapsLink(lead);
   const mapsIsDirect = hasDirectMapsLink(lead);
   const alreadyEnriched = isEnriched(lead);
@@ -317,7 +336,15 @@ export default function LeadDetailPanel({
           {reviews === 0 && <p className="text-xs text-muted-foreground">No reviews found</p>}
         </Section>
 
-        <Section title="Address">
+        <Section title="Location">
+          {/* Only scrapes that captured coordinates can be plotted; the rest still
+              get the address and a Maps link below, rather than an empty frame. */}
+          {coords && (
+            // wheelZoom off: the map sits inside a scrolling panel, where the
+            // wheel belongs to the panel. A small radius just sets the zoom —
+            // LeadsMap already drops its own pin on the centre.
+            <LeadsMap center={coords} radiusKm={0.3} height={150} wheelZoom={false} />
+          )}
           <div className="flex items-start gap-2 text-sm">
             <MapPin size={15} className="mt-0.5 shrink-0 text-muted-foreground" />
             {mapsHref ? (

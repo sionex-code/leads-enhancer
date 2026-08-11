@@ -5,7 +5,6 @@ import Link from "next/link";
 import Image from "next/image";
 import {
   LayoutGrid,
-  Database,
   List,
   PanelLeftClose,
   PanelLeftOpen,
@@ -35,10 +34,14 @@ const DEFAULT_TOUR = [
 // — Projects opens the workspace (?view=projects), with Leads + Lists under the same
 // umbrella. Billing lives in the account menu now (not the sidebar).
 const NEW_SEARCH = { key: "new", label: "New search", href: "/dashboard", icon: Search };
+// One entry, not two: "Leads" and "Lists" were the same job split in half —
+// the table did all the work (filter, sort, status, notes, delete) while a
+// second page existed only to name lists and link back into that table. Lists
+// are now created/renamed/deleted from the table's list filter, so /lists
+// redirects here and the sidebar has a single destination.
 const PROJECT_NAV = [
   { key: "dashboard", label: "Projects", href: "/dashboard?view=projects", icon: LayoutGrid },
-  { key: "leads", label: "Leads", href: "/leads", icon: Database },
-  { key: "lists", label: "Lists", href: "/lists", icon: List },
+  { key: "leads", label: "Lists", href: "/leads", icon: List },
 ];
 
 // Live search runs in the extension, so "is it installed?" is a standing piece

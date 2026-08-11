@@ -105,5 +105,9 @@ export function middleware(request) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.svg$).*)"],
+  // Skip everything under /_next, not just static+image: in dev the HMR socket
+  // lives at /_next/webpack-hmr, and running middleware on that upgrade request
+  // broke the handshake (ERR_INVALID_HTTP_RESPONSE), so hot reload never
+  // connected locally.
+  matcher: ["/((?!_next/|favicon.ico|.*\\.svg$).*)"],
 };

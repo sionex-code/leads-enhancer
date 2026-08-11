@@ -6,6 +6,7 @@ import AppShell from "../components/app/AppShell";
 import AnimatedNumber from "../components/AnimatedNumber";
 import ReportModal from "../components/ReportModal";
 import ListsDialog from "../components/leads/ListsDialog";
+import ManageListsDialog from "../components/leads/ManageListsDialog";
 import {
   Ban,
   BarChart3,
@@ -26,6 +27,7 @@ import {
   Phone,
   Search,
   Send,
+  Settings2,
   Star,
   Trash2,
   Users,
@@ -120,7 +122,7 @@ const LEADS_TOUR = [
   { key: "leads-tabs", title: "Lead views", body: "Use the view dropdown to jump between favorites, lists, email-ready leads, and outreach status." },
   { key: "leads-search", title: "Search your leads", body: "Search across name, domain, phone, email, category and notes at once." },
   { key: "leads-filters", title: "Narrow it down", body: "Filter by project, country, city, whether they have an email or website, and site performance." },
-  { key: "leads-listfilter", title: "Saved lists", body: "Filter to one of your saved lists, then work just those leads." },
+  { key: "leads-listfilter", title: "Saved lists", body: "Filter to one of your saved lists, then work just those leads. The button beside it creates, renames and deletes lists." },
   { key: "leads-table", title: "Work a lead", body: "Click a lead to open full details, or tick rows to bulk audit, scan for chatbots, generate reports, or add to a list." },
   { key: "leads-export", title: "Export to CSV", body: "Download everything matching your current filters as a CSV." },
 ];
@@ -651,6 +653,9 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
   const [lists, setLists] = useState([]);
   const [listFilter, setListFilter] = useState(initialList);
   const [listDialog, setListDialog] = useState(null);
+  // Create/rename/delete lists in place. This was a separate /lists page, which
+  // split one job ("work my lists") across two nav entries.
+  const [manageLists, setManageLists] = useState(false);
   // Tiny self-dismissing toast for quick confirmations (favorite, mark sent, …).
   const [toast, setToast] = useState("");
   const toastTimer = useRef(null);
@@ -1229,10 +1234,17 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                 <option value="">All cities</option>
                 {cities.map((c) => <option key={c.name} value={c.name}>{c.name} ({c.count})</option>)}
               </Select>
-              <Select value={listFilter} onChange={(e) => setListFilter(e.target.value)} className="w-full sm:w-auto sm:min-w-[120px]" title="Filter by list" data-tour="leads-listfilter">
-                <option value="">All lists</option>
-                {lists.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.count})</option>)}
-              </Select>
+              {/* Pick a list and manage lists side by side — the two halves of
+                  the same job, which used to live on two different pages. */}
+              <div className="flex w-full items-center gap-1 sm:w-auto">
+                <Select value={listFilter} onChange={(e) => setListFilter(e.target.value)} className="w-full sm:w-auto sm:min-w-[120px]" title="Filter by list" data-tour="leads-listfilter">
+                  <option value="">All lists</option>
+                  {lists.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.count})</option>)}
+                </Select>
+                <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" title="Create, rename or delete lists" onClick={() => setManageLists(true)}>
+                  <Settings2 size={15} />
+                </Button>
+              </div>
               <Select value={hasEmail} onChange={(e) => setHasEmail(e.target.value)} className="w-full sm:w-auto sm:min-w-[120px]" title="Filter by email">
                 <option value="">Any email</option>
                 <option value="yes">Has email</option>
@@ -1589,6 +1601,15 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
           onClose={() => setListDialog(null)}
           onSavedLead={mergeLead}
           onChanged={load}
+        />
+      )}
+      {manageLists && (
+        <ManageListsDialog
+          lists={lists}
+          activeListId={listFilter}
+          onClose={() => setManageLists(false)}
+          onChanged={load}
+          onDeletedActive={() => setListFilter("")}
         />
       )}
       {active && (
