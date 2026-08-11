@@ -8,13 +8,24 @@ import { headers } from "next/headers";
 import { auth } from "../../../auth";
 import billing from "../../../web/lib/billing.cjs";
 import seo from "../../../web/lib/seo.cjs";
+import { cn } from "../../lib/utils";
 
 export const dynamic = "force-dynamic";
 
 // How many businesses a visitor may see.
 const PUBLIC_ROWS = 30;
+// How many of those come with their real contact details, for everyone —
+// signed out included. The sample is the pitch: a visitor can call one of these
+// businesses today and see the data is real, which is worth more than thirty
+// rows of masked placeholders. The rest stay withheld server-side.
+const FREE_ROWS = 7;
 
 const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || "https://leadsfunda.com";
+
+// Contact cells of a locked row: softened rather than removed, so the shape of
+// what you are missing is visible. `select-none` stops the masked placeholder
+// being copied out as if it were an address.
+const LOCKED_CELL = "select-none blur-[3px]";
 
 const titleCase = (s) =>
   String(s || "").trim().replace(/\s+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -73,9 +84,18 @@ async function loadPage(slug, tier) {
       enrichment = new Map();
     }
 
-    rows = raw.map((r) =>
-      toPublicRow(r, entry.cityName, enrichment.get(hostOf(r.website || ""))?.email || "", tier)
-    );
+    // The first FREE_ROWS are served as if the viewer had a plan; the rest keep
+    // this viewer's real tier, so their contact details are masked here on the
+    // server and never reach the browser at all.
+    rows = raw.map((r, i) => ({
+      ...toPublicRow(
+        r,
+        entry.cityName,
+        enrichment.get(hostOf(r.website || ""))?.email || "",
+        i < FREE_ROWS ? "full" : tier
+      ),
+      locked: i >= FREE_ROWS && tier !== "full",
+    }));
   } catch {
     rows = []; // the page is still worth rendering with its CTA
   }
@@ -200,7 +220,7 @@ export default async function DirectoryEntry({ params }) {
     {
       q: `Do these ${entry.service} listings include phone numbers and websites?`,
       a: `${pctPhone}% of the businesses shown here have a phone number on file and ${pctSite}% have a website. ` +
-         `Contact details are shortened on this page and shown in full inside LeadsFunda.`,
+         `The first ${FREE_ROWS} are listed with their real details; the rest are shortened on this page and shown in full inside LeadsFunda.`,
     },
     {
       q: `How well rated are ${entry.service} businesses in ${entry.cityName}?`,
@@ -378,10 +398,14 @@ export default async function DirectoryEntry({ params }) {
                         <span className="text-muted-foreground">n/a</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                    {/* Locked rows are blurred on top of already-masked values —
+                        the blur is a visual cue, never the thing doing the
+                        hiding. What is behind it is "j•••@domain.com", not the
+                        real address, because the real one was never sent. */}
+                    <td className={cn("px-4 py-3 font-mono text-xs text-muted-foreground", r.locked && r.website && LOCKED_CELL)}>
                       {r.website || "n/a"}
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                    <td className={cn("px-4 py-3 font-mono text-xs text-muted-foreground", r.locked && r.email && LOCKED_CELL)}>
                       {r.email ? (
                         r.email
                       ) : tier === "full" ? (
@@ -396,7 +420,7 @@ export default async function DirectoryEntry({ params }) {
                         </span>
                       )}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-muted-foreground">
+                    <td className={cn("whitespace-nowrap px-4 py-3 font-mono text-xs text-muted-foreground", r.locked && r.phone && LOCKED_CELL)}>
                       {r.phone || "n/a"}
                     </td>
                   </tr>
@@ -405,8 +429,10 @@ export default async function DirectoryEntry({ params }) {
             </table>
           </div>
 
-          {/* Nothing is smudged: the withheld fields are simply not in the
-              response. This states plainly what is missing and what reveals it. */}
+          {/* The blur on the lower rows is decoration over values that were
+              already masked server-side — the withheld fields are not in the
+              response at all. This states plainly what is missing and what
+              reveals it. */}
           <div className="border-t border-border bg-muted/30 px-4 py-7 text-center">
             {tier === "full" ? (
               <p className="text-sm text-muted-foreground">
@@ -422,9 +448,9 @@ export default async function DirectoryEntry({ params }) {
                   Unlock the emails and phone numbers
                 </p>
                 <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
-                  You are signed in, so websites are shown in full. Upgrade your plan to
-                  reveal every email and phone number and export all{" "}
-                  {entry.leadCount.toLocaleString()} businesses.
+                  The first {FREE_ROWS} are shown in full, and you are signed in, so every
+                  website is too. Upgrade your plan to reveal the rest of the emails and
+                  phone numbers and export all {entry.leadCount.toLocaleString()} businesses.
                 </p>
                 <a
                   href={`${appUrl}/billing`}
@@ -440,8 +466,9 @@ export default async function DirectoryEntry({ params }) {
                   Sign in to view full leads
                 </p>
                 <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
-                  Websites, emails and phone numbers are shortened on public pages.
-                  Sign in to see them and to export the whole list.
+                  The first {FREE_ROWS} businesses above show their real website, email and
+                  phone. The rest are shortened on public pages — sign in to see them and to
+                  export the whole list.
                 </p>
                 <a
                   href={`${appUrl}/login?callbackUrl=${encodeURIComponent(`/directory/${entry.slug}`)}`}
