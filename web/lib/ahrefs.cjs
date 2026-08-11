@@ -58,7 +58,11 @@ async function fetchDomainRating(rawTarget, { timeoutMs = DEFAULT_TIMEOUT_MS } =
           ? "Ahrefs rejected the API key (check AHREFS_API_KEY)"
           : res.status === 429
             ? "Ahrefs rate limit reached — try again shortly"
-            : `HTTP ${res.status}`;
+            : res.status === 400
+              // What a dead or malformed domain comes back as. Not a fault worth
+              // alarming anyone about: this lead simply has no rating to fetch.
+              ? "Ahrefs doesn't recognise this domain"
+              : `HTTP ${res.status}`;
       return { ok: false, error: reason, target, status: res.status };
     }
     const data = await res.json().catch(() => null);
