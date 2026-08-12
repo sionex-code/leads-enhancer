@@ -1,6 +1,7 @@
 "use client";
 import { signIn } from "next-auth/react";
 import { Button } from "./ui/button";
+import { cn } from "../lib/utils";
 
 // In production the landing lives on the marketing host (leadsfunda.com) but auth
 // lives on the app host (app.leadsfunda.com, = NEXTAUTH_URL). So from the landing
@@ -33,7 +34,12 @@ function GoogleIcon() {
 
 export function GoogleSignInButton({ callbackUrl = "/dashboard", children, variant, size, className }) {
   return (
-    <Button variant={variant} size={size} className={className} onClick={() => startSignIn(callbackUrl)}>
+    <Button
+      variant={variant}
+      size={size}
+      className={cn("bg-black text-white hover:bg-neutral-800", className)}
+      onClick={() => startSignIn(callbackUrl)}
+    >
       <GoogleIcon />
       {children || "Sign in with Google"}
     </Button>

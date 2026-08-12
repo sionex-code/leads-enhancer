@@ -138,7 +138,9 @@ function titleCase(s) {
 // Shared rating/reviews rule (matches the Leads page): show the review count
 // (0 when empty), and only show a star rating when there is at least one review.
 function reviewCount(lead) {
-  const n = Number(lead.reviews);
+  // lead.reviews can arrive as a plain "1204" or a comma-formatted "1,204" —
+  // Number() chokes on the comma and returns NaN, so strip non-digits first.
+  const n = parseInt(String(lead.reviews ?? "").replace(/[^\d]/g, ""), 10);
   return Number.isFinite(n) ? n : 0;
 }
 function showRating(lead) {

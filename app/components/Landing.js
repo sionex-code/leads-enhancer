@@ -12,15 +12,11 @@ import {
   Check,
   CheckCircle2,
   Plus,
-  Play,
   ArrowRight,
   Zap,
   Sparkles,
   Building2,
-
-  ShieldCheck,
   Gauge,
-  Filter,
   Database,
   ListChecks,
   Activity,
@@ -128,8 +124,8 @@ const PLANS = [
 const PLAN_ICONS = { free: Rocket, p19: Sparkles, p35: Star, p49: Briefcase };
 
 const FAQ = [
-  { q: "Do I need to install anything?", a: "No. LeadsFunda runs in the cloud, so you sign in with Google and search from the browser you already have. There is an optional Chrome extension, and it only matters for cities or niches we have not indexed yet: it runs that search live on your own machine instead of putting you in a queue." },
-  { q: "How fast do leads actually arrive?", a: "Most searches are answered from leads we already hold and land in a few seconds. A search that has to be collected fresh runs as a job on our servers, several at a time, and keeps going after you close the tab." },
+  { q: "Do I need to install anything?", a: "You sign in with Google, no account setup beyond that. Most searches are answered straight from leads we already hold. For a city or niche we haven't indexed yet, you'll need the free Chrome extension: it runs that search live on your own machine instead of putting you in a queue." },
+  { q: "How fast do leads actually arrive?", a: "Most searches are answered from leads we already hold and land in a few seconds. A search that has to be collected fresh runs through the Chrome extension on your own machine, so it needs that tab open until the job finishes." },
   { q: "Where do the leads come from?", a: "Public business listings for the niche and location you pick. We then visit each business's own website and pull emails, social profiles and WhatsApp numbers from it, which is where most of the contact detail comes from." },
   { q: "What is a credit, and what does each action cost?", a: "Finding a lead costs 1 credit, a quick audit 3, a chatbot scan 5 and a full website report 10. Anything you do to a lead you already own is free, so going back over your own list never costs you twice." },
   { q: "What does the website audit check?", a: "We open the site in a real Chrome browser and check SSL, load speed, mobile layout and whether the business runs a chatbot. It is the quickest way to find the businesses whose site is broken, slow or missing altogether." },
@@ -146,11 +142,6 @@ const SCRAPE_FEED = [
   { n: "Northwind HVAC", m: "(512) 555-0143", r: "4.6", bad: false },
   { n: "Contoso Roofing Co.", m: "(512) 555-0117", r: "4.9", bad: true },
   { n: "Fabrikam Electric", m: "(512) 555-0164", r: "4.4", bad: false },
-];
-const ENRICH_FEED = [
-  { name: "Northwind HVAC", e: "office@example.com", wa: true },
-  { name: "Fabrikam Electric", e: "team@example.com", wa: true },
-  { name: "Contoso Roofing", e: "hello@example.com", wa: false },
 ];
 
 /* --------------------------------------------------------------- helpers -- */
@@ -481,59 +472,6 @@ function HeroApp() {
   );
 }
 
-/* ------------------------------------------------------ research widgets -- */
-
-// Wavy trend line + highlighted point with a value tooltip.
-function TrendChart() {
-  return (
-    <div className="mt-5 rounded-2xl border border-border bg-background p-4">
-      <div className="flex items-center justify-between">
-        <span className="font-heading text-sm font-bold">Lead value</span>
-        <span className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-medium text-muted-foreground">Last 7 days <ChevronDown className="h-3 w-3" /></span>
-      </div>
-      <div className="relative mt-4">
-        <div className="absolute left-1/2 top-0 -translate-x-1/2 rounded-lg bg-card px-2.5 py-1 text-center shadow-md ring-1 ring-border">
-          <div className="text-sm font-bold text-foreground">$4,100</div>
-          <div className="text-[10px] text-muted-foreground">from 28 closes</div>
-        </div>
-        <svg viewBox="0 0 320 150" className="mt-9 h-28 w-full overflow-visible">
-          {[30, 70, 110].map((y) => <line key={y} x1="0" y1={y} x2="320" y2={y} stroke="hsl(var(--border))" strokeWidth="1" strokeDasharray="3 5" />)}
-          <path d="M0,96 C24,78 44,70 64,84 C88,100 104,52 128,58 C150,64 158,108 182,96 C206,84 214,40 240,52 C266,64 286,30 320,22" fill="none" stroke="hsl(var(--primary))" strokeWidth="3" strokeLinecap="round" />
-          <circle cx="160" cy="86" r="9" fill="hsl(var(--primary)/0.2)" />
-          <circle cx="160" cy="86" r="4.5" fill="hsl(var(--primary))" />
-        </svg>
-      </div>
-    </div>
-  );
-}
-
-// Owner-contact chat bubbles with floating collaboration cursor tags.
-function EnrichChat() {
-  return (
-    <div className="relative mt-5 h-60 rounded-2xl border border-border bg-background p-4">
-      <div className="space-y-3">
-        {ENRICH_FEED.map((r, i) => (
-          <div key={r.e} className={`flex items-center gap-2.5 rounded-2xl border border-border bg-card px-3 py-2.5 shadow-sm ${i === 1 ? "ml-8" : ""}`}>
-            <Image src={FACES[i + 1]} alt="" width={28} height={28} className="h-7 w-7 rounded-full object-cover" />
-            <div className="min-w-0">
-              <div className="truncate text-xs font-semibold text-foreground">{r.name}</div>
-              <div className="truncate text-[11px] text-muted-foreground">{r.e}</div>
-            </div>
-            <div className="ml-auto flex shrink-0 items-center gap-1.5">
-              {r.wa
-                ? <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600"><MessageCircle className="h-3 w-3" /> WhatsApp</span>
-                : <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">Email</span>}
-            </div>
-          </div>
-        ))}
-      </div>
-      {/* collaboration cursors */}
-      <span className="absolute right-6 top-6 rounded-md bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground shadow">You</span>
-      <span className="absolute bottom-8 left-6 rounded-md bg-foreground px-2 py-0.5 text-[10px] font-semibold text-background shadow">Team</span>
-    </div>
-  );
-}
-
 /* -------------------------------------------------------- bento widgets -- */
 
 function Sparkline() {
@@ -834,7 +772,7 @@ export default function Landing({ recent = [], total = 0 }) {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-70" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-600" />
             </span>
-            Live local search, no account needed
+            Live local search, results in seconds
           </span>
           {/* Two lines, always: the break is authored rather than left to the
               container, because "in any city" is the half that carries the
@@ -869,16 +807,6 @@ export default function Landing({ recent = [], total = 0 }) {
         <HeroApp />
       </section>
 
-      {/* ---- trust strip ---- */}
-      <section className="border-y border-border/60 bg-card/40 backdrop-blur">
-        <div className="container flex flex-wrap items-center justify-center gap-x-10 gap-y-3 py-6 text-sm text-muted-foreground">
-          <span className="flex items-center gap-2"><Globe2 className="h-4 w-4 text-primary" /> Real-Chrome website audits</span>
-          <span className="flex items-center gap-2"><MessageCircle className="h-4 w-4 text-primary" /> WhatsApp detection</span>
-          <span className="flex items-center gap-2"><Mail className="h-4 w-4 text-[#b8860b]" /> Email + social enrichment</span>
-          <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-primary" /> Private &amp; isolated data</span>
-        </div>
-      </section>
-
       {/* ---- about ---- */}
       <section id="about" className="container py-24">
         <Reveal className="mx-auto max-w-3xl text-center">
@@ -910,28 +838,6 @@ export default function Landing({ recent = [], total = 0 }) {
             );
           })}
         </Reveal>
-      </section>
-
-      {/* ---- smarter research: two widget cards ---- */}
-      <section className="container pb-8">
-        <Reveal>
-          <SectionHead icon={Sparkles} eyebrow="See it work" title="From raw listing to ready-to-pitch lead"
-            sub="Let LeadsFunda do the heavy lifting. It gathers every business, then enriches and scores it for you." className="mb-12" />
-        </Reveal>
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Reveal className="relative overflow-hidden rounded-3xl border border-border bg-card p-7 shadow-sm">
-            <div className="pointer-events-none absolute -left-10 -top-10 h-40 w-40 rounded-full bg-rose-400/10 blur-2xl" />
-            <h3 className="font-heading text-xl font-bold">Your pipeline at a glance</h3>
-            <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">See lead volume, closes and revenue trend so you always know which niches are paying off.</p>
-            <TrendChart />
-          </Reveal>
-          <Reveal delay={120} className="relative overflow-hidden rounded-3xl border border-border bg-card p-7 shadow-sm">
-            <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-primary/10 blur-2xl" />
-            <h3 className="font-heading text-xl font-bold">Contacts ready to send</h3>
-            <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">Emails, socials and WhatsApp pulled from each business's own site, sendable the second it lands.</p>
-            <EnrichChat />
-          </Reveal>
-        </div>
       </section>
 
       {/* ---- discover: sticky-left + pastel card stack ---- */}
@@ -996,7 +902,7 @@ export default function Landing({ recent = [], total = 0 }) {
           <Reveal delay={210} className="lg:col-span-4"><BentoCell icon={Activity} tile="bg-emerald-500/10 text-emerald-600" title="Actionable insights" body="See what's landing in real time and pounce on the warmest prospects first.">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="flex items-center justify-between rounded-xl border border-border bg-background px-3 py-3">
-                <div><div className="text-[11px] text-muted-foreground">Leads today</div><div className="font-heading text-xl font-bold text-foreground">2,400 <span className="text-xs font-semibold text-emerald-600">+10%</span></div></div>
+                <div><div className="text-[11px] text-muted-foreground">Leads today</div><div className="font-heading text-xl font-bold text-foreground">1,860 <span className="text-xs font-semibold text-emerald-600">+10%</span></div></div>
                 <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-flare/25 text-flare-ink"><TrendingUp className="h-4 w-4" /></span>
               </div>
               <div className="flex items-center gap-2.5 rounded-xl border border-border bg-background px-3 py-3">
@@ -1060,7 +966,7 @@ export default function Landing({ recent = [], total = 0 }) {
               <Reveal key={t.name} delay={(i % 3) * 90}>
                 <div className="h-full rounded-3xl border border-border bg-card p-6 shadow-sm">
                   <div className="flex items-center gap-3">
-                    <Image src={FACES[i % FACES.length]} alt="" width={40} height={40} className="h-10 w-10 rounded-full object-cover" />
+                    <Image src={t.img} alt="" width={40} height={40} className="h-10 w-10 rounded-full object-cover" />
                     <div className="min-w-0">
                       <div className="text-sm font-semibold text-foreground">{t.name}</div>
                       <div className="truncate text-xs text-muted-foreground">{t.handle}</div>
@@ -1141,7 +1047,6 @@ export default function Landing({ recent = [], total = 0 }) {
             <div className="col-span-2 md:col-span-2">
               <Logo />
               <p className="mt-4 max-w-xs text-sm text-muted-foreground">Turn public map listings into a pipeline of enriched, ready-to-pitch B2B leads with 99% email data accuracy.</p>
-              <div className="mt-6"><Cta signedIn={signedIn} size="sm" className="lf-cta rounded-xl" signedInLabel="Open dashboard">Continue with Google</Cta></div>
             </div>
             <div>
               <div className="mb-4 text-sm font-semibold text-foreground">Pages</div>

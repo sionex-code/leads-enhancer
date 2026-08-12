@@ -110,7 +110,9 @@ const DOMAIN_RATING_INFO = (
 // Rendering rule: a rating only means something with reviews. Show the review
 // count (0 when empty), and only show the star rating when there is at least 1 review.
 function reviewCount(lead) {
-  const n = Number(lead.reviews);
+  // lead.reviews can arrive as a plain "1204" or a comma-formatted "1,204" —
+  // Number() chokes on the comma and returns NaN, so strip non-digits first.
+  const n = parseInt(String(lead.reviews ?? "").replace(/[^\d]/g, ""), 10);
   return Number.isFinite(n) ? n : 0;
 }
 function showRating(lead) {

@@ -200,7 +200,13 @@ async function checkOnce(number) {
     // Be tolerant of small response-shape differences across OpenWA versions.
     const d = data && data.data ? data.data : data;
     const exists = !!(d && (d.exists ?? d.isRegistered ?? d.registered));
-    const wid = (d && (d.whatsappId || d.chatId || d.jid)) || "";
+    // WhatsApp increasingly returns a "@lid" (linked ID) instead of the classic
+    // "@c.us" phone-based JID for some numbers — a LID's digits are an internal
+    // WhatsApp identifier, NOT the phone number, so a wa.me link built from them
+    // is broken. Only trust the API's id when it's actually phone-based; otherwise
+    // fall back to the number we queried with, which we know is real.
+    const rawWid = (d && (d.whatsappId || d.chatId || d.jid)) || "";
+    const wid = /@c\.us$/i.test(rawWid) ? rawWid : "";
     return {
       result: { exists, whatsappId: exists ? wid || `${number}@c.us` : "", status: exists ? "on whatsapp" : "not on whatsapp" },
     };
