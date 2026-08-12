@@ -7,7 +7,7 @@ import ExtensionRequiredDialog from "../components/ExtensionRequiredDialog";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { Textarea } from "../components/ui/textarea";
-import { detectExtension, enrichDomains } from "../lib/extension-client";
+import { detectExtension, enrichDomains, versionAtLeast, MIN_DOMAIN_FINDER_VERSION } from "../lib/extension-client";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 const MAX_DOMAINS = 200;
@@ -44,6 +44,7 @@ export default function DomainFinderClient() {
   const [progress, setProgress] = useState(null); // { done, total }
   const [error, setError] = useState("");
   const [needExtension, setNeedExtension] = useState(false);
+  const [needUpdate, setNeedUpdate] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const fileInputRef = useRef(null);
 
@@ -72,6 +73,14 @@ export default function DomainFinderClient() {
     const version = await detectExtension();
     if (!version) {
       setNeedExtension(true);
+      return;
+    }
+    // An already-installed older extension answers PING fine (that part never
+    // changed) but silently drops ENRICH_DOMAINS — its bridge doesn't forward
+    // a message type it doesn't know, so the page would otherwise wait for a
+    // RESULT that's never coming. Catch that here instead of just spinning.
+    if (version !== "unknown" && !versionAtLeast(version, MIN_DOMAIN_FINDER_VERSION)) {
+      setNeedUpdate(true);
       return;
     }
 
@@ -147,6 +156,12 @@ export default function DomainFinderClient() {
         onClose={() => setNeedExtension(false)}
         title="Install the browser extension to find domain leads"
         body="Domain Leads Finder crawls each site from your own browser through our free Chrome extension, so scanning never loads our servers. It takes about a minute to set up, once."
+      />
+      <ExtensionRequiredDialog
+        open={needUpdate}
+        onClose={() => setNeedUpdate(false)}
+        title="Update the browser extension to use Domain Leads Finder"
+        body="You have an older version of the LeadsFunda extension installed that doesn't support this feature yet. Go to chrome://extensions, find LeadsFunda Lead Scraper, and click Reload — then try again."
       />
       <LeadsClient
         key={refreshKey}

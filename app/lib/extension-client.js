@@ -19,6 +19,25 @@ function newId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+// Compares "2.4.1" >= "2.4.0" numerically, part by part — a plain string
+// compare would put "2.10.0" before "2.9.0".
+export function versionAtLeast(version, min) {
+  const a = String(version || "").split(".").map((n) => parseInt(n, 10) || 0);
+  const b = String(min || "").split(".").map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const av = a[i] || 0, bv = b[i] || 0;
+    if (av !== bv) return av > bv;
+  }
+  return true;
+}
+
+// The extension version that first understood the ENRICH_DOMAINS message type
+// (Domain Leads Finder). An older, already-installed extension silently drops
+// that message — its content-script bridge doesn't forward a type it doesn't
+// know — so the page would otherwise wait forever for a RESULT that never
+// comes. Anything calling enrichDomains() should check this first.
+export const MIN_DOMAIN_FINDER_VERSION = "2.4.0";
+
 // Resolves with the extension version string, or null if it isn't installed.
 export function detectExtension({ timeoutMs = DETECT_TIMEOUT_MS } = {}) {
   if (typeof window === "undefined") return Promise.resolve(null);
@@ -123,7 +142,27 @@ export function enrichDomains(domains, { onProgress, signal } = {}) {
     const jobId = newId();
     let done = false;
 
+    // A watchdog, not a progress deadline: if nothing EVER answers — most
+    // likely an already-installed extension too old to know the
+    // ENRICH_DOMAINS message type, which its content-script bridge silently
+    // drops rather than erroring — this promise would otherwise hang forever
+    // and the page would spin on "Scanning…" with no way out. Generous enough
+    // to clear the extension's own internal deadline (60s floor, 15s/domain,
+    // capped at 6min) with room for message-passing overhead.
+    const watchdogMs = Math.max(60000, Math.min(domains.length * 15000, 360000)) + 30000;
+    const watchdog = setTimeout(() => {
+      if (done) return;
+      done = true;
+      cleanup();
+      window.postMessage({ source: PAGE_SOURCE, type: "CANCEL", jobId }, window.location.origin);
+      reject(new Error(
+        "The extension didn't respond. If you already had it installed, reload it at chrome://extensions " +
+        "(it may be an older version that doesn't support Domain Leads Finder yet), then try again."
+      ));
+    }, watchdogMs);
+
     function cleanup() {
+      clearTimeout(watchdog);
       window.removeEventListener("message", onMessage);
       signal?.removeEventListener?.("abort", onAbort);
     }
