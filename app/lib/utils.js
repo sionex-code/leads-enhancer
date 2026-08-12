@@ -49,6 +49,10 @@ export function hasDirectMapsLink(lead) {
 export function prettyEnrichStatus(status) {
   const s = String(status || "").trim();
   if (!s) return "";
+  // "no website" is accurate about *why* enrichment couldn't run, but this
+  // status renders under a lead's contact/email info, where "no website"
+  // reads as a non sequitur — say what's actually missing there: an email.
+  if (/^no website$/i.test(s)) return "no email found";
   if (/^error\b/i.test(s) || /ENOTFOUND|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|getaddrinfo|certificate|socket hang up|timeout/i.test(s)) {
     return "no email found";
   }
