@@ -3296,7 +3296,7 @@ export default function Dashboard({ view = "" }) {
       </div>
     );
     return (
-      <AppShell active="new" title="Find leads" actions={findActions} tourKey="find" tourSteps={FIND_TOUR}>
+      <AppShell active="new" title="Find leads" actions={findActions} projectsNav={projectList} projectsCount={projects.length} tourKey="find" tourSteps={FIND_TOUR}>
         <div className={cn(
           "transition-all duration-300 ease-out transform origin-center",
           isTransitioningOut ? "opacity-0 scale-95 -translate-y-4" : "opacity-100 scale-100 translate-y-0"
