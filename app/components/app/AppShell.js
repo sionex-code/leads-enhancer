@@ -68,7 +68,7 @@ function Brand({ collapsed, onClick }) {
   );
 }
 
-function NavItem({ item, active, collapsed, onNavigate, prominent, trailingSpace }) {
+function NavItem({ item, active, collapsed, onNavigate, prominent, trailingSpace, badge }) {
   const { key, label, href, icon: Icon } = item;
   const isActive = active === key;
   return (
@@ -91,6 +91,11 @@ function NavItem({ item, active, collapsed, onNavigate, prominent, trailingSpace
       {isActive && <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-primary" />}
       <Icon className="h-[18px] w-[18px] shrink-0" />
       {!collapsed && <span className="truncate">{label}</span>}
+      {!collapsed && badge != null && (
+        <span className="ml-auto flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-semibold tabular-nums text-muted-foreground">
+          {badge}
+        </span>
+      )}
     </Link>
   );
 }
@@ -99,7 +104,7 @@ function NavItem({ item, active, collapsed, onNavigate, prominent, trailingSpace
 // Projects link rather than floating in a separate block further down the
 // sidebar, so the list reads as belonging to the item that opens it. It is
 // dropped in the icon rail, where there is no room to show names.
-function NavLinks({ active, collapsed, onNavigate, projectsNav }) {
+function NavLinks({ active, collapsed, onNavigate, projectsNav, projectsCount }) {
   // The nested project list is collapsible from the Projects row's chevron.
   // Remembered per browser, because whether somebody wants the list open is a
   // standing preference, not a per-page one.
@@ -135,14 +140,14 @@ function NavLinks({ active, collapsed, onNavigate, projectsNav }) {
               // nested in an <a> is invalid, and the link itself must still
               // navigate to the workspace when the row is clicked.
               <div className="relative">
-                <NavItem item={item} active={active} collapsed={collapsed} onNavigate={onNavigate} trailingSpace />
+                <NavItem item={item} active={active} collapsed={collapsed} onNavigate={onNavigate} trailingSpace badge={projectsCount} />
                 <button
                   type="button"
                   onClick={toggleProjects}
                   aria-expanded={projectsOpen}
                   aria-label={projectsOpen ? "Collapse projects" : "Expand projects"}
                   title={projectsOpen ? "Collapse projects" : "Expand projects"}
-                  className="absolute right-1.5 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  className="absolute right-1.5 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
                 >
                   <ChevronRight
                     className={cn("h-4 w-4 transition-transform duration-200", projectsOpen && "rotate-90")}
@@ -186,7 +191,7 @@ function NavLinks({ active, collapsed, onNavigate, projectsNav }) {
   );
 }
 
-export default function AppShell({ active, title, subtitle, actions, sidebarExtra, projectsNav, children, tourKey = "", tourSteps }) {
+export default function AppShell({ active, title, subtitle, actions, sidebarExtra, projectsNav, projectsCount, children, tourKey = "", tourSteps }) {
   const [collapsed, toggleCollapsed] = useSidebarCollapse();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
@@ -245,7 +250,7 @@ export default function AppShell({ active, title, subtitle, actions, sidebarExtr
         </div>
 
         <div className={cn("px-3 py-4", collapsed && "px-2")}>
-          <NavLinks active={active} collapsed={collapsed} projectsNav={projectsNav} />
+          <NavLinks active={active} collapsed={collapsed} projectsNav={projectsNav} projectsCount={projectsCount} />
         </div>
 
         {!collapsed && sidebarExtra ? (
@@ -266,7 +271,7 @@ export default function AppShell({ active, title, subtitle, actions, sidebarExtr
             <Brand collapsed={false} />
           </div>
           <div className="thin-scroll min-h-0 flex-1 overflow-y-auto px-3 py-4">
-            <NavLinks active={active} collapsed={false} onNavigate={() => setMobileOpen(false)} projectsNav={projectsNav} />
+            <NavLinks active={active} collapsed={false} onNavigate={() => setMobileOpen(false)} projectsNav={projectsNav} projectsCount={projectsCount} />
             {sidebarExtra ? <div className="mt-4">{sidebarExtra}</div> : null}
           </div>
           <div className="shrink-0 border-t border-border/60">

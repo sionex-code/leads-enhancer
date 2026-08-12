@@ -3345,6 +3345,7 @@ export default function Dashboard({ view = "" }) {
       subtitle={getProjectCrumbs(status || selectedProject, leads[0]) || status?.query || form.query}
       actions={actions}
       projectsNav={projectList}
+      projectsCount={projects.length}
       tourKey="workspace"
       tourSteps={WORKSPACE_TOUR}
     >
