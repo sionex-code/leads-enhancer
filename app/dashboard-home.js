@@ -868,7 +868,12 @@ function LiveAreaPicker({ countryCode, onCountry, city, onCity, onCountryCities 
             setText("");
           }}
         >
-          {!countries.length && <option value={countryCode}>Loading…</option>}
+          {/* Typing a fresh query clears this back to "" (see the query box's
+              onChange) — an explicit placeholder option so the select actually
+              renders blank instead of silently falling back to the first
+              country in the list, which read as a still-active selection. */}
+          <option value="">Select a country</option>
+          {!countries.length && countryCode && <option value={countryCode}>Loading…</option>}
           {countries.map((c) => (
             <option key={c.code} value={c.code}>{c.name}</option>
           ))}
@@ -1568,7 +1573,18 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
         <div className="relative flex-1">
           <Input
             value={query}
-            onChange={(e) => { setQuery(e.target.value); setSuggestOpen(true); }}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setSuggestOpen(true);
+              // Editing the query by hand invalidates whatever business type,
+              // country and city the live pickers happened to be showing —
+              // those no longer describe what's actually being searched (the
+              // typed text does), so reset them to their placeholder state
+              // rather than let a stale selection look still-active.
+              setLiveService("");
+              setLiveCountry("");
+              setLiveCity(null);
+            }}
             onFocus={() => setSuggestOpen(true)}
             onBlur={() => setTimeout(() => setSuggestOpen(false), 120)}
             onKeyDown={(e) => { if (e.key === "Escape") setSuggestOpen(false); }}
