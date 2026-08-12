@@ -43,6 +43,7 @@ export async function GET(request) {
     watchlist: searchParams.get("watchlist") === "1",
     contactList: searchParams.get("contactList") === "1",
     list: searchParams.get("list") || "",
+    source: searchParams.get("source") || "",
     ids,
     columns,
   });

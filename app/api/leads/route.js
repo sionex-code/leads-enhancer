@@ -68,6 +68,7 @@ export async function GET(request) {
       watchlist: searchParams.get("watchlist") === "1",
       contactList: searchParams.get("contactList") === "1",
       list: searchParams.get("list") || "",
+      source: searchParams.get("source") || "",
       limit: Number(searchParams.get("limit") || 2000),
       offset: Number(searchParams.get("offset") || 0),
     }),

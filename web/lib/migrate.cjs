@@ -122,6 +122,10 @@ const STATEMENTS = [
   `ALTER TABLE leads ADD COLUMN IF NOT EXISTS favicon text`,
   `ALTER TABLE enrichment_cache ADD COLUMN IF NOT EXISTS favicon text`,
 
+  // ---- Domain Lead Finder: distinguishes these leads from Maps-sourced ones ----
+  `ALTER TABLE leads ADD COLUMN IF NOT EXISTS source text`,
+  `CREATE INDEX IF NOT EXISTS idx_leads_source ON leads (source)`,
+
   // sensible defaults for the free monthly grant (only inserted if absent)
   `INSERT INTO app_settings (key, value, updated_at)
      VALUES ('free_monthly_credits_enabled', '1', now()::text)

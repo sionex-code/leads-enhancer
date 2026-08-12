@@ -135,6 +135,7 @@ const LEAD_COLUMNS = [
   "project", "query",
   "lat", "lng", "owner_replied", "owner_reply_count",
   "domain_rating", "domain_rating_checked_at",
+  "tech", "tech_checked_at", "favicon", "source",
 ];
 const INT_COLUMNS = new Set([
   "desktop_performance", "desktop_seo", "desktop_accessibility", "desktop_best_practices",
@@ -203,6 +204,10 @@ function normalizeLead(lead) {
     owner_reply_count: numOrNull(g("owner_reply_count", "ownerReplyCount")),
     domain_rating: numOrNull(g("domain_rating", "domainRating")),
     domain_rating_checked_at: g("domain_rating_checked_at", "domainRatingCheckedAt"),
+    tech: g("tech"),
+    tech_checked_at: g("tech_checked_at", "techCheckedAt"),
+    favicon: g("favicon"),
+    source: g("source"),
   };
 }
 
@@ -586,6 +591,7 @@ function buildLeadWhere(
     list = "",
     httpStatus = "",
     ids = null,
+    source = "",
   } = {}
 ) {
   const where = ["user_id = $1"];
@@ -689,9 +695,21 @@ function buildLeadWhere(
     where.push("(contact_list = 1 OR watchlist = 1 OR email_status = 'send')");
     where.push("outreach_status NOT IN ('sent', 'complete', 'skipped')");
   }
-  // Explicit id allow-list (e.g. "export selected rows only").
-  if (Array.isArray(ids) && ids.length) {
+  // Explicit id allow-list (e.g. "export selected rows only"). An id-scoped
+  // call already knows exactly which rows it wants, so it skips the source
+  // default below rather than having Domain Finder rows silently vanish from
+  // an action the caller explicitly targeted at them.
+  const hasIdFilter = Array.isArray(ids) && ids.length;
+  if (hasIdFilter) {
     where.push(`id = ANY(${add(ids.map(Number).filter(Number.isFinite))}::int[])`);
+  }
+
+  // Domain Lead Finder leads are a distinct category from Maps leads and stay
+  // out of the default (Maps) view unless explicitly asked for via `source`.
+  if (source) {
+    where.push(`source = ${add(source)}`);
+  } else if (!hasIdFilter) {
+    where.push(`(source IS NULL OR source != 'domain_finder')`);
   }
 
   return { where, params, add, clause: "WHERE " + where.join(" AND ") };

@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
+  Globe,
   LayoutGrid,
   List,
   PanelLeftClose,
@@ -42,6 +43,7 @@ const NEW_SEARCH = { key: "new", label: "New search", href: "/dashboard", icon: 
 const PROJECT_NAV = [
   { key: "dashboard", label: "Projects", href: "/dashboard?view=projects", icon: LayoutGrid },
   { key: "lists", label: "Lists", href: "/lists", icon: List },
+  { key: "domain-finder", label: "Domain Finder", href: "/domain-finder", icon: Globe },
 ];
 
 // Live search runs in the extension, so "is it installed?" is a standing piece

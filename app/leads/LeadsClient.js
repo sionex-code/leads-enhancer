@@ -614,7 +614,7 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot, on
   );
 }
 
-export default function LeadsPage({ initialWorkflow = "", initialList = "", pageTitle = "Lead manager", activeNav = "lists" }) {
+export default function LeadsPage({ initialWorkflow = "", initialList = "", pageTitle = "Lead manager", activeNav = "lists", source = "", topPanel = null }) {
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [stats, setStats] = useState(null);
@@ -1084,9 +1084,10 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
     if (socialFilter) params.set("social", socialFilter);
     if (enrichedFilter) params.set("enriched", enrichedFilter);
     if (sort && sort !== "recent") params.set("sort", sort);
+    if (source) params.set("source", source);
     return params;
   }, [search, project, country, city, workflow, hasEmail, hasWhatsapp, hasWebsite, httpStatus, minScore, listFilter,
-      hasPhone, reviewsFilter, ratingFilter, socialFilter, enrichedFilter, sort]);
+      hasPhone, reviewsFilter, ratingFilter, socialFilter, enrichedFilter, sort, source]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1223,6 +1224,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
   return (
     <AppShell active={activeNav} title={pageTitle} subtitle={subtitle} actions={actions} sidebarExtra={sidebarStats} tourKey="leads" tourSteps={LEADS_TOUR}>
       <div className="space-y-4 overflow-x-clip p-4 sm:p-6">
+        {topPanel}
         {/* Toolbar */}
         <Card>
           <CardContent className="space-y-3 p-4">

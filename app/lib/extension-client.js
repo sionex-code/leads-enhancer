@@ -109,3 +109,49 @@ export function scrapeWithExtension(params, { onProgress, signal } = {}) {
     window.postMessage({ source: PAGE_SOURCE, type: "SCRAPE", jobId, params }, window.location.origin);
   });
 }
+
+/**
+ * Domain Lead Finder: crawl an arbitrary list of domains in the extension
+ * (10s/site timeout, low concurrency — runs in the user's own browser, not
+ * the VPS) for emails, socials and tracking pixels.
+ * @param {string[]} domains
+ * @param {object} opts  { onProgress({phase,done,total}), signal }
+ * @returns {Promise<{rows: object[], cancelled: boolean, timedOut: boolean}>}
+ */
+export function enrichDomains(domains, { onProgress, signal } = {}) {
+  return new Promise((resolve, reject) => {
+    const jobId = newId();
+    let done = false;
+
+    function cleanup() {
+      window.removeEventListener("message", onMessage);
+      signal?.removeEventListener?.("abort", onAbort);
+    }
+
+    function onAbort() {
+      window.postMessage({ source: PAGE_SOURCE, type: "CANCEL", jobId }, window.location.origin);
+    }
+
+    function onMessage(event) {
+      if (event.source !== window) return;
+      const m = event.data;
+      if (!m || m.source !== EXT_SOURCE || m.jobId !== jobId) return;
+
+      if (m.type === "PROGRESS") {
+        onProgress?.(m);
+        return;
+      }
+      if (m.type === "RESULT") {
+        if (done) return;
+        done = true;
+        cleanup();
+        if (m.ok === false) reject(new Error(m.error || "Extension domain scan failed"));
+        else resolve({ rows: m.rows || [], cancelled: !!m.cancelled, timedOut: !!m.timedOut });
+      }
+    }
+
+    window.addEventListener("message", onMessage);
+    signal?.addEventListener?.("abort", onAbort);
+    window.postMessage({ source: PAGE_SOURCE, type: "ENRICH_DOMAINS", jobId, domains }, window.location.origin);
+  });
+}

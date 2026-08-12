@@ -2334,19 +2334,28 @@ export default function Dashboard({ view = "" }) {
           centerLng: liveParams.centerLng,
           radiusKm: liveParams.radiusKm,
           max: scrapeMax,
-          // Search only. Crawling each site for emails and socials now runs on
-          // the server after /ingest, so the user isn't kept waiting behind the
-          // slowest business website in the area with the tab pinned open.
-          enrich: false,
+          // Enrich locally first: the extension crawls each found business's
+          // website (15s/site timeout) for email/socials right in the user's
+          // browser before anything is saved. Whatever it doesn't get to in
+          // time (or fails on) still lands with no email, and /ingest queues
+          // the VPS enrichment pass for exactly those leftovers — local first,
+          // VPS fallback for the remainder, never both for the same lead.
         },
         {
           signal: controller.signal,
-          onProgress: ({ done, total, scanned, scanTotal, found }) => {
-            setBusy(total ? `Searching the map (${done}/${total})` : "Searching the map");
+          onProgress: ({ phase, done, total, scanned, scanTotal, found }) => {
+            const isEnrich = phase === "enrich";
+            setBusy(
+              isEnrich
+                ? `Finding emails (${done}/${total})`
+                : total
+                  ? `Searching the map (${done}/${total})`
+                  : "Searching the map"
+            );
             setScrapeProgress((prev) => ({
               ...(prev || {}),
               status: "running",
-              phase: "search",
+              phase: isEnrich ? "enrich" : "search",
               done: done || 0,
               total: total || 0,
               scanned: scanned || 0,
@@ -2358,7 +2367,9 @@ export default function Dashboard({ view = "" }) {
               // reveal them one at a time instead of flashing twenty at once.
               found: found?.length ? found : null,
               foundSeq: (prev?.foundSeq || 0) + (found?.length ? 1 : 0),
-              message: `${done} business${done === 1 ? "" : "es"} found`,
+              message: isEnrich
+                ? `Finding emails: ${done}/${total}`
+                : `${done} business${done === 1 ? "" : "es"} found`,
             }));
           },
         }
@@ -3445,7 +3456,7 @@ export default function Dashboard({ view = "" }) {
 
             {formRunning && (
               <div className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-600">
-                "{form.name}" is already running. Change the project name to launch another in parallel.
+                A project named "{form.name}" is already running. This name will add to it — rename this one to run it alongside as a separate search.
               </div>
             )}
 

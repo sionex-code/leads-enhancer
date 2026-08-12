@@ -346,6 +346,10 @@ const leads = pgTable(
     chatbotCheckedAt: text("chatbot_checked_at"),
     domainRating: doublePrecision("domain_rating"),
     domainRatingCheckedAt: text("domain_rating_checked_at"),
+    // Where this lead came from: 'maps' (Google Maps scrape/live search, the
+    // default) or 'domain_finder' (Domain Lead Finder). Null reads as 'maps'
+    // for rows written before this column existed.
+    source: text("source"),
     project: text("project"),
     query: text("query"),
     lat: doublePrecision("lat"),

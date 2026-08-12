@@ -172,14 +172,15 @@ export async function POST(request, { params }) {
     dbSync: { inserted: res.inserted, updated: res.updated, at: new Date().toISOString() },
   });
 
-  // Hand the slow half of the job to the server.
+  // Hand whatever the extension didn't finish to the server.
   //
-  // The extension used to crawl every lead's website for emails and socials
-  // before handing anything over, which meant the leads the user had already
-  // paid for sat invisible behind a phase that runs at the speed of their home
-  // connection — and that stalls on sites which accept a connection and then
-  // never answer. Leads are saved and visible the moment the search ends; the
-  // crawl continues here, on the VPS, whether or not the tab stays open.
+  // The extension already tried to crawl every lead's website for emails and
+  // socials (15s/site, in the user's own browser) before this request landed —
+  // see runJob's enrich phase in the extension's offscreen.js. `rows` here
+  // already carries email/socials for whatever it got to in time. This queues
+  // the VPS pass for exactly the leftovers (no website result yet), so the
+  // slow tail of a run — sites that stall or a tab that gets closed mid-crawl —
+  // still finishes here rather than being lost.
   const enrich = await queueEnrichment({ userId, dir, slug, meta, rows });
 
   // Grow the public side of the product from the same scrape.
