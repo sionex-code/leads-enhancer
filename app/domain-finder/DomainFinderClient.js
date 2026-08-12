@@ -146,11 +146,11 @@ export default function DomainFinderClient() {
         open={needExtension}
         onClose={() => setNeedExtension(false)}
         title="Install the browser extension to find domain leads"
-        body="Domain Lead Finder crawls each site from your own browser through our free Chrome extension, so scanning never loads our servers. It takes about a minute to set up, once."
+        body="Domain Leads Finder crawls each site from your own browser through our free Chrome extension, so scanning never loads our servers. It takes about a minute to set up, once."
       />
       <LeadsClient
         key={refreshKey}
-        pageTitle="Domain Lead Finder"
+        pageTitle="Domain Leads Finder"
         activeNav="domain-finder"
         source="domain_finder"
         topPanel={topPanel}

@@ -43,7 +43,12 @@ const NEW_SEARCH = { key: "new", label: "New search", href: "/dashboard", icon: 
 const PROJECT_NAV = [
   { key: "dashboard", label: "Projects", href: "/dashboard?view=projects", icon: LayoutGrid },
   { key: "lists", label: "Lists", href: "/lists", icon: List },
-  { key: "domain-finder", label: "Domain Finder", href: "/domain-finder", icon: Globe },
+];
+// Standalone utilities that aren't part of the Maps scrape workflow — their own
+// section rather than folded into Projects, so they don't read as another kind
+// of project.
+const MISC_NAV = [
+  { key: "domain-finder", label: "Domain Leads Finder", href: "/domain-finder", icon: Globe },
 ];
 
 // Live search runs in the extension, so "is it installed?" is a standing piece
@@ -167,6 +172,16 @@ function NavLinks({ active, collapsed, onNavigate, projectsNav }) {
           </Fragment>
         );
       })}
+      {collapsed ? (
+        <div className="mx-auto my-1.5 h-px w-8 bg-border/60" />
+      ) : (
+        <div className="px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+          Misc tools
+        </div>
+      )}
+      {MISC_NAV.map((item) => (
+        <NavItem key={item.key} item={item} active={active} collapsed={collapsed} onNavigate={onNavigate} />
+      ))}
     </nav>
   );
 }
