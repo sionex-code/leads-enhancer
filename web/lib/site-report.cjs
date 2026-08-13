@@ -12,6 +12,7 @@
 const fs = require("fs");
 const path = require("path");
 const llm = require("./llm.cjs");
+const { cleanSocialUrl } = require("./social-urls.cjs");
 // auditUrl goes through the audit module so the heavy real-Chrome scan can be
 // offloaded to a worker VPS (AUDIT_WORKER_URL); report HTML is still built here.
 const { auditUrl } = require("../../modules/audit/index.cjs");
@@ -117,9 +118,14 @@ async function inspectWebsite(website) {
     out.description = (pickMeta(html, "description") || pickMeta(html, "og:description")).slice(0, 300);
     out.ogImage = !!pickMeta(html, "og:image");
     out.h1 = (html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || [])[1]?.replace(/<[^>]+>/g, "").trim().slice(0, 160) || "";
+    // Same validator the crawler uses. This path used to keep whatever the
+    // pattern matched, so a share dialog or a directory index became a social
+    // profile on the report.
     for (const [key, re] of Object.entries(SOCIAL_PATTERNS)) {
-      const m = html.match(re);
-      if (m) out.socials[key] = m[0].replace(/["'<>)].*$/, "");
+      for (const m of html.matchAll(new RegExp(re.source, "gi"))) {
+        const cleaned = cleanSocialUrl(m[0].replace(/["'<>)].*$/, ""), key);
+        if (cleaned) { out.socials[key] = cleaned; break; }
+      }
     }
     out.emails = [...new Set((html.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi) || [])
       .filter((e) => !/\.(png|jpg|jpeg|gif|svg|webp|css|js)$/i.test(e) && !e.includes("example."))

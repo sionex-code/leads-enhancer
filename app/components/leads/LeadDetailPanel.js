@@ -33,6 +33,7 @@ import LeadAvatar from "./LeadAvatar";
 import { scoreLead, isEnriched, BAND_LABEL, OPPORTUNITY_HELP } from "../../lib/opportunity";
 import { InfoPopover } from "../ui/info-popover";
 import trackingDetect from "../../../web/lib/tracking-detect.cjs";
+import { cleanSocialUrl } from "../../../web/lib/social-urls.cjs";
 
 // Leaflet touches `window` on import, so it can only load in the browser.
 const LeadsMap = dynamic(() => import("../LeadsMap"), { ssr: false });
@@ -280,9 +281,11 @@ export default function LeadDetailPanel({
           <div className="divide-y divide-border/60">
             <PresenceRow icon={Globe} label="Website" href={lead.website} />
             <PresenceRow icon={Mail} label="Email" href={email ? `mailto:${email}` : ""} />
-            <PresenceRow network="facebook" label="Facebook" href={lead.facebook} />
-            <PresenceRow network="instagram" label="Instagram" href={lead.instagram} />
-            <PresenceRow network="linkedin" label="LinkedIn" href={lead.linkedin} />
+            {/* Validated here too: a stored directory index or share link is
+                not a profile, and "Not found" is the accurate answer for it. */}
+            <PresenceRow network="facebook" label="Facebook" href={cleanSocialUrl(lead.facebook, "facebook")} />
+            <PresenceRow network="instagram" label="Instagram" href={cleanSocialUrl(lead.instagram, "instagram")} />
+            <PresenceRow network="linkedin" label="LinkedIn" href={cleanSocialUrl(lead.linkedin, "linkedin")} />
           </div>
         </Section>
 

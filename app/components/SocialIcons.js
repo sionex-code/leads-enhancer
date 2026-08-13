@@ -2,6 +2,7 @@
 
 import { MessageCircleCheck, MessageCircleX } from "lucide-react";
 import { cn, waMeLink, waState } from "../lib/utils";
+import { cleanSocialUrl } from "../../web/lib/social-urls.cjs";
 
 // Brand-colored social chips shared by every lead view. Each entry carries the
 // lead field to read, a display label, the brand background (a CSS gradient for
@@ -79,9 +80,14 @@ const MISSING_SHOWN = ["facebook", "instagram", "linkedin", "twitter"];
 // present ones instead of vanishing, so a row with nothing reads as an
 // opportunity rather than as empty space.
 export function Socials({ lead, showMissing = false, tone = "subtle" }) {
-  const present = SOCIALS.filter((s) => lead[s.key]);
+  // Validate on the way out as well as on the way in. Rows enriched before the
+  // rule tightened still hold things like "facebook.com/people" — Facebook's
+  // directory index — and an icon that promises a profile and delivers a
+  // listing page is worse than no icon. A rejected link counts as missing.
+  const href = (key) => cleanSocialUrl(lead[key], key);
+  const present = SOCIALS.filter((s) => href(s.key));
   const missing = showMissing
-    ? SOCIALS.filter((s) => MISSING_SHOWN.includes(s.key) && !lead[s.key])
+    ? SOCIALS.filter((s) => MISSING_SHOWN.includes(s.key) && !href(s.key))
     : [];
   if (!present.length && !missing.length) return <span className="text-xs text-muted-foreground">-</span>;
   const brand = tone === "brand";
@@ -90,7 +96,7 @@ export function Socials({ lead, showMissing = false, tone = "subtle" }) {
       {present.map((s) => (
         <a
           key={s.key}
-          href={lead[s.key]}
+          href={href(s.key)}
           target="_blank"
           rel="noreferrer"
           title={s.label}

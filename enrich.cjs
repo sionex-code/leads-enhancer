@@ -16,6 +16,7 @@ const fs = require("fs");
 const path = require("path");
 const proxy = require("./web/lib/proxy.cjs");
 const trackingDetect = require("./web/lib/tracking-detect.cjs");
+const { cleanSocialUrl } = require("./web/lib/social-urls.cjs");
 let PROXY_URLS = []; // admin proxy pool, loaded at startup; random per request
 
 // ---- CLI args ----------------------------------------------------------------
@@ -212,8 +213,8 @@ function extractEmails(html) {
 }
 
 const SOCIAL = {
-  facebook: /https?:\/\/(?:www\.)?facebook\.com\/[A-Za-z0-9_.\-/%]+/i,
-  instagram: /https?:\/\/(?:www\.)?instagram\.com\/[A-Za-z0-9_.\-/%]+/i,
+  facebook: /https?:\/\/(?:[a-z-]{1,5}\.)?facebook\.com\/[A-Za-z0-9_.\-/%?=&]+/i,
+  instagram: /https?:\/\/(?:[a-z-]{1,5}\.)?instagram\.com\/[A-Za-z0-9_.\-/%]+/i,
   linkedin: /https?:\/\/(?:[a-z]{2,3}\.)?linkedin\.com\/[A-Za-z0-9_.\-/%]+/i,
   twitter: /https?:\/\/(?:www\.)?(?:twitter|x)\.com\/[A-Za-z0-9_.\-/%]+/i,
   // Only handle/channel forms for YouTube (not /watch, /embed, /results).
@@ -224,56 +225,40 @@ const SOCIAL = {
   whatsapp: /https?:\/\/(?:wa\.me\/[0-9]+|(?:api|chat)\.whatsapp\.com\/[A-Za-z0-9?=&%._\-/]+)/i,
   telegram: /https?:\/\/(?:www\.)?t\.me\/[A-Za-z0-9_]+/i,
 };
-// ODT bug #8 — Wrong social links: filter out generic/login/share/widget URLs that
-// are not a real business profile (e.g. facebook.com/profile.php with no id,
-// sharer links, dialog flows, login, signup, help, policies, tracking pixels, etc.).
-// Keep it conservative: only reject clearly-generic paths, not real profile handles.
-function isJunkSocial(url, network) {
-  let u;
-  try { u = new URL(url); } catch { return true; }
-  const path = u.pathname;
-  const href = url;
-
-  // Generic patterns that apply to any network
-  if (/\/(login|signup|register|oauth|auth|join|policies|help|support|terms|privacy|about|dialog)\b/i.test(path)) return true;
-  if (/\/sharer(\.php)?(\?|$)/i.test(path)) return true;
-  if (/\/share(\?|$|\b)/i.test(path)) return true;
-  if (/\/intent\//i.test(path)) return true;
-  if (/\/plugins\//i.test(path)) return true;
-  if (/\/tr\?/i.test(href) || /[?&]_?tr=/i.test(href)) return true; // tracking pixels
-  if (/\/widgets\//i.test(path)) return true;
-  if (/\/embed\b/i.test(path)) return true;
-
-  // Platform-specific junk
-  if (network === "facebook") {
-    // facebook.com/profile.php with no real id param (just profile.php alone = generic)
-    if (/^\/profile\.php$/i.test(path) && !u.searchParams.get("id")) return true;
-    // facebook.com/ root only (no path segment = homepage, not a business page)
-    if (/^\/?$/.test(path)) return true;
+// Links the page actually renders, in document order. Matching the raw HTML
+// instead meant the first occurrence anywhere won — including inside a script
+// blob or a meta tag — so a directory URL buried in analytics config beat the
+// real profile link in the footer.
+function hrefsFrom(html) {
+  const out = [];
+  for (const m of html.matchAll(/<a\b[^>]*?\bhref\s*=\s*("([^"]*)"|'([^']*)'|([^\s">]+))/gi)) {
+    const raw = (m[2] ?? m[3] ?? m[4] ?? "").trim();
+    if (raw) out.push(raw.replace(/&amp;/g, "&"));
   }
-
-  if (network === "twitter" || network === "x") {
-    // twitter.com/intent/... already caught above, also catch /home, /explore
-    if (/^\/(home|explore|notifications|messages|settings)\b/i.test(path)) return true;
-  }
-
-  if (network === "linkedin") {
-    if (/\/feed\b|\/jobs\b|\/learning\b|\/events\b/i.test(path)) return true;
-  }
-
-  // Platform-page / app-install / cms-owner links (e.g. facebook.com/wordpress)
-  if (/(facebook|instagram|twitter|x|youtube|tiktok|pinterest)\.com\/(wix|wordpressdotcom|wordpress|squarespace|godaddy|shopify|weebly|app)\b/i.test(href)) return true;
-
-  return false;
+  return out;
 }
 
 function extractSocial(html, into) {
+  const anchors = hrefsFrom(html);
   for (const [key, re] of Object.entries(SOCIAL)) {
     if (into[key]) continue;
-    const m = html.match(re);
-    if (!m) continue;
-    const url = m[0].replace(/[).,'"\\]+$/, "");
-    if (!isJunkSocial(url, key)) into[key] = url;
+
+    // A real link first. Only if the page has none do we fall back to scanning
+    // the whole document, which is how JSON-LD and inline config get picked up.
+    let found = "";
+    for (const href of anchors) {
+      const m = href.match(re);
+      if (!m) continue;
+      const cleaned = cleanSocialUrl(m[0].replace(/[).,'"\\]+$/, ""), key);
+      if (cleaned) { found = cleaned; break; }
+    }
+    if (!found) {
+      for (const m of html.matchAll(new RegExp(re.source, "gi"))) {
+        const cleaned = cleanSocialUrl(m[0].replace(/[).,'"\\]+$/, ""), key);
+        if (cleaned) { found = cleaned; break; }
+      }
+    }
+    if (found) into[key] = found;
   }
 }
 
