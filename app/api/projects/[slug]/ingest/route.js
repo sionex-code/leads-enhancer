@@ -172,6 +172,9 @@ export async function POST(request, { params }) {
     dbSync: { inserted: res.inserted, updated: res.updated, at: new Date().toISOString() },
   });
 
+  // The leads themselves are the last word on where the search went.
+  const finalMeta = reconcileMetaLocation({ dir, meta, rows });
+
   // Hand whatever the extension didn't finish to the server.
   //
   // The extension already tried to crawl every lead's website for emails and
@@ -181,10 +184,10 @@ export async function POST(request, { params }) {
   // the VPS pass for exactly the leftovers (no website result yet), so the
   // slow tail of a run — sites that stall or a tab that gets closed mid-crawl —
   // still finishes here rather than being lost.
-  const enrich = await queueEnrichment({ userId, dir, slug, meta, rows });
+  const enrich = await queueEnrichment({ userId, dir, slug, meta: finalMeta, rows });
 
   // Grow the public side of the product from the same scrape.
-  const published = await publishToDirectory({ userId, meta, rows });
+  const published = await publishToDirectory({ userId, meta: finalMeta, rows });
 
   return Response.json({
     ok: true,
@@ -195,8 +198,51 @@ export async function POST(request, { params }) {
     fromCache,
     enrich,
     published,
-    status: store.loadStatus(meta.name || slug, userId),
+    status: store.loadStatus(finalMeta.name || slug, userId),
   });
+}
+
+// What the scraped addresses mostly say, which beats anything we predicted.
+function modeOf(values) {
+  const counts = new Map();
+  for (const raw of values) {
+    const v = String(raw || "").trim();
+    if (v) counts.set(v, (counts.get(v) || 0) + 1);
+  }
+  let best = "", bestN = 0;
+  for (const [v, n] of counts) if (n > bestN) { best = v; bestN = n; }
+  return { value: best, count: bestN };
+}
+
+// Correct the project's recorded location from the leads it actually returned.
+//
+// Everything upstream of this is a prediction: the dropdowns predict, the
+// geocoder predicts, and when the geocoder comes back empty we have nothing.
+// The addresses on the scraped rows are evidence. A project labelled Adelaide
+// holding ten Islamabad addresses is a bug the user sees on the header, on every
+// export, and — via publishToDirectory — on the public site.
+//
+// Only overwrite when the rows agree with each other (a clear majority) and
+// disagree with the label. A mixed bag of cities is not a correction.
+// Returns the meta to use downstream: the corrected one when it changed, the
+// original otherwise, so the directory publish below never uses a label we just
+// established is wrong.
+function reconcileMetaLocation({ dir, meta, rows }) {
+  try {
+    const located = rows.map((r) => db.parseLocation(r.address || ""));
+    const city = modeOf(located.map((l) => l.city));
+    const country = modeOf(located.map((l) => l.country));
+    // Better than half the rows have to say the same thing before it counts.
+    const threshold = Math.max(2, Math.ceil(rows.length / 2));
+    const patch = {};
+    if (city.value && city.count >= threshold && city.value !== meta.cityName) patch.cityName = city.value;
+    if (country.value && country.count >= threshold && country.value !== meta.countryName) patch.countryName = country.value;
+    if (!Object.keys(patch).length) return meta;
+    return store.writeMeta(dir, patch);
+  } catch {
+    // A wrong label is a cosmetic bug; losing the leads is not. Never throw here.
+    return meta;
+  }
 }
 
 // A live search covers an area the warehouse had nothing for. Those rows go

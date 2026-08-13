@@ -32,6 +32,15 @@ function countryFromDisplay(display) {
   return parts.length ? parts[parts.length - 1] : "";
 }
 
+// The keyword half of "<what> in <where>". Used when a live search could not be
+// resolved to a place: we still know what was being looked for, even if we can't
+// honestly say where it landed, and the typed text beats the Service dropdown —
+// which for a live search describes a different query altogether.
+function keywordFromQuery(text) {
+  const parts = String(text || "").trim().split(/(?:^|\s)in\s/i);
+  return (parts[0] || "").trim();
+}
+
 // Name a project after the search that actually ran: "Islamabad Restaurants
 // Leads". Built from the resolved keyword and place rather than the dropdowns,
 // which for a typed query describe somewhere else entirely.
@@ -242,7 +251,12 @@ export async function POST(request) {
   // Leads" sitting on top of 109 Islamabad businesses. Only this side knows
   // where the search actually went, so it has to supply the name too.
   let area = null;
-  if (mustGoLive && isCustomQuery && query) {
+  // Any live run searches the query text, so any live run needs the text
+  // resolved. Requiring isCustomQuery too meant a search forced live by an
+  // unrecognised keyword skipped resolution entirely and then got labelled from
+  // the dropdowns, which is how "Coworking space · Adelaide · Australia" ended
+  // up sitting on ten Islamabad businesses.
+  if (mustGoLive && query) {
     // The form already resolved this text to show the user where the pin was
     // going. Reusing its answer means the search runs exactly where the map
     // said it would, and saves a second Nominatim call for the same string.
@@ -294,11 +308,20 @@ export async function POST(request) {
     query: query || "",
     max: String(max),
     publicId,
-    // When the area was resolved from the query, the dropdowns describe
-    // somewhere the search never went — record where it actually went.
-    cityName: area ? area.shortName : (cityName || ""),
-    countryName: area ? (area.countryName || countryFromDisplay(area.display)) : (countryName || ""),
-    service: area ? areaKeyword : (service || ""),
+    // Where the search actually went.
+    //
+    // A warehouse lookup searches *by* cityId/countryCode, so its dropdowns are
+    // the truth by definition. A live scrape searches the query text, and the
+    // dropdowns are then just whatever the form happened to be showing — a
+    // different city, usually a different country. Falling back to them when
+    // resolution failed is what produced project headers reading "Adelaide,
+    // Australia" over Islamabad leads, and those labels flow on into the
+    // directory. An empty crumb is honest; a confident wrong one is not.
+    cityName: area ? area.shortName : (mustGoLive ? "" : (cityName || "")),
+    countryName: area
+      ? (area.countryName || countryFromDisplay(area.display))
+      : (mustGoLive ? "" : (countryName || "")),
+    service: area ? areaKeyword : (mustGoLive ? keywordFromQuery(query) : (service || "")),
     // Needed by /ingest to publish a live scrape into the shared warehouse:
     // the country has to be an ISO code to match the warehouse's country list,
     // and the coordinates place a city the catalog has never seen before.
@@ -343,9 +366,14 @@ export async function POST(request) {
         // leaving it in ("Plumber" vs "Gujrat Plumber") narrows Maps to
         // businesses with the place in their name.
         query: area ? (areaKeyword || query || "") : (query || ""),
-        service: service || "",
-        cityName: cityName || "",
-        countryCode: countryCode || "",
+        // These label the run for the client. They described the dropdowns,
+        // which for a live search point somewhere the scrape is not going, so
+        // the extension reported progress against the wrong city. Same rule as
+        // the metadata above: the resolved area, else the query text, else
+        // nothing.
+        service: area ? areaKeyword : keywordFromQuery(query),
+        cityName: area ? area.shortName : "",
+        countryCode: area ? (area.countryCode || "") : "",
         // The warehouse path applies these in SQL. The live path has to carry
         // them to the client and apply them to what the extension returns,
         // otherwise picking a rating band silently does nothing for any search

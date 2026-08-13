@@ -1613,8 +1613,12 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
       // Only meaningful for a live scrape — a warehouse lookup is already
       // pinned to the matched city id, and handing it a geocoder result would
       // just be a second, weaker opinion about where to search.
+      // Sent for every live run, not only a custom-text one: the server needs it
+      // to know where the scrape actually went, and a search forced live by an
+      // unrecognised keyword used to arrive without it and get labelled from the
+      // dropdowns instead.
       resolvedArea:
-        effectiveSource === "live" && queryIsCustom && resolvedArea?.lat != null
+        effectiveSource === "live" && resolvedArea?.lat != null
           ? {
               place: resolvedArea.place,
               display: resolvedArea.display,
@@ -2115,13 +2119,32 @@ export default function Dashboard({ view = "", countryHint = "" }) {
   // raw query string and matches how the search was actually specified. Falls
   // back to the query when a project has no structured place on it (typed
   // searches, older projects).
-  const getProjectCrumbs = (p, leadSample) => {
+  // The most common value of a field across the loaded leads. The crumbs used to
+  // read leads[0], which is row one of the *current filter and sort* — so sorting
+  // by opportunity silently relabelled the whole project after whichever business
+  // happened to float to the top. What the rows mostly are is a description of
+  // the project; what the first row is, is not.
+  const modeOf = (rows, field) => {
+    const counts = new Map();
+    for (const r of rows || []) {
+      const v = String(r?.[field] || "").trim();
+      if (v) counts.set(v, (counts.get(v) || 0) + 1);
+    }
+    let best = "", bestN = 0;
+    for (const [v, n] of counts) if (n > bestN) { best = v; bestN = n; }
+    return best;
+  };
+
+  const getProjectCrumbs = (p, rows) => {
     if (!p) return "";
-    const service = leadSample?.category || "";
+    const list = Array.isArray(rows) ? rows : rows ? [rows] : [];
+    // The project records the service it actually searched for; the leads only
+    // corroborate it.
+    const service = p.service || modeOf(list, "category");
     const parts = [
       service,
-      p.cityName || leadSample?.city,
-      p.countryName || leadSample?.country,
+      p.cityName || modeOf(list, "city"),
+      p.countryName || modeOf(list, "country"),
     ].filter(Boolean);
     return parts.length >= 2 ? parts.join(" · ") : getProjectDisplayQuery(p);
   };
@@ -3492,7 +3515,7 @@ export default function Dashboard({ view = "", countryHint = "" }) {
     <AppShell
       active="dashboard"
       title={getProjectDisplayName(status || selectedProject) || status?.name || selectedProject?.name || "Lead Generation"}
-      subtitle={getProjectCrumbs(status || selectedProject, leads[0]) || status?.query || form.query}
+      subtitle={getProjectCrumbs(status || selectedProject, leads) || status?.query || form.query}
       actions={actions}
       projectsNav={projectList}
       projectsCount={projects.length}
