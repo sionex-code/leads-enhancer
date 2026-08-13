@@ -1702,8 +1702,8 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     });
   }
 
-  // The chip browser uses the same city objects from the catalog
-  // For the select dropdown value we use city id (or name as fallback)
+  // The select's value is the city id, falling back to the name for catalog
+  // entries that have no id.
   const citySelectVal = allCities ? "__all__" : cityObj?.id ?? cityObj?.name ?? "";
 
   return (
