@@ -32,10 +32,17 @@ function resolveCityHint({ countryCode, city, lat, lng }) {
 export default async function Page({ searchParams }) {
   const params = await searchParams;
   const where = locationFromHeaders(await headers());
+  // The country's display name travels separately from the city, because the
+  // city depends on headers that may not be switched on while the country does
+  // not — and the live picker needs a name, not a code, to describe a search.
+  const countryHintName = where.countryCode && geo.available()
+    ? (geo.countries().find((c) => c.code === where.countryCode) || {}).name || ""
+    : "";
   return (
     <DashboardHome
       view={params?.view || ""}
       countryHint={where.countryCode}
+      countryHintName={countryHintName}
       cityHint={resolveCityHint(where)}
     />
   );

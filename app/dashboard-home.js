@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -989,7 +989,7 @@ function ExtensionPill({ ext }) {
 // city every visit. Only ever a convenience: nothing here is trusted.
 const SEARCH_PREFS_KEY = "lf.search.prefs";
 
-function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, countryHint = "", cityHint = null }) {
+function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, countryHint = "", countryHintName = "", cityHint = null }) {
   // ── Catalog state ─────────────────────────────────────────────────────────
   const [catalog, setCatalog] = useState(null); // null = loading
   const [, setCatalogError] = useState(false);
@@ -1124,7 +1124,14 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     const suffix = QUICK_COUNTRIES.find((q) => q.code === cntry?.code)?.querySuffix || cntry?.name || "";
     return `${svc} in ${cityName} ${suffix}`.replace(/\s+/g, " ").trim();
   };
-  const [query, setQuery] = useState(() => buildQuery(service, cityObj, country));
+  // Starts empty, always. Seeding it with a real-looking search ("plumber in
+  // Austin TX USA") made the app look like it had decided what you were looking
+  // for, and the value had to be cleared before anything else could be typed.
+  // The placeholder says what a query looks like; the box says what you want.
+  const [query, setQuery] = useState("");
+  // The country name behind the live picker, so an empty box can still be
+  // turned into a real search from what the pickers show.
+  const [liveCountryName, setLiveCountryName] = useState(() => cityHint?.countryName || countryHintName || "");
 
   // What the dropdowns alone would search for. Anything the user types that
   // differs from this is a custom search.
@@ -1216,21 +1223,8 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
       if (nextCity.lat != null) setCenter({ lat: nextCity.lat, lng: nextCity.lng });
     }
     if (!touched.current.service) setService(nextService);
-    // The query box mirrors the selects, but only while it is still ours. Once
-    // somebody has typed in it, it is theirs.
-    //
-    // When we know the visitor's own city, that is what the box should say —
-    // and it has to, because the live search reads this text. Seeding the box
-    // from the warehouse's top city while the live picker showed Rawalpindi
-    // would have the form disagreeing with itself.
-    if (!touched.current.query) {
-      const useHint = cityHint && !savedCity && !hintedCity;
-      setQuery(
-        useHint
-          ? `${nextService} in ${[cityHint.n, cityHint.s, cityHint.countryName].filter(Boolean).join(", ")}`.replace(/\s+/g, " ").trim()
-          : buildQuery(nextService, nextCity, nextCountry)
-      );
-    }
+    // Deliberately does not touch the query box. The selects describe where we
+    // think you are; the box stays yours to fill.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [catalog, countryHint, cityHint]);
 
@@ -1326,6 +1320,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     touched.current.query = true;
     setLiveCountry(code);
     setLiveCity(null);
+    setLiveCountryName(countryName || "");
     if (!countryName) return;
     const keyword = liveService || splitQuery().keyword || service;
     setQuery(`${keyword} in ${countryName}`.replace(/\s+/g, " ").trim());
@@ -1604,6 +1599,33 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchKey]);
 
+  // An example, not a value. Naming somewhere the user actually is beats
+  // "Austin TX" for everyone who is not in Austin.
+  const queryPlaceholder = useMemo(() => {
+    const svc = catalogServices[0]?.name || QUICK_SERVICES[0] || "plumber";
+    const place = cityHint?.n || cityObj?.name || "";
+    return place ? `${svc} in ${place}` : `${svc} in your city`;
+  }, [catalogServices, cityHint, cityObj]);
+
+  // What the pickers alone describe, used when the box is empty.
+  //
+  // It has to follow the *active* source: in live mode the live country/city
+  // pickers are the ones on screen, and building from the warehouse selects
+  // would search a city the user never saw. Empty when there is nothing to go
+  // on, which is what keeps the submit button disabled.
+  const queryFromPickers = useCallback(() => {
+    const svc = (liveService || service || "").trim();
+    if (source === "live") {
+      const place = liveCity
+        ? [liveCity.n, liveCity.s, liveCountryName].filter(Boolean).join(", ")
+        : liveCountryName;
+      if (!svc || !place) return "";
+      return `${svc} in ${place}`.replace(/\s+/g, " ").trim();
+    }
+    if (!svc || (!allCities && !cityObj?.name) || !country?.name) return "";
+    return buildQuery(svc, allCities ? null : cityObj, country);
+  }, [source, liveService, service, liveCity, liveCountryName, allCities, cityObj, country]);
+
   function submit(e) {
     e.preventDefault();
     // A typed query we can serve is run against the matched service + city, not
@@ -1615,7 +1637,9 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     const matchCity = useMatch ? useMatch.city : allCities ? null : cityObj;
     const matchCountry = useMatch ? useMatch.country : country;
 
-    const cleanQuery = query.trim() || buildQuery(matchService, matchCity, matchCountry);
+    // An empty box means "search what the pickers show", not "search the
+    // warehouse defaults".
+    const cleanQuery = query.trim() || queryFromPickers() || buildQuery(matchService, matchCity, matchCountry);
     const effectiveCity = useMatch ? matchCity : allCities ? null : cityObj;
     const isCustom = !useMatch && cleanQuery !== buildQuery(service, effectiveCity, country);
     const isUnknownKeyword = !useMatch && !catalogServices.some(s =>
@@ -1760,7 +1784,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
             onFocus={() => setSuggestOpen(true)}
             onBlur={() => setTimeout(() => setSuggestOpen(false), 120)}
             onKeyDown={(e) => { if (e.key === "Escape") setSuggestOpen(false); }}
-            placeholder="plumber in Austin TX"
+            placeholder={queryPlaceholder}
             className="h-10 w-full text-sm"
             autoComplete="off"
             autoFocus
@@ -1800,7 +1824,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
             </ul>
           )}
         </div>
-        <Button type="submit" className="h-10 shrink-0 px-5" disabled={!!busy || !query.trim()} data-tour="find-submit">
+        <Button type="submit" className="h-10 shrink-0 px-5" disabled={!!busy || !(query.trim() || queryFromPickers())} data-tour="find-submit">
           {busy ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />} Find leads
         </Button>
       </form>
@@ -2148,7 +2172,7 @@ function Kpi({ value, text, label, icon: Icon, hint, tone = "" }) {
   );
 }
 
-export default function Dashboard({ view = "", countryHint = "", cityHint = null }) {
+export default function Dashboard({ view = "", countryHint = "", countryHintName = "", cityHint = null }) {
   const router = useRouter();
 
   // A label built from the dropdowns is only trustworthy when the search itself
@@ -3523,6 +3547,7 @@ export default function Dashboard({ view = "", countryHint = "", cityHint = null
             error={error}
             needPlan={needPlan}
             countryHint={countryHint}
+            countryHintName={countryHintName}
             cityHint={cityHint}
           />
         </div>
