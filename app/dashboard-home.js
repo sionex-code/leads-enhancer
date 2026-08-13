@@ -423,6 +423,16 @@ function haversineKm(a, b) {
 // city dropdowns can only ever hold catalog entries, so resolving a location to
 // anything outside it would leave the form displaying one place while searching
 // another — the exact mismatch that makes a live search come back empty.
+// Administrative units that carry a settlement's name without being one.
+// Nominatim ranks the boundary "Bhalwal Tehsil" above the town "Bhalwal", so
+// names like this got recorded as the city of a search and are now real entries
+// in the warehouse catalog. They must never be what the form picks for you.
+// (The source of new ones is fixed in web/lib/geo-resolve.cjs.)
+const ADMIN_UNIT_NAME =
+  /^(zone\s+[ivxlc\d]+|.*\s(tehsil|district|division|subdivision|county|prefecture|municipality|union council))$/i;
+
+const isRealCityName = (name) => !!String(name || "").trim() && !ADMIN_UNIT_NAME.test(String(name).trim());
+
 function nearestCatalogCity(countries, point) {
   let best = null;
   for (const country of countries || []) {
@@ -1210,11 +1220,20 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     const savedCity = saved?.cityName ? cities.find((c) => c.name === saved.cityName) : null;
     // Then the city the request came from, if we hold leads there. Only when the
     // country matches — a hint for Rawalpindi says nothing about Australia.
-    const hintedCity =
-      cityHint && nextCountry.code === countryHint
-        ? cities.find((c) => (c.name || "").toLowerCase() === cityHint.n.toLowerCase())
+    const sameCountry = cityHint && nextCountry.code === (cityHint.countryCode || countryHint);
+    const hintedCity = sameCountry
+      ? cities.find((c) => (c.name || "").toLowerCase() === cityHint.n.toLowerCase())
+      : null;
+    // We hold nothing under that exact name, but we know where they are: the
+    // nearest city we *do* hold beats the top of an alphabetical list.
+    const nearestToHint =
+      !hintedCity && sameCountry && cityHint.la != null
+        ? (nearestCatalogCity([nextCountry], { lat: cityHint.la, lng: cityHint.ln }) || {}).city || null
         : null;
-    const nextCity = savedCity || hintedCity || cities[0] || null;
+    // Last resort: the country's best-covered city, skipping anything that is an
+    // administrative unit rather than a place.
+    const firstReal = cities.find((c) => isRealCityName(c.name)) || cities[0] || null;
+    const nextCity = savedCity || hintedCity || nearestToHint || firstReal;
     const nextService = (saved?.service && services.some((s) => s.name === saved.service) ? saved.service : services[0]?.name) || service;
 
     if (!touched.current.country) setCountryCode(nextCountry.code);

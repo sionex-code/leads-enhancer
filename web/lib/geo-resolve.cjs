@@ -50,8 +50,16 @@ async function geocode(location, { strict = false, timeoutMs = 6000 } = {}) {
     );
     if (!usable.length) return null;
     // Nominatim sorts by relevance to the string, not by how prominent the place
-    // is, so take the most important match rather than the first.
-    const hit = usable.reduce((a, b) => (Number(b.importance) || 0) > (Number(a.importance) || 0) ? b : a);
+    // is, so take the most important match rather than the first — but a
+    // settlement beats an administrative boundary before importance is even
+    // considered. Searching "Bhalwal" returns the boundary "Bhalwal Tehsil"
+    // (importance 0.395) above the town "Bhalwal" (0.336), and picking on
+    // importance alone is how projects ended up labelled "Bhalwal Tehsil" and
+    // "Zone IV" — administrative units nobody prospects by.
+    const mostImportant = (list) =>
+      list.reduce((a, b) => ((Number(b.importance) || 0) > (Number(a.importance) || 0) ? b : a));
+    const places = usable.filter((r) => r.category === "place");
+    const hit = mostImportant(places.length ? places : usable);
     const [latMin, latMax, lngMin, lngMax] = hit.boundingbox.map(Number);
     if (![latMin, latMax, lngMin, lngMax].every(Number.isFinite)) return null;
     const display = hit.display_name || location;
@@ -60,7 +68,7 @@ async function geocode(location, { strict = false, timeoutMs = 6000 } = {}) {
       display,
       // Just the place, for labels: "Islamabad" rather than the full
       // "Islamabad, Zone 1, Islamabad Capital Territory, 44000, Pakistan".
-      shortName: (hit.name || display.split(",")[0] || location).trim(),
+      shortName: placeLabel(hit, display, location),
       // ISO-3166 alpha-2, so a resolved area can be matched against the
       // warehouse's country list. Nominatim reports it lower case.
       countryCode: String(hit.address?.country_code || "").toUpperCase(),
@@ -73,6 +81,30 @@ async function geocode(location, { strict = false, timeoutMs = 6000 } = {}) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Administrative units that carry a settlement's name without being one. A
+// project called "Bhalwal Tehsil" or "Zone IV" reads as a bug, and those names
+// reach the project header, the export and the public directory.
+const ADMIN_UNIT =
+  /^(zone\s+[ivxlc\d]+|.*\s(tehsil|district|division|subdivision|county|prefecture|municipality|union council))$/i;
+
+// The place to put on a label. Nominatim's own `name` is whatever the matched
+// object is called, so a boundary hit is named after the boundary; the address
+// block carries the settlement it sits in, which is what a person means.
+function placeLabel(hit, display, fallback) {
+  const a = hit.address || {};
+  const raw = String(hit.name || display.split(",")[0] || fallback || "").trim();
+  if (!ADMIN_UNIT.test(raw)) return raw;
+  const better = [a.city, a.town, a.village, a.municipality, a.suburb]
+    .map((v) => String(v || "").trim())
+    .find((v) => v && !ADMIN_UNIT.test(v));
+  if (better) return better;
+  // Nothing better on offer: at least drop the unit word, so "Bhalwal Tehsil"
+  // becomes "Bhalwal". A bare "Zone IV" has no settlement in it and is left
+  // alone rather than mangled.
+  const stripped = raw.replace(/\s+(tehsil|district|division|subdivision|county|prefecture|municipality|union council)$/i, "").trim();
+  return stripped || raw;
 }
 
 // Pad a near-point box up to a usable area and pick grid steps that keep the
