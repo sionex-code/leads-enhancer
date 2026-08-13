@@ -43,6 +43,7 @@ import {
   TrendingUp,
   MapPin,
   MoreHorizontal,
+  Copy,
   LocateFixed,
   Monitor,
   Smartphone,
@@ -74,6 +75,8 @@ const LeadsMap = dynamic(() => import("./components/LeadsMap"), { ssr: false });
 // order. Targets are data-tour attributes on the form (works on mobile since they
 // are all on-screen). Passed to AppShell as tourKey="find".
 const FIND_TOUR = [
+  { key: "find-query", title: "Type what you're after", body: "Search in plain English — \"plumber in Austin\" or just \"plumber\" to search wherever the map below is centered. The dropdowns underneath do the same job if you'd rather click than type; edit either one and the other follows." },
+  { key: "find-source", title: "Our database or live", body: "\"Our database\" answers instantly from leads we already hold. \"Live via extension\" scrapes Google Maps in your browser right now — automatic for anything we don't already have." },
   { key: "find-service", title: "Pick a service", body: "Choose the type of business you want to reach, such as plumbers, dentists, real estate agencies, and so on." },
   { key: "find-country", title: "Choose a country", body: "Pick the country to search in. The city list below updates to match." },
   { key: "find-city", title: "Pick a city", body: "Select a city, or choose \"All cities\" to search the whole country at once." },
@@ -81,8 +84,8 @@ const FIND_TOUR = [
   { key: "find-max", title: "How many leads", body: SHOW_CREDITS
     ? "Set how many leads to pull (up to 10,000). You're only charged 1 credit per brand-new lead."
     : "Set how many leads to pull (up to 10,000). Leads you already own are merged rather than pulled again." },
-  { key: "find-radius", title: "Search radius", body: "Widen or tighten the search area around the center. \"All cities\" makes it country-wide." },
-  { key: "find-map", title: "Refine the center", body: "Drag the pin to move the exact search center. The circle shows your radius." },
+  { key: "find-radius", title: "Search radius", body: "Widen or tighten the search area around the center." },
+  { key: "find-map", title: "Set the search area", body: "Drag the circle to move it, or drag its edge to resize — the radius above follows along. Everything found outside it is left out, so this is the real boundary of your search, not just a preview." },
   { key: "find-submit", title: "Find leads", body: "Hit Find leads and we'll pull matching businesses straight into your project." },
 ];
 
@@ -92,11 +95,11 @@ const FIND_TOUR = [
 // (tourKey "workspace") and replays from the topbar "Tour" button.
 const WORKSPACE_TOUR = [
   { key: "", title: "Your leads workspace", body: "You found leads. Here's how to enrich them, spot the weak websites, and turn them into outreach." },
+  { key: "project-id", title: "Your project ID", body: "Every project gets its own short ID. Click it to copy — it's the fastest way to point us at this exact project if you ever need support." },
   { key: "ws-enrich", title: "Enrich", body: "Grab each lead's email address and social profiles automatically by crawling their website. This button does it for every captured lead at once." },
   { key: "ws-whatsapp", title: "Check WhatsApp", body: "See which leads' phone numbers are active on WhatsApp, so you know who you can message directly." },
-  { key: "ws-leads", title: "Per-lead actions", body: "Every row has quick actions: grab email & socials, check WhatsApp, run a website page-speed audit (desktop + mobile Performance / SEO scores), and generate a full website report. Tick the checkboxes to audit or report many leads at once." },
-  { key: "nav-leads", title: "All your leads", body: "Every lead you capture across projects is saved here under Leads." },
-  { key: "nav-lists", title: "Build lists", body: "Group leads into Lists to organize your outreach campaigns." },
+  { key: "ws-leads", title: "Per-lead actions", body: "Every row has quick actions: grab email & socials, check WhatsApp, run a website page-speed audit (desktop + mobile Performance / SEO scores), and generate a full website report. Tick the checkboxes to act on many leads at once." },
+  { key: "nav-lists", title: "Leads & Lists", body: "Every lead you capture across projects lands here — see them all, or group them into Lists to organize outreach campaigns." },
 ];
 
 const blankForm = {
@@ -1120,6 +1123,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
   // for, and the value had to be cleared before anything else could be typed.
   // The placeholder says what a query looks like; the box says what you want.
   const [query, setQuery] = useState("");
+  const queryInputRef = useRef(null);
   // The country name behind the live picker, so an empty box can still be
   // turned into a real search from what the pickers show.
   const [liveCountryName, setLiveCountryName] = useState(() => cityHint?.countryName || countryHintName || "");
@@ -1630,6 +1634,16 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
 
   function submit(e) {
     e.preventDefault();
+    // A disabled button explains nothing; this does. Realistically the pickers
+    // already describe *something* the moment the catalog and location hint
+    // have loaded, so this only fires in the actual gap the user reported —
+    // right after landing, or once nothing is left for either the box or the
+    // pickers to say.
+    if (!query.trim() && !queryFromPickers()) {
+      showToast("Type what you're looking for, like \"plumber in Austin\"");
+      queryInputRef.current?.focus();
+      return;
+    }
     // A typed query we can serve is run against the matched service + city, not
     // against whatever the selects happen to show. Sending the selects would
     // answer confidently for the wrong place — the exact failure that made every
@@ -1764,8 +1778,9 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
           both places said the same thing twice and cost the query 40px of the
           only field on the page anyone actually types into. */}
       <form className="mt-4 flex flex-col gap-2 sm:flex-row" onSubmit={submit}>
-        <div className="relative flex-1">
+        <div className="relative flex-1" data-tour="find-query">
           <Input
+            ref={queryInputRef}
             value={query}
             onChange={(e) => {
               // From here on the box belongs to the user, and nothing that
@@ -1825,7 +1840,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
             </ul>
           )}
         </div>
-        <Button type="submit" className="h-10 shrink-0 px-5" disabled={!!busy || !(query.trim() || queryFromPickers())} data-tour="find-submit">
+        <Button type="submit" className="h-10 shrink-0 px-5" disabled={!!busy} data-tour="find-submit">
           {busy ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />} Find leads
         </Button>
       </form>
@@ -3594,6 +3609,25 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
               </button>
             )}
           </div>
+        )}
+
+        {/* Support-reference id. Small and easy to skip, but it has to be
+            somewhere a user can actually find and copy it — it was being
+            generated for every project already and shown nowhere at all. */}
+        {(status?.publicId || selectedProject?.publicId) && (
+          <button
+            type="button"
+            data-tour="project-id"
+            onClick={() => {
+              const id = status?.publicId || selectedProject?.publicId;
+              navigator.clipboard?.writeText(id).then(() => showToast(`Copied project ID ${id}`)).catch(() => {});
+            }}
+            className="inline-flex items-center gap-1.5 self-start rounded-full border border-border/60 bg-card/40 px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+            title="Copy project ID — reference this if you contact support about this project"
+          >
+            <Copy size={11} />
+            ID {status?.publicId || selectedProject?.publicId}
+          </button>
         )}
 
         {/* KPI strip — one bordered row, four numbers, roughly half the height

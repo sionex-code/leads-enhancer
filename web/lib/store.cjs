@@ -47,6 +47,44 @@ function randomProjectId(len = 5) {
   return s;
 }
 
+// Every project's stored publicId, read without the CSV/summary work
+// projectSummary does — this only ever needs to answer "is this id taken?".
+function existingPublicIds(userId) {
+  const root = projectRootFor(userId);
+  ensureDir(root);
+  const ids = new Set();
+  for (const name of fs.readdirSync(root)) {
+    const dir = path.join(root, name);
+    try {
+      if (!fs.statSync(dir).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    const id = readMeta(dir).publicId;
+    if (id) ids.add(id);
+  }
+  return ids;
+}
+
+// A short, collision-checked id for support references and cross-project
+// lookups — the thing a user can read out loud or paste into a support
+// message without pasting the whole project name. It used to be a bare
+// Math.random().toString(36) with no uniqueness check at all: fine odds for
+// any single pair, but with hundreds of projects per tenant the birthday
+// paradox stops being theoretical, and a shared id would let one support
+// reference resolve to two different projects. Same retry pattern as
+// uniqueProjectName below, checked against this tenant's own projects.
+function uniquePublicId(userId) {
+  const taken = existingPublicIds(userId);
+  for (let i = 0; i < 25; i++) {
+    const candidate = randomProjectId(6);
+    if (!taken.has(candidate)) return candidate;
+  }
+  // 36^6 candidates exhausted 25 draws in a row is not a coincidence worth
+  // trusting further — widen it instead of trying again.
+  return `${randomProjectId(6)}${Date.now().toString(36).slice(-2).toUpperCase()}`;
+}
+
 // Give a brand-new project a unique name/slug for this user: if the requested
 // name's slug already exists, append a random 5-char id until it's unique so a
 // duplicate run becomes its own project instead of merging into the old one.
@@ -532,6 +570,7 @@ function loadStatus(slugOrName, userId) {
     cityName: meta.cityName || "",
     countryName: meta.countryName || "",
     isUnknownKeyword: meta.isUnknownKeyword === "1",
+    publicId: meta.publicId || "",
     dir,
     state: { ...state, activeAlive },
     files: {
@@ -595,6 +634,7 @@ function projectSummary(dir) {
     cityName: meta.cityName || "",
     countryName: meta.countryName || "",
     isUnknownKeyword: meta.isUnknownKeyword === "1",
+    publicId: meta.publicId || "",
     counts,
     running: processAlive(state.activePid),
     updatedAt: meta.updatedAt || state.updatedAt || "",
@@ -766,6 +806,7 @@ module.exports = {
   ensureDir,
   projectExists,
   uniqueProjectName,
+  uniquePublicId,
   safeProjectDir,
   projectDir,
   readMeta,

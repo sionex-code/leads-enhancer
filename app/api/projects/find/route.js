@@ -324,8 +324,9 @@ export async function POST(request) {
   const { name: projectName } = store.uniqueProjectName(requestedName, userId);
   const dir = store.safeProjectDir(store.slugify(projectName), userId);
 
-  // Short public id for support references (stable per project).
-  const publicId = Math.random().toString(36).slice(2, 8).toUpperCase();
+  // Short public id for support references (stable per project). Collision-
+  // checked against this tenant's other projects — see store.uniquePublicId.
+  const publicId = store.uniquePublicId(userId);
 
   // Reject if there is already a live runner for this project.
   const state = store.readState(dir);
