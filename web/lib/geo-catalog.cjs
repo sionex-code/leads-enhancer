@@ -14,6 +14,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { haversineKm } = require("./geo-distance.cjs");
 
 // Resolved from cwd, not __dirname. Next bundles server code into
 // .next/server/chunks, so __dirname at runtime is the chunk's directory and
@@ -48,6 +49,35 @@ function countries() {
   return _countries;
 }
 
+// The source data lists administrative areas alongside the settlements inside
+// them, and it is ordered by population, so PK offers "Rawalpindi District"
+// (3,363,911) above "Rawalpindi" (3,357,612). Two entries for one place reads as
+// a bug, and picking the district centres the search on the district centroid —
+// which is how a Rawalpindi search came back with Chakwal and Kalar Kahar.
+//
+// Nobody prospecting means the district. Where both exist in the same state,
+// keep the city; where only the district exists, keep it, since dropping it
+// would lose the only entry for that place.
+//
+// Done here, at the single point both searchCities and allCities read through,
+// so neither path can miss it.
+const ADMIN_SUFFIX = /\s+(district|division|tehsil|county|municipality|prefecture|province|region)$/i;
+
+function dropAdminTwins(list) {
+  if (!Array.isArray(list)) return [];
+  const settlements = new Set();
+  for (const c of list) {
+    if (!ADMIN_SUFFIX.test(String(c.n))) settlements.add(`${String(c.n).toLowerCase()}|${c.s || ""}`);
+  }
+  if (!settlements.size) return list;
+  return list.filter((c) => {
+    const name = String(c.n);
+    const bare = name.replace(ADMIN_SUFFIX, "").trim().toLowerCase();
+    if (bare === name.toLowerCase()) return true; // not an administrative area
+    return !settlements.has(`${bare}|${c.s || ""}`);
+  });
+}
+
 function loadCities(code) {
   const key = String(code || "").toUpperCase();
   if (!/^[A-Z]{2}$/.test(key)) return []; // also stops ../ path traversal
@@ -59,7 +89,7 @@ function loadCities(code) {
   }
   let list = [];
   try {
-    list = JSON.parse(fs.readFileSync(path.join(CITY_DIR, `${key}.json`), "utf8"));
+    list = dropAdminTwins(JSON.parse(fs.readFileSync(path.join(CITY_DIR, `${key}.json`), "utf8")));
   } catch {
     list = [];
   }
@@ -111,4 +141,30 @@ function allCities(code) {
   return loadCities(code);
 }
 
-module.exports = { available, countries, searchCities, allCities };
+// The city a coordinate falls in, or nearest to it. Used to turn the latitude
+// and longitude Cloudflare derives from the visitor's IP into a city we can
+// actually preselect. `maxKm` keeps a wildly-off fix from silently selecting a
+// city hundreds of km away — better to preselect nothing than the wrong place.
+function nearestCity(code, lat, lng, maxKm = 120) {
+  const a = Number(lat);
+  const b = Number(lng);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  let best = null;
+  let bestKm = Infinity;
+  for (const c of loadCities(code)) {
+    if (!Number.isFinite(c.la) || !Number.isFinite(c.ln)) continue;
+    const km = haversineKm(a, b, c.la, c.ln);
+    if (km < bestKm) { bestKm = km; best = c; }
+  }
+  return best && bestKm <= maxKm ? { ...best, distanceKm: Math.round(bestKm) } : null;
+}
+
+// A city by name within one country, for the case where we are given a name
+// rather than a coordinate.
+function cityByName(code, name) {
+  const wanted = norm(name);
+  if (!wanted) return null;
+  return loadCities(code).find((c) => norm(c.n) === wanted) || null;
+}
+
+module.exports = { available, countries, searchCities, allCities, nearestCity, cityByName };

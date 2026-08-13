@@ -727,28 +727,29 @@ function SourcePicker({ source, setSource, ext, lockedLive }) {
 // switching back to a country already visited is instant.
 const LIVE_CITY_CACHE = new Map(); // country code -> city[]
 
-// The source data carries administrative areas alongside the settlements that
-// share their name — PK holds both "Rawalpindi District" (pop 3,363,911) and
-// "Rawalpindi" (3,357,612), and since it is population-ordered the *district*
-// lists first. Picking it centres the search on the district centroid, which is
-// why a search for Rawalpindi came back with Chakwal and Kalar Kahar: places
-// that are genuinely in the district and nowhere near the city.
-//
-// Nobody prospecting means the district. Where both exist in the same state,
-// keep the city. Where only the district exists, keep it — dropping it would
-// lose the only entry for that place.
+// Administrative areas sit in these lists beside the settlements that share
+// their name — both "Rawalpindi District" and "Rawalpindi" — and offering both
+// reads as a duplicate. The world index is cleaned in web/lib/geo-catalog.cjs
+// as it is read; this covers the warehouse catalog, whose city list is built
+// from the places we hold leads for and so can pick up a district name from an
+// earlier search that used one.
 const ADMIN_SUFFIX = /\s+(district|division|tehsil|county|municipality|prefecture|province|region)$/i;
 
-function dedupeAdminTwins(list) {
+// Two shapes of city reach the UI: the world index uses {n, s} and the warehouse
+// catalog uses {name, admin}, so the accessors are arguments.
+function dedupeAdminTwins(list, nameOf, adminOf) {
+  if (!Array.isArray(list) || !list.length) return list || [];
   const settlements = new Set();
   for (const c of list) {
-    if (!ADMIN_SUFFIX.test(String(c.n))) settlements.add(`${String(c.n).toLowerCase()}|${c.s || ""}`);
+    const name = String(nameOf(c) || "");
+    if (name && !ADMIN_SUFFIX.test(name)) settlements.add(`${name.toLowerCase()}|${adminOf(c) || ""}`);
   }
   if (!settlements.size) return list;
   return list.filter((c) => {
-    const bare = String(c.n).replace(ADMIN_SUFFIX, "").trim().toLowerCase();
-    if (bare === String(c.n).toLowerCase()) return true; // not an admin area
-    return !settlements.has(`${bare}|${c.s || ""}`);
+    const name = String(nameOf(c) || "");
+    const bare = name.replace(ADMIN_SUFFIX, "").trim().toLowerCase();
+    if (bare === name.toLowerCase()) return true; // not an administrative area
+    return !settlements.has(`${bare}|${adminOf(c) || ""}`);
   });
 }
 
@@ -757,7 +758,7 @@ function dedupeAdminTwins(list) {
 // so ties resolve to the city people actually mean.
 function filterCities(all, text, cap = 50) {
   const t = String(text || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
-  if (!t) return dedupeAdminTwins(all.slice(0, cap * 2)).slice(0, cap);
+  if (!t) return all.slice(0, cap);
   const starts = [];
   const contains = [];
   for (const c of all) {
@@ -769,7 +770,7 @@ function filterCities(all, text, cap = 50) {
       contains.push(c);
     }
   }
-  return dedupeAdminTwins(starts.concat(contains)).slice(0, cap);
+  return starts.concat(contains).slice(0, cap);
 }
 
 // Business-type picker for a LIVE search. ~3,968 Google Business Profile
@@ -988,7 +989,7 @@ function ExtensionPill({ ext }) {
 // city every visit. Only ever a convenience: nothing here is trusted.
 const SEARCH_PREFS_KEY = "lf.search.prefs";
 
-function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, countryHint = "" }) {
+function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, countryHint = "", cityHint = null }) {
   // ── Catalog state ─────────────────────────────────────────────────────────
   const [catalog, setCatalog] = useState(null); // null = loading
   const [, setCatalogError] = useState(false);
@@ -1015,9 +1016,18 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
   }, []);
 
   // Resolved data: catalog when available, else fallback (shown while loading too)
-  const resolved = catalog || buildFallbackCatalog();
-  const catalogCountries = resolved.countries || [];
-  const catalogServices = resolved.services || [];
+  const resolved = useMemo(() => catalog || buildFallbackCatalog(), [catalog]);
+  // Deduped once, here, because a dozen places downstream read `country.cities`
+  // and every one of them would otherwise have to remember to do it.
+  const catalogCountries = useMemo(
+    () =>
+      (resolved.countries || []).map((c) => ({
+        ...c,
+        cities: dedupeAdminTwins(c.cities || [], (x) => x.name, (x) => x.admin),
+      })),
+    [resolved]
+  );
+  const catalogServices = useMemo(() => resolved.services || [], [resolved]);
 
   // ── Form state ─────────────────────────────────────────────────────────────
   // Which fields the user has made their own. Once a field is in here the form
@@ -1077,11 +1087,13 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
   // Live-search area, chosen from the world list rather than the warehouse's.
   // Held separately from countryCode/cityObj so switching source back to the
   // warehouse does not find its selects pointing at a city we hold no leads for.
-  const [liveCountry, setLiveCountry] = useState(() => countryHint || "US");
+  const [liveCountry, setLiveCountry] = useState(() => cityHint?.countryCode || countryHint || "US");
   // Whether the user has actually chosen a country, so the map is only recentred
   // on a real choice and not when the live panel first mounts with its default.
   const liveCountryPicked = useRef(false);
-  const [liveCity, setLiveCity] = useState(null);
+  // Pre-selected from the visitor's own location, so a live search opens on the
+  // city they are in rather than on whichever one we hold the most leads for.
+  const [liveCity, setLiveCity] = useState(() => cityHint || null);
   const [liveService, setLiveService] = useState("");
 
   // With the extension installed, live search is the better default: it returns
@@ -1098,11 +1110,13 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     setSource(next);
   }
   // center for the area picker map — kept in sync with selected city
-  const [center, setCenter] = useState(() =>
-    cityObj?.lat != null && cityObj?.lng != null
-      ? { lat: cityObj.lat, lng: cityObj.lng }
-      : { lat: 30.2672, lng: -97.7431 } // Austin TX fallback
-  );
+  const [center, setCenter] = useState(() => {
+    // The visitor's own city first — the map is the clearest statement the form
+    // makes about where it is going to search.
+    if (cityHint?.la != null && cityHint?.ln != null) return { lat: cityHint.la, lng: cityHint.ln };
+    if (cityObj?.lat != null && cityObj?.lng != null) return { lat: cityObj.lat, lng: cityObj.lng };
+    return { lat: 30.2672, lng: -97.7431 }; // Austin TX fallback
+  });
 
   // Build query text from current selections (same shape as before)
   const buildQuery = (svc, cObj, cntry) => {
@@ -1187,7 +1201,13 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     // the one we hold the most leads for *within that country* — which is at
     // least somewhere they could plausibly mean.
     const savedCity = saved?.cityName ? cities.find((c) => c.name === saved.cityName) : null;
-    const nextCity = savedCity || cities[0] || null;
+    // Then the city the request came from, if we hold leads there. Only when the
+    // country matches — a hint for Rawalpindi says nothing about Australia.
+    const hintedCity =
+      cityHint && nextCountry.code === countryHint
+        ? cities.find((c) => (c.name || "").toLowerCase() === cityHint.n.toLowerCase())
+        : null;
+    const nextCity = savedCity || hintedCity || cities[0] || null;
     const nextService = (saved?.service && services.some((s) => s.name === saved.service) ? saved.service : services[0]?.name) || service;
 
     if (!touched.current.country) setCountryCode(nextCountry.code);
@@ -1198,9 +1218,21 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     if (!touched.current.service) setService(nextService);
     // The query box mirrors the selects, but only while it is still ours. Once
     // somebody has typed in it, it is theirs.
-    if (!touched.current.query) setQuery(buildQuery(nextService, nextCity, nextCountry));
+    //
+    // When we know the visitor's own city, that is what the box should say —
+    // and it has to, because the live search reads this text. Seeding the box
+    // from the warehouse's top city while the live picker showed Rawalpindi
+    // would have the form disagreeing with itself.
+    if (!touched.current.query) {
+      const useHint = cityHint && !savedCity && !hintedCity;
+      setQuery(
+        useHint
+          ? `${nextService} in ${[cityHint.n, cityHint.s, cityHint.countryName].filter(Boolean).join(", ")}`.replace(/\s+/g, " ").trim()
+          : buildQuery(nextService, nextCity, nextCountry)
+      );
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [catalog, countryHint]);
+  }, [catalog, countryHint, cityHint]);
 
   // Remember where they searched, so the next visit opens where they left off.
   useEffect(() => {
@@ -2116,7 +2148,7 @@ function Kpi({ value, text, label, icon: Icon, hint, tone = "" }) {
   );
 }
 
-export default function Dashboard({ view = "", countryHint = "" }) {
+export default function Dashboard({ view = "", countryHint = "", cityHint = null }) {
   const router = useRouter();
 
   // A label built from the dropdowns is only trustworthy when the search itself
@@ -3491,6 +3523,7 @@ export default function Dashboard({ view = "", countryHint = "" }) {
             error={error}
             needPlan={needPlan}
             countryHint={countryHint}
+            cityHint={cityHint}
           />
         </div>
         <ExtensionRequiredDialog open={needExtension} onClose={() => setNeedExtension(false)} />

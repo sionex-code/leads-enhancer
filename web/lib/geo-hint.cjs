@@ -46,4 +46,43 @@ function countryFromHeaders(headers) {
   );
 }
 
-module.exports = { countryFromHeaders, countryFromAcceptLanguage, clean };
+// Where the visitor is, to city level, when the edge tells us.
+//
+// Cloudflare's "Add visitor location headers" managed transform adds cf-ipcity,
+// cf-iplatitude and cf-iplongitude alongside cf-ipcountry. It is available on
+// every plan including Free, but it is OFF by default — so this returns country
+// only until it is switched on in the Cloudflare dashboard
+// (Rules -> Settings -> Managed Transforms -> Add visitor location headers).
+// Everything downstream treats the city as optional for exactly that reason.
+//
+// Never a fact, always a hint: it seeds a form the user can change, and must
+// not filter results or drive a billing decision.
+function locationFromHeaders(headers) {
+  if (!headers || typeof headers.get !== "function") return { countryCode: "", city: "", lat: null, lng: null };
+  const h = (name) => headers.get(name) || "";
+  // Number("") is 0, which is a real coordinate in the Atlantic — an absent
+  // header must read as absent, not as null island.
+  const num = (v) => {
+    if (v === "" || v == null) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  // Vercel percent-encodes the city ("New%20York"); Cloudflare sends it plain.
+  const decode = (v) => {
+    try {
+      return decodeURIComponent(v);
+    } catch {
+      return v;
+    }
+  };
+  const lat = num(h("cf-iplatitude")) ?? num(h("x-vercel-ip-latitude"));
+  const lng = num(h("cf-iplongitude")) ?? num(h("x-vercel-ip-longitude"));
+  return {
+    countryCode: countryFromHeaders(headers),
+    city: decode(h("cf-ipcity") || h("x-vercel-ip-city")).trim(),
+    lat,
+    lng,
+  };
+}
+
+module.exports = { countryFromHeaders, countryFromAcceptLanguage, locationFromHeaders, clean };
