@@ -695,8 +695,24 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
   const patchLead = useCallback(async (id, patch) => {
     // Apply the change immediately so the UI responds on click; the PATCH is a
     // ~half-second DB round-trip and waiting for it felt like nothing happened.
-    setRows((cur) => cur.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+    //
+    // The overview tiles read `stats`, which only load() writes — and load()
+    // reruns on a filter or page change, nothing else. So favouriting three
+    // leads lit three badges while the Favorites tile sat at 0 until something
+    // unrelated refreshed it. The optimistic update has to cover the counters
+    // too, or the two halves of the same screen disagree.
+    let delta = 0;
+    setRows((cur) => cur.map((r) => {
+      if (r.id !== id) return r;
+      if (patch.watchlist !== undefined && !!r.watchlist !== !!patch.watchlist) {
+        delta = patch.watchlist ? 1 : -1;
+      }
+      return { ...r, ...patch };
+    }));
     setActive((cur) => (cur?.id === id ? { ...cur, ...patch } : cur));
+    if (delta) {
+      setStats((s) => (s ? { ...s, watchlist: Math.max(0, (s.watchlist || 0) + delta) } : s));
+    }
     if (patch.watchlist !== undefined) {
       showToast(patch.watchlist ? "★ Added to favorites" : "Removed from favorites");
     }
@@ -707,6 +723,9 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
     } catch (err) {
       // Revert to the server's truth and surface the failure.
       jsonFetch(`/api/leads/${id}`).then((d) => d.lead && mergeLead(d.lead)).catch(() => {});
+      if (delta) {
+        setStats((s) => (s ? { ...s, watchlist: Math.max(0, (s.watchlist || 0) - delta) } : s));
+      }
       showToast(err.message || "Couldn't save, try again");
       return null;
     }

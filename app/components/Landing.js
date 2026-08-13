@@ -312,8 +312,17 @@ function AvatarStack() {
 
 // Official LeadsFunda wordmark (blue + dark ink, made for light backgrounds).
 // viewBox is 683.78 x 132.24, so width = height * 5.17.
-function Logo({ height = 28, className = "" }) {
-  return (
+// The wordmark is a home link, which on the home page means "back to the top".
+// It rendered as a bare image before, so clicking the most obviously clickable
+// thing on the page did nothing at all.
+function Logo({ height = 28, className = "", asLink = true }) {
+  const toTop = (e) => {
+    // Only intercept when we are already here; anywhere else the href is right.
+    if (typeof window === "undefined" || window.location.pathname !== "/") return;
+    e.preventDefault();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const img = (
     <Image
       src="/brand/leadsfunda-white.svg"
       alt="LeadsFunda"
@@ -322,6 +331,14 @@ function Logo({ height = 28, className = "" }) {
       priority
       className={`h-[20px] w-auto sm:h-[28px] sm:w-auto ${className}`}
     />
+  );
+  // The hero renders a picture of the app, and the wordmark inside that picture
+  // is part of the illustration — clicking it should do nothing.
+  if (!asLink) return img;
+  return (
+    <a href="/" onClick={toTop} aria-label="LeadsFunda home" className="inline-flex items-center">
+      {img}
+    </a>
   );
 }
 
@@ -408,7 +425,7 @@ function HeroApp() {
         <div className="flex">
           {/* sidebar */}
           <aside className="hidden w-56 shrink-0 flex-col border-r border-border/60 bg-muted/20 p-4 sm:flex">
-            <Logo height={18} />
+            <Logo height={18} asLink={false} />
             <button className="mt-5 flex items-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground shadow-sm">
               <Plus className="h-4 w-4" /> New scrape
             </button>
@@ -654,18 +671,37 @@ function DiscoverCards() {
         const translateY = (1 - progressToSticky) * 40; // slide up 40px as it enters
         const depth = clamp(active - i - 0.6, 0, 3); // how far behind the front card
         
-        el.style.transform = `translateY(${translateY}px) scale(${1 - depth * 0.05}) rotate(${tilt}deg)`;
+        // No scale() here on purpose. A fractional scale lands glyphs on
+        // non-integer pixels, and combined with the promoted layer below it was
+        // what made this card's body text look blurry. Depth reads from the
+        // opacity and the stack offset on their own.
+        el.style.transform = `translateY(${translateY}px) rotate(${tilt}deg)`;
         el.style.opacity = String(1 - depth * 0.06);
       });
     };
 
-    const onScroll = () => { if (!raf) raf = requestAnimationFrame(apply); };
+    // will-change promotes each card to its own GPU layer, and a promoted layer
+    // is rasterised once and then re-used by the compositor — so rotated text
+    // gets resampled instead of redrawn, permanently. Promote only while a
+    // scroll is actually in flight, then hand the cards back to the renderer so
+    // they are drawn sharp at rest, which is when they are being read.
+    let settle = 0;
+    const onScroll = () => {
+      const cards = cardRefs.current.filter(Boolean);
+      for (const el of cards) el.style.willChange = "transform";
+      clearTimeout(settle);
+      settle = setTimeout(() => {
+        for (const el of cardRefs.current.filter(Boolean)) el.style.willChange = "auto";
+      }, 120);
+      if (!raf) raf = requestAnimationFrame(apply);
+    };
     apply();
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll);
     return () => {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
+      clearTimeout(settle);
       if (raf) cancelAnimationFrame(raf);
     };
   }, []);
@@ -676,7 +712,7 @@ function DiscoverCards() {
         <div key={d.title} className="lg:sticky" style={{ top: `${100 + i * 16}px` }}>
           <div
             ref={(el) => (cardRefs.current[i] = el)}
-            style={{ transformOrigin: "center top", willChange: "transform", transform: `rotate(${i % 2 === 0 ? "2.2deg" : "-2.2deg"})` }}
+            style={{ transformOrigin: "center top", transform: `rotate(${i % 2 === 0 ? "2.2deg" : "-2.2deg"})` }}
             className={`relative min-h-[180px] overflow-hidden rounded-3xl border border-border bg-card bg-gradient-to-br ${d.grad} p-7 ring-1 ${d.ring} shadow-xl shadow-black/[0.07]`}
           >
             <span className={`absolute right-5 top-5 h-2.5 w-2.5 rounded-full ${d.dot} shadow-[0_0_0_4px_rgba(255,255,255,0.6)]`} />
@@ -685,7 +721,7 @@ function DiscoverCards() {
               <span className="text-[11px] font-bold uppercase tracking-wide">{d.tag}</span>
             </div>
             <h3 className="font-heading text-xl font-bold text-foreground">{d.title}</h3>
-            <p className="mt-2 max-w-sm text-sm leading-relaxed text-foreground/70">{d.body}</p>
+            <p className="mt-2 max-w-sm text-sm leading-relaxed text-foreground/85">{d.body}</p>
           </div>
         </div>
       ))}

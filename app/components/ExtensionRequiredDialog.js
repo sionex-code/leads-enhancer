@@ -64,8 +64,11 @@ export default function ExtensionRequiredDialog({
         </ul>
 
         <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+          {/* New tab, so the search behind this dialog survives the detour. */}
           <Link
             href="/extension"
+            target="_blank"
+            rel="noopener"
             className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
           >
             <Download className="h-4 w-4" />

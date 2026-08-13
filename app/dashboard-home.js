@@ -680,8 +680,12 @@ function SourcePicker({ source, setSource, ext, lockedLive }) {
               : "Live search runs inside your own browser, so it needs the LeadsFunda extension. Nothing here will run until it is installed."}
           </p>
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            {/* New tab: installing is a detour, and the search being set up
+                here should still be waiting when they come back. */}
             <Link
               href="/extension"
+              target="_blank"
+              rel="noopener"
               className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm transition hover:opacity-90"
             >
               <Download className="h-3.5 w-3.5" />

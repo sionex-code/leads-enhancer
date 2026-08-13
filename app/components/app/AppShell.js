@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import Image from "next/image";
 import {
   Globe,
@@ -13,6 +13,7 @@ import {
   Search,
   HelpCircle,
   ChevronRight,
+  Loader2,
 } from "lucide-react";
 import AccountWidget from "../AccountWidget";
 import useSidebarCollapse from "../useSidebarCollapse";
@@ -68,6 +69,19 @@ function Brand({ collapsed, onClick }) {
   );
 }
 
+// Every app route is force-dynamic, so a click on a slow connection paints
+// nothing at all until the server answers — the sidebar does not even highlight,
+// and it reads as a click that did not register. useLinkStatus reports the
+// pending navigation, but only from inside the Link, so the icon lives in its
+// own component. It swaps the item's own icon for a spinner rather than adding
+// one, which keeps the row from shifting.
+function NavIcon({ icon: Icon }) {
+  const { pending } = useLinkStatus();
+  return pending
+    ? <Loader2 className="h-[18px] w-[18px] shrink-0 animate-spin" />
+    : <Icon className="h-[18px] w-[18px] shrink-0" />;
+}
+
 function NavItem({ item, active, collapsed, onNavigate, prominent, trailingSpace, badge }) {
   const { key, label, href, icon: Icon } = item;
   const isActive = active === key;
@@ -89,7 +103,7 @@ function NavItem({ item, active, collapsed, onNavigate, prominent, trailingSpace
       )}
     >
       {isActive && <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-primary" />}
-      <Icon className="h-[18px] w-[18px] shrink-0" />
+      <NavIcon icon={Icon} />
       {!collapsed && <span className="truncate">{label}</span>}
       {!collapsed && badge != null && (
         <span className="ml-auto flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-semibold tabular-nums text-muted-foreground">
