@@ -137,7 +137,11 @@ export default function LeadDetailPanel({
   // parse() returns null for "" — which means "never scanned", NOT "no pixels".
   const scanned = trackingDetect.isScanned(tracking);
   const stack = tracking ? trackingDetect.summarize(tracking) : "";
-  const reviews = parseInt(String(lead.reviews ?? "").replace(/[^\d]/g, ""), 10) || 0;
+  // null = Google never gave us a count for this listing (its search record
+  // comes back truncated for a fair number of them), which is a different
+  // claim from "this business has no reviews". Don't collapse the two.
+  const reviewsRaw = String(lead.reviews ?? "").replace(/[^\d]/g, "");
+  const reviews = reviewsRaw === "" ? null : parseInt(reviewsRaw, 10);
   const email = lead.email || "";
   // waMeLink takes the lead, not a phone string — handing it `lead.phone` made it
   // read .whatsapp off a String, so the button was dead for every lead.
@@ -332,11 +336,18 @@ export default function LeadDetailPanel({
           <div className="flex items-center gap-2 text-sm">
             <Star size={15} className={reviews ? "text-amber-500" : "text-muted-foreground"} fill={reviews ? "currentColor" : "none"} />
             <span className="font-medium">
-              {reviews.toLocaleString()} review{reviews === 1 ? "" : "s"}
+              {reviews == null
+                ? "Review count not reported"
+                : `${reviews.toLocaleString()} review${reviews === 1 ? "" : "s"}`}
             </span>
-            {lead.rating && reviews > 0 && <span className="text-muted-foreground">· {lead.rating} average</span>}
+            {lead.rating && reviews !== 0 && <span className="text-muted-foreground">· {lead.rating} average</span>}
           </div>
           {reviews === 0 && <p className="text-xs text-muted-foreground">No reviews found</p>}
+          {reviews == null && (
+            <p className="text-xs text-muted-foreground">
+              Google didn&apos;t include a count for this listing. Open it on Maps to see the real number.
+            </p>
+          )}
         </Section>
 
         <Section title="Location">

@@ -632,9 +632,14 @@ function buildLeadWhere(
   // "no review count captured" and "zero reviews" are different answers.
   const REVIEWS_NUM = REVIEWS_EXPR;
   const RATING_NUM = RATING_EXPR;
-  if (reviews === "none") where.push(`COALESCE(${REVIEWS_NUM}, 0) = 0`);
-  else if (reviews === "some") where.push(`COALESCE(${REVIEWS_NUM}, 0) BETWEEN 1 AND 20`);
-  else if (reviews === "many") where.push(`COALESCE(${REVIEWS_NUM}, 0) > 20`);
+  // COALESCE(..., 0) here undid the very distinction the comment above draws:
+  // a lead whose count Google never reported came back under "no reviews",
+  // which is the bucket people work as "nobody has reviewed them yet, easy
+  // pitch". An uncaptured count now matches none of the three buckets rather
+  // than silently joining the emptiest one.
+  if (reviews === "none") where.push(`${REVIEWS_NUM} = 0`);
+  else if (reviews === "some") where.push(`${REVIEWS_NUM} BETWEEN 1 AND 20`);
+  else if (reviews === "many") where.push(`${REVIEWS_NUM} > 20`);
   if (rating === "none") where.push(`${RATING_NUM} IS NULL`);
   else if (rating === "low") where.push(`${RATING_NUM} < 4`);
   else if (rating === "good") where.push(`${RATING_NUM} >= 4 AND ${RATING_NUM} < 4.5`);

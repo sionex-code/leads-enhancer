@@ -107,16 +107,32 @@ const DOMAIN_RATING_INFO = (
   </>
 );
 
-// Rendering rule: a rating only means something with reviews. Show the review
-// count (0 when empty), and only show the star rating when there is at least 1 review.
+// Rendering rule: a rating only means something with reviews — but "we never
+// got a count" is not the same claim as "this business has none".
+//
+// Google's search endpoint omits the review count on a sizeable minority of
+// listings (the record comes back truncated), so treating a missing count as 0
+// printed a confident "0 reviews" for businesses that plainly have some, and
+// hid their rating on top of it. Missing is null here; only a real number is a
+// number. See reviewLabel() for how that renders.
 function reviewCount(lead) {
   // lead.reviews can arrive as a plain "1204" or a comma-formatted "1,204" —
   // Number() chokes on the comma and returns NaN, so strip non-digits first.
-  const n = parseInt(String(lead.reviews ?? "").replace(/[^\d]/g, ""), 10);
-  return Number.isFinite(n) ? n : 0;
+  const raw = String(lead.reviews ?? "").replace(/[^\d]/g, "");
+  if (raw === "") return null;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) ? n : null;
 }
+function reviewLabel(lead) {
+  const n = reviewCount(lead);
+  return n == null ? "—" : n.toLocaleString();
+}
+// A rating with no captured count is still a real rating, so it is worth
+// showing; a rating alongside a genuine 0 reviews is not, because it cannot be
+// an average of anything.
 function showRating(lead) {
-  return lead.rating != null && lead.rating !== "" && reviewCount(lead) > 0;
+  if (lead.rating == null || lead.rating === "") return false;
+  return reviewCount(lead) !== 0;
 }
 
 // Guided tour for the Leads page. Targets are data-tour attributes on-screen, so
@@ -1483,7 +1499,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                       {showRating(lead) && (
                         <Pill tone="muted"><Star size={11} className="text-amber-500" fill="currentColor" /> {lead.rating}</Pill>
                       )}
-                      <Pill tone="muted">{reviewCount(lead).toLocaleString()} rev</Pill>
+                      <Pill tone="muted">{reviewLabel(lead)} rev</Pill>
                       {ownerReplied === 1 && (
                         <Pill tone="good">Owner replied {lead.owner_reply_count != null ? `(${lead.owner_reply_count})` : ""}</Pill>
                       )}
@@ -1597,7 +1613,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                           </TableCell>
                         )}
                         {isVisible("reviews") && (
-                          <TableCell className="text-xs tabular-nums">{reviewCount(lead).toLocaleString()}</TableCell>
+                          <TableCell className="text-xs tabular-nums">{reviewLabel(lead)}</TableCell>
                         )}
                         {isVisible("domainRating") && (
                           <TableCell className="text-xs">
