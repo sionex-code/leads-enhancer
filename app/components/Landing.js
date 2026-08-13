@@ -834,9 +834,6 @@ export default function Landing({ recent = [], total = 0 }) {
             <AvatarStack />
             <span className="text-sm text-muted-foreground">Trusted by <span className="font-semibold text-foreground">2,400+</span> marketers</span>
             <span className="flex items-center gap-2"><Stars className="h-4 w-4" /> <span className="text-sm font-semibold text-foreground">5.0</span></span>
-            <a href="#how" className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground underline underline-offset-[6px] decoration-border transition-colors hover:decoration-foreground">
-              See how it works <ArrowRight className="h-3.5 w-3.5" />
-            </a>
           </div>
         </div>
 
