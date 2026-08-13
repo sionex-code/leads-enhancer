@@ -471,15 +471,24 @@ function projectNameFromQuery(query) {
 
 const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 
-// How well `text` matches `name`: 3 exact, 2 prefix, 1 word-boundary substring,
-// 0 no match. Ranking by this keeps "plumber" ahead of "commercial plumber".
+// Whole-word containment. `norm` has already collapsed both sides to single
+// spaced lowercase, so padding with spaces is enough to pin the boundaries.
+// Without this "spa" matches "coworker spaces", which is how a search for
+// coworking spaces used to suggest spas in six countries.
+const containsWord = (hay, needle) => ` ${hay} `.includes(` ${needle} `);
+const startsWithWord = (hay, prefix) => hay === prefix || hay.startsWith(`${prefix} `);
+
+// How well `text` matches `name`: 3 exact, 2 word-boundary prefix, 1 word-boundary
+// substring, 0 no match. Ranking by this keeps "plumber" ahead of "commercial
+// plumber". Every comparison is word-boundary aware: a bare substring hit is not
+// a match, because a suggestion we show under "Ready in our database" is a claim.
 function matchScore(text, name) {
   const t = norm(text);
   const n = norm(name);
   if (!t || !n) return 0;
   if (t === n) return 3;
-  if (n.startsWith(t) || t.startsWith(n)) return 2;
-  if (n.includes(t) || t.includes(n)) return 1;
+  if (startsWithWord(n, t) || startsWithWord(t, n)) return 2;
+  if (containsWord(n, t) || containsWord(t, n)) return 1;
   return 0;
 }
 
@@ -514,14 +523,16 @@ function matchCatalog(text, index, { limit = 6, preferCityId = null } = {}) {
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score || b.s.leadCount - a.s.leadCount);
 
-  // With no place typed, the city the user already has selected wins — otherwise
-  // typing a bare "plumber" would quietly move the search to whichever city we
-  // happen to hold the most leads for, which is not what they asked for.
+  // With no place typed, only the city the user already has selected qualifies.
+  // Scoring every other city 1 here used to emit the full service x city cross
+  // product, so "coworker spaces near me" offered spas in Adelaide, London and
+  // New York. If nothing is selected we hold no opinion about where they mean,
+  // and the honest answer is no suggestion at all.
   const scoredCities = index.cities
     .map((c) => {
       if (!place) {
         const isSelected = preferCityId != null && String(c.city.id ?? c.city.name) === String(preferCityId);
-        return { c, score: isSelected ? 3 : 1 };
+        return { c, score: isSelected ? 3 : 0 };
       }
       const direct = matchScore(place, c.city.name);
       const withAdmin = c.city.admin ? matchScore(place, `${c.city.name} ${c.city.admin}`) : 0;
@@ -712,12 +723,37 @@ function SourcePicker({ source, setSource, ext, lockedLive }) {
 // switching back to a country already visited is instant.
 const LIVE_CITY_CACHE = new Map(); // country code -> city[]
 
+// The source data carries administrative areas alongside the settlements that
+// share their name — PK holds both "Rawalpindi District" (pop 3,363,911) and
+// "Rawalpindi" (3,357,612), and since it is population-ordered the *district*
+// lists first. Picking it centres the search on the district centroid, which is
+// why a search for Rawalpindi came back with Chakwal and Kalar Kahar: places
+// that are genuinely in the district and nowhere near the city.
+//
+// Nobody prospecting means the district. Where both exist in the same state,
+// keep the city. Where only the district exists, keep it — dropping it would
+// lose the only entry for that place.
+const ADMIN_SUFFIX = /\s+(district|division|tehsil|county|municipality|prefecture|province|region)$/i;
+
+function dedupeAdminTwins(list) {
+  const settlements = new Set();
+  for (const c of list) {
+    if (!ADMIN_SUFFIX.test(String(c.n))) settlements.add(`${String(c.n).toLowerCase()}|${c.s || ""}`);
+  }
+  if (!settlements.size) return list;
+  return list.filter((c) => {
+    const bare = String(c.n).replace(ADMIN_SUFFIX, "").trim().toLowerCase();
+    if (bare === String(c.n).toLowerCase()) return true; // not an admin area
+    return !settlements.has(`${bare}|${c.s || ""}`);
+  });
+}
+
 // Same ranking the server uses: prefix matches ahead of mid-word ones, accents
 // folded so "cordoba" finds "Córdoba". The source array is population-ordered,
 // so ties resolve to the city people actually mean.
 function filterCities(all, text, cap = 50) {
   const t = String(text || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
-  if (!t) return all.slice(0, cap);
+  if (!t) return dedupeAdminTwins(all.slice(0, cap * 2)).slice(0, cap);
   const starts = [];
   const contains = [];
   for (const c of all) {
@@ -729,7 +765,7 @@ function filterCities(all, text, cap = 50) {
       contains.push(c);
     }
   }
-  return starts.concat(contains).slice(0, cap);
+  return dedupeAdminTwins(starts.concat(contains)).slice(0, cap);
 }
 
 // Business-type picker for a LIVE search. ~3,968 Google Business Profile
@@ -944,7 +980,11 @@ function ExtensionPill({ ext }) {
   );
 }
 
-function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
+// Where the last search was run, so a returning user doesn't re-pick their own
+// city every visit. Only ever a convenience: nothing here is trusted.
+const SEARCH_PREFS_KEY = "lf.search.prefs";
+
+function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, countryHint = "" }) {
   // ── Catalog state ─────────────────────────────────────────────────────────
   const [catalog, setCatalog] = useState(null); // null = loading
   const [, setCatalogError] = useState(false);
@@ -976,8 +1016,27 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   const catalogServices = resolved.services || [];
 
   // ── Form state ─────────────────────────────────────────────────────────────
-  // Start with stable static defaults to prevent double-switching on reload
-  const [countryCode, setCountryCode] = useState(() => QUICK_COUNTRIES[0].code);
+  // Which fields the user has made their own. Once a field is in here the form
+  // stops moving it: the catalog settling in later is not a reason to discard
+  // something somebody typed or picked.
+  const touched = useRef({ country: false, city: false, service: false, query: false });
+
+  // Last session's country/city/service. Read in an effect rather than in the
+  // initial state so the server-rendered markup and the first client render
+  // agree — localStorage does not exist on the server.
+  const prefs = useRef(null);
+  useEffect(() => {
+    try {
+      prefs.current = JSON.parse(localStorage.getItem(SEARCH_PREFS_KEY) || "null");
+    } catch {
+      prefs.current = null;
+    }
+  }, []);
+
+  // Start with stable static defaults to prevent double-switching on reload.
+  // `countryHint` comes from the request's own country header, so the first
+  // paint is already in the right part of the world for most people.
+  const [countryCode, setCountryCode] = useState(() => countryHint || QUICK_COUNTRIES[0].code);
   const country = useMemo(
     () => catalogCountries.find((c) => c.code === countryCode) || catalogCountries[0] || { code: "", name: "", cities: [] },
     [catalogCountries, countryCode]
@@ -1014,7 +1073,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   // Live-search area, chosen from the world list rather than the warehouse's.
   // Held separately from countryCode/cityObj so switching source back to the
   // warehouse does not find its selects pointing at a city we hold no leads for.
-  const [liveCountry, setLiveCountry] = useState("US");
+  const [liveCountry, setLiveCountry] = useState(() => countryHint || "US");
   // Whether the user has actually chosen a country, so the map is only recentred
   // on a real choice and not when the live panel first mounts with its default.
   const liveCountryPicked = useRef(false);
@@ -1079,17 +1138,32 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   // warehouse lookup for somewhere else.
   const bestMatch = matches.length && matches[0].score >= 6 ? matches[0] : null;
 
+  // The list we're willing to put under "Ready in our database" holds itself to
+  // the same bar as the one we'd actually run. A weak match is not worth showing:
+  // an empty dropdown reads as "we don't have this", which is the truth, whereas
+  // a confident wrong suggestion costs the user a search to discover.
+  const suggestions = useMemo(() => matches.filter((m) => m.score >= 6), [matches]);
+
   // Typed text we can serve from the database goes to the warehouse; anything we
   // don't hold still has to be scraped live. A query built by the dropdowns was
   // always warehouse-able, so it keeps honouring the user's own preference.
   const activeSource = !queryIsCustom ? source : bestMatch ? source : "live";
   const lockedLive = queryIsCustom && !bestMatch;
 
-  // Settle the form on the catalog's biggest country, city and service once it
-  // loads. This used to be a 12-tick slot-machine animation that flung random
-  // countries and cities through the inputs for almost a second before landing
-  // somewhere arbitrary. It looked busy, it made the form unusable while it ran,
-  // and it left people searching a city they never chose.
+  // Settle the form once the catalog loads. This used to be a 12-tick slot-machine
+  // animation that flung random countries and cities through the inputs for almost
+  // a second before landing somewhere arbitrary. It looked busy, it made the form
+  // unusable while it ran, and it left people searching a city they never chose.
+  //
+  // Two rules it did not used to follow:
+  //
+  // 1. Where. The catalog is ordered by coverage, and its first entry happened to
+  //    be Adelaide, Australia — so every user on earth opened the form pointed at
+  //    Adelaide. Their own last search wins, then the country their request came
+  //    from, and only then our coverage.
+  // 2. When. It fired on catalog arrival with no regard for what the user had
+  //    already done, so anyone who typed or picked during the fetch watched their
+  //    input get overwritten. Anything already touched is now left alone.
   const settled = useRef(false);
   useEffect(() => {
     if (!catalog || settled.current) return;
@@ -1098,21 +1172,44 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
     if (!countries.length || !services.length) return;
     settled.current = true;
 
-    // The catalog is ordered by coverage, so the first entry is the one most
-    // likely to return a full list.
-    const topCountry = countries[0];
-    const topCity = (topCountry.cities || [])[0] || null;
-    const topService = services[0]?.name || service;
+    const byCode = (code) => (code ? countries.find((c) => c.code === code) : null);
+    const saved = prefs.current;
+    // Their own last search, then the country the request came from, then whatever
+    // we hold the most of. Only the first of these is something the user told us.
+    const nextCountry = byCode(saved?.countryCode) || byCode(countryHint) || countries[0];
+    const cities = nextCountry.cities || [];
+    // A saved city only counts inside the country it was saved for. An IP hint
+    // tells us the country and nothing more, so rather than guess a city we take
+    // the one we hold the most leads for *within that country* — which is at
+    // least somewhere they could plausibly mean.
+    const savedCity = saved?.cityName ? cities.find((c) => c.name === saved.cityName) : null;
+    const nextCity = savedCity || cities[0] || null;
+    const nextService = (saved?.service && services.some((s) => s.name === saved.service) ? saved.service : services[0]?.name) || service;
 
-    setCountryCode(topCountry.code);
-    if (topCity) {
-      setCityObj(topCity);
-      if (topCity.lat != null) setCenter({ lat: topCity.lat, lng: topCity.lng });
+    if (!touched.current.country) setCountryCode(nextCountry.code);
+    if (!touched.current.city && nextCity) {
+      setCityObj(nextCity);
+      if (nextCity.lat != null) setCenter({ lat: nextCity.lat, lng: nextCity.lng });
     }
-    setService(topService);
-    setQuery(buildQuery(topService, topCity, topCountry));
+    if (!touched.current.service) setService(nextService);
+    // The query box mirrors the selects, but only while it is still ours. Once
+    // somebody has typed in it, it is theirs.
+    if (!touched.current.query) setQuery(buildQuery(nextService, nextCity, nextCountry));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [catalog]);
+  }, [catalog, countryHint]);
+
+  // Remember where they searched, so the next visit opens where they left off.
+  useEffect(() => {
+    if (!settled.current) return;
+    try {
+      localStorage.setItem(
+        SEARCH_PREFS_KEY,
+        JSON.stringify({ countryCode, cityName: cityObj?.name || "", service })
+      );
+    } catch {
+      // Private mode, or a full quota. Losing a convenience is not worth an error.
+    }
+  }, [countryCode, cityObj, service]);
 
   const shownCities = useMemo(() => {
     const q = citySearch.trim().toLowerCase();
@@ -1124,26 +1221,34 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   function changeCountry(nextCode) {
     const nextCountry = catalogCountries.find((c) => c.code === nextCode) || catalogCountries[0];
     if (!nextCountry) return;
+    touched.current.country = true;
+    touched.current.city = true;
     const nextCity = nextCountry.cities?.[0] || null;
     setCountryCode(nextCountry.code);
     setCityObj(nextCity);
     setCitySearch("");
     if (nextCity?.lat != null) setCenter({ lat: nextCity.lat, lng: nextCity.lng });
-    setQuery(buildQuery(service, allCities ? null : nextCity, nextCountry));
+    // Changing country moves the search; it does not decide what is being
+    // searched for. Reusing `service` here is what turned a typed "chezious"
+    // into "general contractor in Pakistan" — the country select silently
+    // replacing the user's own keyword with the catalog's most common one.
+    setQuery(buildQuery(splitQuery().keyword || service, allCities ? null : nextCity, nextCountry));
   }
 
   function selectService(nextService) {
+    touched.current.service = true;
     setService(nextService);
     setQuery(buildQuery(nextService, allCities ? null : cityObj, country));
   }
 
   function selectCity(nextCityObj) {
+    touched.current.city = true;
     setAllCities(false);
     setCityObj(nextCityObj);
     if (nextCityObj?.lat != null && nextCityObj?.lng != null) {
       setCenter({ lat: nextCityObj.lat, lng: nextCityObj.lng });
     }
-    setQuery(buildQuery(service, nextCityObj, country));
+    setQuery(buildQuery(splitQuery().keyword || service, nextCityObj, country));
   }
 
   // Aim a live search at a city from the world list.
@@ -1166,6 +1271,8 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   }
 
   function pickLiveService(s) {
+    touched.current.service = true;
+    touched.current.query = true;
     setLiveService(s);
     const { place } = splitQuery();
     const next = place ? `${s} in ${place}` : s;
@@ -1179,6 +1286,8 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   // immediately — same contract as pickLiveCity.
   function pickLiveCountry(code, countryName) {
     liveCountryPicked.current = true;
+    touched.current.country = true;
+    touched.current.query = true;
     setLiveCountry(code);
     setLiveCity(null);
     if (!countryName) return;
@@ -1201,6 +1310,8 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
   }
 
   function pickLiveCity(c, countryName) {
+    touched.current.city = true;
+    touched.current.query = true;
     setLiveCity(c);
     // Compact wire keys (n/s/la/ln) — see /api/geo/places.
     if (Number.isFinite(c?.la) && Number.isFinite(c?.ln)) {
@@ -1574,6 +1685,9 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
           <Input
             value={query}
             onChange={(e) => {
+              // From here on the box belongs to the user, and nothing that
+              // arrives later — the catalog, a settle pass — may rewrite it.
+              touched.current.query = true;
               setQuery(e.target.value);
               setSuggestOpen(true);
               // Editing the query by hand invalidates whatever business type,
@@ -1596,12 +1710,12 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan }) {
           {/* What we already hold that looks like what's being typed. Picking one
               fills the selects, so the search runs instantly out of the database
               instead of scraping a city we already have. */}
-          {suggestOpen && matches.length > 0 && (
+          {suggestOpen && suggestions.length > 0 && (
             <ul className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-lg">
               <li className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
                 Ready in our database
               </li>
-              {matches.map((m) => (
+              {suggestions.map((m) => (
                 <li key={`${m.service}-${m.city.id ?? m.city.name}`}>
                   <button
                     type="button"
@@ -1971,7 +2085,7 @@ function Kpi({ value, text, label, icon: Icon, hint, tone = "" }) {
   );
 }
 
-export default function Dashboard({ view = "" }) {
+export default function Dashboard({ view = "", countryHint = "" }) {
   const router = useRouter();
 
   // A label built from the dropdowns is only trustworthy when the search itself
@@ -2691,15 +2805,28 @@ export default function Dashboard({ view = "" }) {
     }
   }
 
-  // Stable identity for a captured (CSV) lead, matching the DB dedupe rule:
-  // domain, else phone digits, else name. Used to key per-row state + overlay.
+  // Stable identity for a row, used to key per-row state, the selection set and
+  // the open drawer.
+  //
+  // This used to return on the first non-empty field — domain, else phone, else
+  // name — mirroring the DB's dedupe rule. That rule is right for deduping and
+  // wrong for identity: every branch of a chain shares one website, so ten
+  // Cheezious rows collapsed to "d:cheezious.com". Clicking the fourth opened
+  // the first, because the drawer resolves its row with `leads.find(...)` and
+  // find returns the earliest match. The same collision cross-selected
+  // checkboxes and mis-tinted rows.
+  //
+  // Identity now needs every distinguishing field to agree, so two rows share a
+  // key only when they really are the same listing.
   function leadKey(lead) {
+    // A saved lead already has an identity the server assigned. Nothing beats it.
+    if (lead.id != null && lead.id !== "") return "i:" + lead.id;
     const host = (lead.domain || "").toLowerCase() ||
       (lead.website || "").replace(/^https?:\/\//i, "").replace(/^www\./, "").split("/")[0].toLowerCase();
-    if (host) return "d:" + host;
     const phone = String(lead.phone || "").replace(/\D/g, "");
-    if (phone.length >= 7) return "p:" + phone;
-    return "n:" + String(lead.name || "").trim().toLowerCase();
+    const name = String(lead.name || "").trim().toLowerCase();
+    const address = String(lead.address || "").trim().toLowerCase();
+    return `c:${host}|${phone}|${name}|${address}`;
   }
 
   const setRowBusyKey = (key, action, val) =>
@@ -2977,9 +3104,15 @@ export default function Dashboard({ view = "" }) {
   // to the snapshot taken on click. `leads` is re-derived by filtering, paging,
   // polling and live-search ticks, so the clicked row can vanish from it while the
   // drawer is still open — which used to leave the panel rendering nothing at all.
-  const detailLead = detailKey
-    ? leads.find((l) => leadKey(l) === detailKey) || detailSnapshot || null
-    : null;
+  // The snapshot is the row that was actually clicked, so it decides identity;
+  // the live row only supplies fresher fields on top of it. Letting `find` win
+  // outright meant any key collision opened somebody else's business.
+  const detailLead = (() => {
+    if (!detailKey) return null;
+    const live = leads.find((l) => leadKey(l) === detailKey);
+    if (live && detailSnapshot) return { ...detailSnapshot, ...live };
+    return live || detailSnapshot || null;
+  })();
   // Trust either source: the projects list (authoritative, refreshed every tick)
   // or the selected project's status. This keeps the Stop button enabled even
   // when a status fetch is mid-flight or briefly stale after switching projects.
@@ -3307,6 +3440,7 @@ export default function Dashboard({ view = "" }) {
             onOpenDashboard={openProjects}
             error={error}
             needPlan={needPlan}
+            countryHint={countryHint}
           />
         </div>
         <ExtensionRequiredDialog open={needExtension} onClose={() => setNeedExtension(false)} />
@@ -3843,7 +3977,7 @@ export default function Dashboard({ view = "" }) {
                       const reviews = reviewCount(lead);
                       return (
                       <TableRow
-                        key={`${lead.name}-${index}`}
+                        key={key}
                         className={cn(
                           "group/row h-12 cursor-pointer",
                           // Selected and open are different states and have to
