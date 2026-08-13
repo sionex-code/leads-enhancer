@@ -325,7 +325,13 @@ export async function POST(request) {
     // Needed by /ingest to publish a live scrape into the shared warehouse:
     // the country has to be an ISO code to match the warehouse's country list,
     // and the coordinates place a city the catalog has never seen before.
-    countryCode: area ? (area.countryCode || "") : String(countryCode || "").toUpperCase(),
+    // Same rule as cityName/countryName above, and it matters more here:
+    // publishToDirectory keys the public record on this code, and ingest can
+    // later fill in a city and country name from the scraped addresses. If the
+    // code were still the dropdown's, that correction would publish Islamabad
+    // leads under Australia. Empty means the search stays private, which is the
+    // right outcome when we can't say where it went.
+    countryCode: area ? (area.countryCode || "") : (mustGoLive ? "" : String(countryCode || "").toUpperCase()),
     cityId: area ? "" : (cityId ?? ""),
     areaLat: area ? String(area.lat ?? "") : "",
     areaLng: area ? String(area.lng ?? "") : "",
