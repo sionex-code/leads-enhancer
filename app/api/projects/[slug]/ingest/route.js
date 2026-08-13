@@ -6,6 +6,7 @@ import billing from "../../../../../web/lib/billing.cjs";
 import queue from "../../../../../web/lib/queue.cjs";
 import warehousePublish from "../../../../../web/lib/warehouse-publish.cjs";
 import publicSearches from "../../../../../web/lib/public-searches.cjs";
+import { haversineKm } from "../../../../../web/lib/geo-distance.cjs";
 import { requireUser } from "../../../../../web/lib/session.js";
 
 export const dynamic = "force-dynamic";
@@ -81,6 +82,54 @@ function toLeadRow(x, ctx) {
   return row;
 }
 
+// Hold the scrape to the area that was asked for.
+//
+// The warehouse path has always done this — a bounding-box query refined with
+// haversine — so a warehouse search respects the slider exactly. The live path
+// did not, and could not: the radius was sent to the extension and then
+// forgotten, never written to the project, so nothing downstream knew what it
+// had been.
+//
+// It matters because the extension only over-approximates. It turns centre plus
+// radius into a *square* bbox and keeps anything inside it plus a fixed 0.05
+// degree margin, and Google Maps answers the query text rather than our area, so
+// a brand name pulls in branches from the whole country. At 5 km that accepts
+// results ~14 km out; at 1 km, ~9 km. The slider was decoration.
+//
+// Returns null when the project records no area, so an older project ingests
+// exactly as it did before.
+function areaFilterFor(meta) {
+  const lat = Number(meta.searchCenterLat);
+  const lng = Number(meta.searchCenterLng);
+  const radiusKm = Number(meta.searchRadiusKm);
+  if (Number.isFinite(lat) && Number.isFinite(lng) && Number.isFinite(radiusKm) && radiusKm > 0) {
+    return (row) => {
+      const rLat = Number(row.lat);
+      const rLng = Number(row.lng);
+      // A row with no coordinates cannot be proven outside, and dropping it
+      // would lose a real lead over missing metadata. Keep it.
+      if (!Number.isFinite(rLat) || !Number.isFinite(rLng)) return true;
+      return haversineKm(lat, lng, rLat, rLng) <= radiusKm;
+    };
+  }
+  if (meta.searchBbox) {
+    try {
+      const b = JSON.parse(meta.searchBbox);
+      if (["latMin", "latMax", "lngMin", "lngMax"].every((k) => Number.isFinite(Number(b[k])))) {
+        return (row) => {
+          const rLat = Number(row.lat);
+          const rLng = Number(row.lng);
+          if (!Number.isFinite(rLat) || !Number.isFinite(rLng)) return true;
+          return rLat >= b.latMin && rLat <= b.latMax && rLng >= b.lngMin && rLng <= b.lngMax;
+        };
+      }
+    } catch {
+      // A malformed area is not a reason to reject the leads.
+    }
+  }
+  return null;
+}
+
 // POST /api/projects/:slug/ingest
 // Accepts leads scraped by the browser extension and stores them exactly as a
 // warehouse-backed find would.
@@ -129,19 +178,31 @@ export async function POST(request, { params }) {
   const ctx = { project: meta.name || slug, query: meta.query || "" };
 
   // Drop anything without a name — a row we can't identify is not a lead.
-  const rows = incoming
-    .filter((r) => r && String(r.name || "").trim())
-    .slice(0, limit)
-    .map((r) => toLeadRow(r, ctx));
+  const named = incoming.filter((r) => r && String(r.name || "").trim());
+
+  // Then drop anything outside the search area, BEFORE the limit is applied, so
+  // the user still gets up to `max` leads they actually asked for rather than a
+  // page padded out with distant ones. This also runs before upsert, so nothing
+  // out of area is charged for.
+  const inArea = areaFilterFor(meta);
+  const kept = inArea ? named.filter(inArea) : named;
+  const outOfArea = named.length - kept.length;
+
+  const rows = kept.slice(0, limit).map((r) => toLeadRow(r, ctx));
 
   if (!rows.length) {
     store.writeState(dir, {
       running: false, queued: false, activePid: null,
-      message: "No leads found for this search.",
+      // "Nothing found" and "found, but all of it was somewhere else" are
+      // different answers, and only the second one tells the user what to
+      // change.
+      message: outOfArea
+        ? `No leads inside your search area. ${outOfArea} ${outOfArea === 1 ? "result was" : "results were"} outside it — try a wider radius.`
+        : "No leads found for this search.",
       finishedAt: new Date().toISOString(),
       stages: { scrape: { status: "done" } },
     });
-    return Response.json({ ok: true, inserted: 0, updated: 0, received: incoming.length });
+    return Response.json({ ok: true, inserted: 0, updated: 0, received: incoming.length, outOfArea });
   }
 
   // Fill in contact details anyone has already found for these domains, BEFORE
@@ -194,6 +255,7 @@ export async function POST(request, { params }) {
     inserted: res.inserted,
     updated: res.updated,
     received: incoming.length,
+    outOfArea,
     stored: rows.length,
     fromCache,
     enrich,

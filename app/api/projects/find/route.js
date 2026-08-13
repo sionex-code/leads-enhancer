@@ -41,6 +41,32 @@ function keywordFromQuery(text) {
   return (parts[0] || "").trim();
 }
 
+// The area the user actually asked for, in whichever shape the search used.
+//
+// Persisted because the live path has no other way to hold itself to it. The
+// extension converts centre+radius into a *square* bounding box and then keeps
+// anything inside it plus a fixed 0.05 degree margin, so a 5 km search accepts
+// businesses ~14 km away and a 1 km search accepts them ~9 km away. Google Maps
+// answers the query text, not our radius, so without a final check the slider
+// was decoration on every live search.
+function searchAreaMeta(area, dropdown) {
+  const blank = { searchCenterLat: "", searchCenterLng: "", searchRadiusKm: "", searchBbox: "" };
+  const radius = Number(dropdown.radiusKm);
+  // An area the form resolved is a point, and the radius slider still applies.
+  if (area && area.fromClient && Number.isFinite(area.lat) && Number.isFinite(area.lng)) {
+    return { ...blank, searchCenterLat: String(area.lat), searchCenterLng: String(area.lng), searchRadiusKm: Number.isFinite(radius) ? String(radius) : "" };
+  }
+  // An area resolved here is an administrative region: its bbox *is* the area,
+  // and there is no radius to honour.
+  if (area && area.bbox) return { ...blank, searchBbox: JSON.stringify(area.bbox) };
+  const lat = Number(dropdown.centerLat);
+  const lng = Number(dropdown.centerLng);
+  if (Number.isFinite(lat) && Number.isFinite(lng) && Number.isFinite(radius)) {
+    return { ...blank, searchCenterLat: String(lat), searchCenterLng: String(lng), searchRadiusKm: String(radius) };
+  }
+  return blank;
+}
+
 // Name a project after the search that actually ran: "Islamabad Restaurants
 // Leads". Built from the resolved keyword and place rather than the dropdowns,
 // which for a typed query describe somewhere else entirely.
@@ -335,6 +361,8 @@ export async function POST(request) {
     cityId: area ? "" : (cityId ?? ""),
     areaLat: area ? String(area.lat ?? "") : "",
     areaLng: area ? String(area.lng ?? "") : "",
+    // What /ingest holds a live scrape to. See searchAreaMeta.
+    ...searchAreaMeta(area, { centerLat, centerLng, radiusKm }),
     // This flag makes the UI synthesise a label from cityName/countryName
     // instead of showing the real one. That is only appropriate when we could
     // not work out what was searched — which is no longer the case here.
