@@ -305,7 +305,13 @@ export async function POST(request) {
         fromClient: true,
       };
     } else {
-      area = await geo.resolveArea(query).catch(() => null);
+      // Only let the resolver treat the ENTIRE query as a place when it does
+      // not already look like a recognised service — the same signal that
+      // decided isUnknownKeyword above. "spa" is also a town in Belgium, and
+      // without this, a bare service name a live search silently relocated
+      // itself off the user's own map circle and onto whatever real place
+      // shared its name.
+      area = await geo.resolveArea(query, { allowWholeQueryFallback: !!isUnknownKeyword }).catch(() => null);
     }
   }
 

@@ -171,11 +171,15 @@ const MIN_GUESS_IMPORTANCE = 0.25;
  * Returns null when nothing in the text names a place we can locate — the
  * caller should then fall back to the user's selected city.
  */
-async function resolveArea(query) {
+async function resolveArea(query, { allowWholeQueryFallback = true } = {}) {
   const q = String(query || "").trim();
   if (!q) return null;
 
-  const key = q.toLowerCase();
+  // The fallback flag changes what this function is willing to return for the
+  // exact same string, so it has to be part of the cache key — otherwise an
+  // earlier unguarded call (or vice versa) serves its answer to a later call
+  // that asked for the opposite, for as long as the entry lives.
+  const key = `${allowWholeQueryFallback ? 1 : 0}:${q.toLowerCase()}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.value;
 
@@ -233,7 +237,15 @@ async function resolveArea(query) {
   // for "that service, but over there". Every split needs both halves, so this
   // case can only be caught here. The keyword comes back empty for the caller
   // to fill from its own selection.
-  if (!value) {
+  //
+  // Dangerous when the "place" is actually just a service name: "spa" is also
+  // a real, prominent town in Belgium, and geocoding it moved a live search's
+  // circle off Rawalpindi and onto Belgium without the user asking for that —
+  // a bare word with no "in"/"near"/"," has no location marker in it at all,
+  // so there is nothing here that says the user meant a place over a service.
+  // Callers that already know the text names a recognised service pass
+  // allowWholeQueryFallback: false to keep this from firing.
+  if (!value && allowWholeQueryFallback) {
     if (calls++) await sleep(NOMINATIM_GAP_MS);
     const geo = await geocode(q, { strict: true });
     if (geo && geo.importance >= MIN_GUESS_IMPORTANCE) {

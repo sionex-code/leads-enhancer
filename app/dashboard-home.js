@@ -1532,6 +1532,18 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
   const [resolvedArea, setResolvedArea] = useState(null);
   const [resolving, setResolving] = useState(false);
 
+  // Same question the server asks before trusting a whole-string geocode: does
+  // the typed text already name one of our own services? "spa" is also a real,
+  // prominent town in Belgium — geocoding it silently moved a live search's
+  // circle off the user's own location and onto Belgium, for no reason beyond
+  // sharing a name. An explicit "in <place>"/"near <place>" still resolves
+  // normally either way; this only gates the case where nothing marks a place
+  // at all, so a bare recognised keyword can never be mistaken for one.
+  const queryNamesKnownService = useMemo(
+    () => catalogServices.some((s) => query.trim().toLowerCase().includes(s.name.toLowerCase())),
+    [query, catalogServices]
+  );
+
   useEffect(() => {
     // A query we can already answer from our own catalog needs no geocoder: we
     // know the city, and asking Nominatim would only add latency and a second
@@ -1549,7 +1561,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     // Debounced: this hits Nominatim, and firing per keystroke would be both
     // useless and a good way to get the app rate limited.
     const timer = setTimeout(() => {
-      fetch(`${BASE_PATH}/api/geo/resolve?q=${encodeURIComponent(text)}`)
+      fetch(`${BASE_PATH}/api/geo/resolve?q=${encodeURIComponent(text)}&knownService=${queryNamesKnownService ? "1" : "0"}`)
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => {
           if (!alive) return;
@@ -1566,7 +1578,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
       clearTimeout(timer);
       setResolving(false);
     };
-  }, [queryIsCustom, query, bestMatch]);
+  }, [queryIsCustom, query, bestMatch, queryNamesKnownService]);
 
   // Move the pin onto the resolved place. Deliberately not the other way round:
   // dragging the pin afterwards still works, because this only fires when the

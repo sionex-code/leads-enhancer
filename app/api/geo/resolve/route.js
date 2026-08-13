@@ -19,11 +19,17 @@ export async function GET(request) {
   const { response } = await requireUser();
   if (response) return response;
 
-  const q = (new URL(request.url).searchParams.get("q") || "").trim();
+  const params = new URL(request.url).searchParams;
+  const q = (params.get("q") || "").trim();
   if (!q) return Response.json({ resolved: false });
+  // Set by the caller when the text, with no "in"/"near"/"," marker, already
+  // names one of our own services — "spa" is also a real town in Belgium, and
+  // without this the map preview jumped there for a plain service keyword.
+  // See the matching guard in web/lib/geo-resolve.cjs.
+  const knownService = params.get("knownService") === "1";
 
   try {
-    const area = await geo.resolveArea(q);
+    const area = await geo.resolveArea(q, { allowWholeQueryFallback: !knownService });
     if (!area) return Response.json({ resolved: false });
     return Response.json({
       resolved: true,
