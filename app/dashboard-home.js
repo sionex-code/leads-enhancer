@@ -43,7 +43,6 @@ import {
   TrendingUp,
   MapPin,
   MoreHorizontal,
-  Copy,
   LocateFixed,
   Monitor,
   Smartphone,
@@ -95,7 +94,6 @@ const FIND_TOUR = [
 // (tourKey "workspace") and replays from the topbar "Tour" button.
 const WORKSPACE_TOUR = [
   { key: "", title: "Your leads workspace", body: "You found leads. Here's how to enrich them, spot the weak websites, and turn them into outreach." },
-  { key: "project-id", title: "Your project ID", body: "Every project gets its own short ID. Click it to copy — it's the fastest way to point us at this exact project if you ever need support." },
   { key: "ws-enrich", title: "Enrich", body: "Grab each lead's email address and social profiles automatically by crawling their website. This button does it for every captured lead at once." },
   { key: "ws-whatsapp", title: "Check WhatsApp", body: "See which leads' phone numbers are active on WhatsApp, so you know who you can message directly." },
   { key: "ws-leads", title: "Per-lead actions", body: "Every row has quick actions: grab email & socials, check WhatsApp, run a website page-speed audit (desktop + mobile Performance / SEO scores), and generate a full website report. Tick the checkboxes to act on many leads at once." },
@@ -3609,25 +3607,6 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
               </button>
             )}
           </div>
-        )}
-
-        {/* Support-reference id. Small and easy to skip, but it has to be
-            somewhere a user can actually find and copy it — it was being
-            generated for every project already and shown nowhere at all. */}
-        {(status?.publicId || selectedProject?.publicId) && (
-          <button
-            type="button"
-            data-tour="project-id"
-            onClick={() => {
-              const id = status?.publicId || selectedProject?.publicId;
-              navigator.clipboard?.writeText(id).then(() => showToast(`Copied project ID ${id}`)).catch(() => {});
-            }}
-            className="inline-flex items-center gap-1.5 self-start rounded-full border border-border/60 bg-card/40 px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-            title="Copy project ID — reference this if you contact support about this project"
-          >
-            <Copy size={11} />
-            ID {status?.publicId || selectedProject?.publicId}
-          </button>
         )}
 
         {/* KPI strip — one bordered row, four numbers, roughly half the height
