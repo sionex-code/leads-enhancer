@@ -7,6 +7,7 @@ import {
   Smartphone,
   AlertTriangle,
   ArrowRight,
+  ArrowUpCircle,
   CheckCircle2,
   RefreshCw,
 } from "lucide-react";
@@ -239,8 +240,50 @@ function useReturnTarget() {
   return target;
 }
 
-function ReadyPanel({ version }) {
+function ReadyPanel({ version, outdated, latestVersion }) {
   const { href, label } = useReturnTarget();
+  const browser = useBrowser();
+
+  // An outdated install is the whole reason somebody lands back here, so it
+  // gets the download button up front rather than a green "you're all set".
+  if (outdated) {
+    return (
+      <div className="mt-8 rounded-2xl border border-sky-500/40 bg-sky-500/[0.08] p-6">
+        <div className="flex gap-3">
+          <ArrowUpCircle className="mt-0.5 h-5 w-5 shrink-0 text-sky-600" />
+          <div className="min-w-0">
+            <h2 className="font-medium text-foreground">
+              An update is ready{latestVersion ? ` — v${latestVersion}` : ""}
+            </h2>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              You&apos;re running v{version}. Download the zip, unzip it over the
+              same <Code>{FOLDER_NAME}</Code> folder, then click the refresh arrow
+              on its card at <Code>{browser.url || "chrome://extensions"}</Code>.
+              Reload this page afterwards so it can see the new version.
+            </p>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <a
+                href={`/${ZIP_NAME}`}
+                download
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:opacity-90"
+              >
+                <Download className="h-4 w-4" />
+                Download the update
+              </a>
+              <a
+                href={href}
+                className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-foreground"
+              >
+                Skip for now
+                <ArrowRight className="h-4 w-4" />
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-8 rounded-2xl border border-emerald-500/40 bg-emerald-500/[0.07] p-6">
       <div className="flex gap-3">
@@ -424,7 +467,7 @@ function Steps({ browser }) {
 }
 
 export default function InstallGuide() {
-  const { checking, installed, version } = useExtension({ poll: true });
+  const { checking, installed, version, outdated, latestVersion } = useExtension({ poll: true });
   const browser = useBrowser();
   const [override, setOverride] = useState(false);
 
@@ -441,8 +484,8 @@ export default function InstallGuide() {
   if (installed) {
     return (
       <>
-        <ReadyPanel version={version} />
-        <details className="mt-8">
+        <ReadyPanel version={version} outdated={outdated} latestVersion={latestVersion} />
+        <details className="mt-8" open={outdated}>
           <summary className="cursor-pointer text-sm text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-foreground">
             Show the install steps again
           </summary>

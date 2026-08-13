@@ -16,6 +16,7 @@ import {
   Loader2,
 } from "lucide-react";
 import AccountWidget from "../AccountWidget";
+import ExtensionUpdateBanner from "../ExtensionUpdateBanner";
 import useSidebarCollapse from "../useSidebarCollapse";
 import Tour from "../Tour";
 import { Sheet, SheetContent } from "../ui/sheet";
@@ -328,6 +329,11 @@ export default function AppShell({ active, title, subtitle, actions, sidebarExtr
             </button>
           </div>
         </header>
+
+        {/* Sits below the sticky header, above the page: it scrolls away rather
+            than eating height on every screen forever, but it is the first
+            thing under the title bar on arrival. */}
+        <ExtensionUpdateBanner />
 
         {/* overflow-x-clip is a page-level guard against horizontal scroll on
             mobile; wide tables still scroll inside their own overflow wrappers. */}

@@ -14,6 +14,7 @@ const DETECT_TIMEOUT_MS = 2500;
 const PING_RETRY_MS = 300;
 
 let cachedVersion = null;
+let cachedLatest = null;
 
 function newId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -37,6 +38,27 @@ export function versionAtLeast(version, min) {
 // know — so the page would otherwise wait forever for a RESULT that never
 // comes. Anything calling enrichDomains() should check this first.
 export const MIN_DOMAIN_FINDER_VERSION = "2.4.0";
+
+// The extension build we currently publish, read from a static file that ships
+// with this app (public/extension-version.json).
+//
+// The zip is uploaded to the VPS by hand, so that file is the one thing that
+// has to be bumped alongside it — it's how a page load knows a newer build
+// exists. Self-hosted unpacked extensions never auto-update, so without this
+// an out-of-date install stays out of date silently until something it can't
+// do (see MIN_DOMAIN_FINDER_VERSION) finally fails in the user's face.
+export function getLatestExtensionVersion() {
+  if (typeof window === "undefined") return Promise.resolve(null);
+  if (cachedLatest) return Promise.resolve(cachedLatest);
+  return fetch("/extension-version.json", { cache: "no-store" })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => {
+      const v = d?.version || null;
+      if (v) cachedLatest = v;
+      return v;
+    })
+    .catch(() => null);
+}
 
 // Resolves with the extension version string, or null if it isn't installed.
 export function detectExtension({ timeoutMs = DETECT_TIMEOUT_MS } = {}) {

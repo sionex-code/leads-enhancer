@@ -66,7 +66,7 @@ export default function AccountWidget({ collapsed = false }) {
   const me = useMe();
   // Extension install state rides along with the account menu entry below, so
   // "is live search going to work?" stays answerable from every page.
-  const { checking: extChecking, installed: extInstalled } = useExtension();
+  const { checking: extChecking, installed: extInstalled, outdated: extOutdated } = useExtension();
 
   // Session gone (expired cookie, signed out in another tab). Offer the way
   // back in rather than a spinner that never resolves.
@@ -177,10 +177,16 @@ export default function AccountWidget({ collapsed = false }) {
                 <Puzzle className="h-4 w-4" /> Extension
                 {!extChecking && (
                   <span
-                    title={extInstalled ? "Extension connected" : "Extension not installed"}
+                    title={
+                      extOutdated
+                        ? "Extension update available"
+                        : extInstalled
+                          ? "Extension connected"
+                          : "Extension not installed"
+                    }
                     className={cn(
                       "ml-auto h-2 w-2 shrink-0 rounded-full",
-                      extInstalled ? "bg-emerald-500" : "bg-amber-500"
+                      extOutdated ? "bg-sky-500" : extInstalled ? "bg-emerald-500" : "bg-amber-500"
                     )}
                   />
                 )}
