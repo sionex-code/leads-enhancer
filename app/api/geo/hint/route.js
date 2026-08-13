@@ -1,23 +1,22 @@
 import { headers } from "next/headers";
-import { locationFromHeaders } from "../../../../web/lib/geo-hint.cjs";
+import { resolveLocation } from "../../../../web/lib/geo-hint.cjs";
 import geo from "../../../../web/lib/geo-catalog.cjs";
 
 export const dynamic = "force-dynamic";
 
-// GET /api/geo/hint -> what the edge says about *this* request, and the city we
-// would preselect from it.
+// GET /api/geo/hint -> where we think *this* request is coming from, and the
+// city we would preselect from it.
 //
-// Diagnostic for "the form still opens on the wrong city". The city hint depends
-// on Cloudflare's "Add visitor location headers" managed transform, which is
-// available on every plan but off by default, so the useful question is whether
-// those headers arrived at all — and there is no way to answer it from outside.
+// Diagnostic for "the form still opens on the wrong city", which cannot be
+// answered from outside: `source` says whether the answer came from Cloudflare's
+// location headers, from an IP lookup, or from a cached one.
 //
-// Returns only what the caller's own request carries: their own IP-derived
-// location, never anybody else's, and never the IP itself.
+// Returns only what the caller's own request resolves to — their own location,
+// never anybody else's, and never the IP itself.
 export async function GET() {
   const h = await headers();
-  const where = locationFromHeaders(h);
-  const hasCityHeaders = !!(where.city || (where.lat != null && where.lng != null));
+  const where = await resolveLocation(h);
+  const located = !!(where.city || (where.lat != null && where.lng != null));
 
   let city = null;
   if (where.countryCode && geo.available()) {
@@ -32,11 +31,11 @@ export async function GET() {
       edge: where,
       geoIndexBuilt: geo.available(),
       resolvedCity: city,
-      hint: hasCityHeaders
+      hint: located
         ? city
-          ? "City headers present and matched — the form will open on this city."
-          : "City headers present but no city in our index matched; the form falls back to the country."
-        : "No city headers. Enable Cloudflare -> Rules -> Settings -> Managed Transforms -> 'Add visitor location headers' to get city-level defaults.",
+          ? `Location resolved (${where.source}) and matched — the form opens on this city.`
+          : `Location resolved (${where.source}) but no city in our index matched; the form falls back to the country.`
+        : "No location beyond the country. Cloudflare's 'Add visitor location headers' managed transform would make this instant and free.",
     },
     { headers: { "Cache-Control": "no-store" } }
   );

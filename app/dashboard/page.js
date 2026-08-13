@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 import DashboardHome from "../dashboard-home.js";
-import { locationFromHeaders } from "../../web/lib/geo-hint.cjs";
+import { resolveLocation } from "../../web/lib/geo-hint.cjs";
 import geo from "../../web/lib/geo-catalog.cjs";
 
 // Authenticated app home. `?view=projects` opens the projects workspace; anything
@@ -13,10 +13,11 @@ export const dynamic = "force-dynamic";
 // the most leads for.
 //
 // Coordinates first: they place someone in the city they are actually in, which
-// a country code cannot. The city *name* is the fallback, because the edge's
-// spelling has to match ours to be usable. Both are optional — Cloudflare only
-// sends them once "Add visitor location headers" is enabled — and the whole
-// thing degrades to a country hint, then to nothing.
+// a country code cannot. The city *name* is the fallback, because the provider's
+// spelling has to match ours to be usable. resolveLocation takes Cloudflare's
+// location headers when they are enabled and resolves the visitor's IP when they
+// are not, so this works either way and degrades to a country hint if neither
+// answers.
 function resolveCityHint({ countryCode, city, lat, lng }) {
   if (!countryCode || !geo.available()) return null;
   const found =
@@ -31,7 +32,7 @@ function resolveCityHint({ countryCode, city, lat, lng }) {
 
 export default async function Page({ searchParams }) {
   const params = await searchParams;
-  const where = locationFromHeaders(await headers());
+  const where = await resolveLocation(await headers());
   // The country's display name travels separately from the city, because the
   // city depends on headers that may not be switched on while the country does
   // not — and the live picker needs a name, not a code, to describe a search.
