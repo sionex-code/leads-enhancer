@@ -572,23 +572,6 @@ function matchCatalog(text, index, { limit = 6, preferCityId = null } = {}) {
   return out.sort((a, b) => b.score - a.score || b.leadCount - a.leadCount).slice(0, limit);
 }
 
-function Chip({ active, children, ...props }) {
-  return (
-    <button
-      type="button"
-      className={cn(
-        "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-        active
-          ? "border-primary bg-primary/15 text-primary"
-          : "border-border bg-card/40 text-muted-foreground hover:border-primary/50 hover:text-foreground"
-      )}
-      {...props}
-    >
-      {children}
-    </button>
-  );
-}
-
 // Live remaining-credits pill (reuses the /api/me poll behind useMe). Shown on the
 // find-leads home and in the workspace header so the balance is always visible.
 // Contact details behind the plan gate for free accounts.
@@ -1073,8 +1056,6 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     const defaultCityName = fallbackCountry.cities[10] || fallbackCountry.cities[0];
     return { id: null, name: defaultCityName, admin: "", lat: null, lng: null, leadCount: 0 };
   });
-  const [citySearch, setCitySearch] = useState("");
-  const [showChips, setShowChips] = useState(false);
   const [max, setMax] = useState("100");
   // One combined rating filter. "" = any, "gte:N" = N and up, "lt:N" = below N.
   // Mapped to the API's minRating/maxRating on submit so the backend is unchanged.
@@ -1260,13 +1241,6 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     }
   }, [countryCode, cityObj, service]);
 
-  const shownCities = useMemo(() => {
-    const q = citySearch.trim().toLowerCase();
-    return q
-      ? (country.cities || []).filter((c) => (c.name || "").toLowerCase().includes(q))
-      : (country.cities || []);
-  }, [citySearch, country]);
-
   function changeCountry(nextCode) {
     const nextCountry = catalogCountries.find((c) => c.code === nextCode) || catalogCountries[0];
     if (!nextCountry) return;
@@ -1275,7 +1249,6 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     const nextCity = nextCountry.cities?.[0] || null;
     setCountryCode(nextCountry.code);
     setCityObj(nextCity);
-    setCitySearch("");
     if (nextCity?.lat != null) setCenter({ lat: nextCity.lat, lng: nextCity.lng });
     // Changing country moves the search; it does not decide what is being
     // searched for. Reusing `service` here is what turned a typed "chezious"
@@ -1382,7 +1355,6 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
   function applyMatch(m) {
     setSuggestOpen(false);
     setAllCities(false);
-    setCitySearch("");
     setService(m.service);
     setCountryCode(m.country.code);
     setCityObj(m.city);
@@ -1457,7 +1429,6 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
         setGeoBusy(false);
         setCenter(point);
         setAllCities(false);
-        setCitySearch("");
 
         // Does the warehouse actually have this place? Same country, same name.
         const match = named
@@ -1732,7 +1703,6 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
   }
 
   // The chip browser uses the same city objects from the catalog
-  const chipCityLabel = (c) => `${c.name}${c.admin ? ", " + c.admin : ""}`;
   // For the select dropdown value we use city id (or name as fallback)
   const citySelectVal = allCities ? "__all__" : cityObj?.id ?? cityObj?.name ?? "";
 
@@ -2101,64 +2071,6 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
           height={210}
         />
       </div>
-
-      {/* Dropdowns are the default; the chip browser below is an optional, collapsed view. */}
-      <div className="mt-3 flex justify-center">
-        <button
-          type="button"
-          onClick={() => setShowChips((v) => !v)}
-          className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card/40 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
-        >
-          <SlidersHorizontal className="h-3.5 w-3.5" />
-          {showChips ? "Hide chip browser" : "Browse popular services & cities"}
-          <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showChips && "rotate-180")} />
-        </button>
-      </div>
-
-      {showChips && (
-        <div className="mt-3 grid gap-3 lg:grid-cols-[260px_1fr]">
-          <Card>
-            <CardContent className="p-4">
-              <h2 className="mb-3 text-sm font-semibold">Service</h2>
-              <div className="flex flex-wrap gap-1.5">
-                {catalogServices.map((item) => (
-                  <Chip key={item.name} active={service === item.name} onClick={() => selectService(item.name)}>{item.name}</Chip>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4">
-              <div className="mb-3 flex flex-wrap gap-1.5">
-                {catalogCountries.map((item) => (
-                  <Chip key={item.code} active={countryCode === item.code} onClick={() => changeCountry(item.code)}>{item.code}</Chip>
-                ))}
-              </div>
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold">{country.name}</h2>
-                <Input
-                  value={citySearch}
-                  onChange={(e) => setCitySearch(e.target.value)}
-                  placeholder="Find city"
-                  className="h-8 w-40"
-                />
-              </div>
-              <div className="flex max-h-72 flex-wrap gap-1.5 overflow-y-auto">
-                {shownCities.map((c) => (
-                  <Chip
-                    key={c.id ?? c.name}
-                    active={cityObj?.id != null ? cityObj.id === c.id : cityObj?.name === c.name}
-                    onClick={() => selectCity(c)}
-                  >
-                    {chipCityLabel(c)}
-                  </Chip>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
   );
 }
