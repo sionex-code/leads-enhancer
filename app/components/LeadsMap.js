@@ -24,6 +24,17 @@ function makeCenterIcon(L) {
   });
 }
 
+// The grab handle that sits on the circle's edge. Small, high-contrast and
+// obviously draggable — a plain marker would read as a second search pin.
+function makeHandleIcon(L) {
+  return L.divIcon({
+    className: "",
+    iconSize: [16, 16],
+    iconAnchor: [8, 8],
+    html: `<span style="display:block;width:14px;height:14px;border-radius:9999px;background:#fff;border:3px solid #e05305;box-shadow:0 1px 3px rgba(0,0,0,.35);cursor:ew-resize"></span>`,
+  });
+}
+
 /**
  * LeadsMap — a reusable Leaflet/OSM component.
  *
@@ -31,8 +42,10 @@ function makeCenterIcon(L) {
  *   center        {lat, lng}          — map center (required for anything to show)
  *   radiusKm      number              — radius in km; draws a circle and sets zoom
  *   points        Array<{lat,lng,name}> — lead pins (read-only markers)
- *   interactive   boolean             — if true, center marker is draggable
- *   onCenterChange ({lat,lng}) => void — fired after dragging the center marker
+ *   interactive   boolean             — if true, the search area can be moved and
+ *                                       resized directly on the map
+ *   onCenterChange ({lat,lng}) => void — fired after moving the search area
+ *   onRadiusChange (km) => void        — fired after dragging the resize handle
  *   height        number (px)         — container height (default 360)
  *   wheelZoom     boolean             — wheel zooms the map (default true). Turn
  *                                       it off for a map inside a scrollable
@@ -50,6 +63,9 @@ export default function LeadsMap({
   points = [],
   interactive = false,
   onCenterChange,
+  onRadiusChange,
+  minRadiusKm = 1,
+  maxRadiusKm = 200,
   height = 360,
   wheelZoom = true,
   className,
@@ -58,7 +74,12 @@ export default function LeadsMap({
   const mapRef = useRef(null);
   const circleRef = useRef(null);
   const markerRef = useRef(null);
+  const handleRef = useRef(null);
   const pinsLayerRef = useRef(null);
+  // Latest callbacks, so the mount-only effect's handlers never call a stale
+  // closure after a parent re-render.
+  const cbRef = useRef({ onCenterChange, onRadiusChange, minRadiusKm, maxRadiusKm });
+  cbRef.current = { onCenterChange, onRadiusChange, minRadiusKm, maxRadiusKm };
   // Tracks the last center/radius we actually applied, so an unrelated parent
   // re-render (which hands us a fresh `center` object with identical values)
   // never re-runs setView and snaps the user's manual zoom back.
@@ -127,10 +148,95 @@ export default function LeadsMap({
     markerRef.current = marker;
 
     if (interactive) {
+      // The circle used to be scenery: only the pin moved it, and only the
+      // slider sized it. People try to drag the area itself, and try to pull its
+      // edge, because that is what a search radius on a map looks like it does.
+
+      // Sync everything that follows the centre.
+      const moveTo = (pos) => {
+        circle.setLatLng(pos);
+        marker.setLatLng(pos);
+        placeHandle(pos, circle.getRadius());
+      };
+
+      // The handle sits due east of the centre, on the edge, so its distance
+      // from the centre IS the radius.
+      const edgeOf = (pos, radiusMeters) => {
+        // One degree of longitude shrinks with latitude; at the poles it
+        // collapses, so the cosine is floored to keep this finite.
+        const kmPerDegLng = 111.32 * Math.max(0.01, Math.cos((pos.lat * Math.PI) / 180));
+        return L.latLng(pos.lat, pos.lng + radiusMeters / 1000 / kmPerDegLng);
+      };
+
+      function placeHandle(pos, radiusMeters) {
+        if (handleRef.current) handleRef.current.setLatLng(edgeOf(pos, radiusMeters));
+      }
+
+      // ---- drag the area ----
+      let dragging = false;
+      let grabOffset = null;
+
+      const onAreaDown = (e) => {
+        dragging = true;
+        const c = circle.getLatLng();
+        grabOffset = { lat: c.lat - e.latlng.lat, lng: c.lng - e.latlng.lng };
+        map.dragging.disable();
+        L.DomUtil.addClass(map.getContainer(), "leaflet-grabbing");
+        map.on("mousemove", onAreaMove);
+        map.once("mouseup", onAreaUp);
+        // Leaflet's mouseup only fires over the map. Releasing the button off
+        // the edge would otherwise leave the drag latched and map panning
+        // disabled, with no way back short of a reload.
+        document.addEventListener("mouseup", onAreaUp, { once: true });
+      };
+      const onAreaMove = (e) => {
+        if (!dragging) return;
+        moveTo(L.latLng(e.latlng.lat + grabOffset.lat, e.latlng.lng + grabOffset.lng));
+      };
+      const onAreaUp = () => {
+        if (!dragging) return; // both listeners fire when the release is on the map
+        dragging = false;
+        map.dragging.enable();
+        L.DomUtil.removeClass(map.getContainer(), "leaflet-grabbing");
+        map.off("mousemove", onAreaMove);
+        document.removeEventListener("mouseup", onAreaUp);
+        const pos = circle.getLatLng();
+        cbRef.current.onCenterChange?.({ lat: pos.lat, lng: pos.lng });
+      };
+
+      circle.on("mousedown", onAreaDown);
+      circle.on("mouseover", () => { if (!dragging) circle.setStyle({ fillOpacity: 0.14 }); });
+      circle.on("mouseout", () => { if (!dragging) circle.setStyle({ fillOpacity: 0.08 }); });
+
+      // ---- drag the edge to resize ----
+      const handle = L.marker(edgeOf(circle.getLatLng(), circle.getRadius()), {
+        draggable: true,
+        icon: makeHandleIcon(L),
+        keyboard: false,
+        zIndexOffset: 1000,
+        title: "Drag to change the radius",
+      }).addTo(map);
+      handleRef.current = handle;
+
+      const applyHandle = (commit) => {
+        const c = circle.getLatLng();
+        const km = c.distanceTo(handle.getLatLng()) / 1000;
+        const { minRadiusKm: lo, maxRadiusKm: hi } = cbRef.current;
+        const clamped = Math.min(hi, Math.max(lo, Math.round(km)));
+        circle.setRadius(clamped * 1000);
+        // Snap the handle back onto the edge, so it can't drift off the circle
+        // when the value was clamped or rounded.
+        handle.setLatLng(edgeOf(c, clamped * 1000));
+        if (commit) cbRef.current.onRadiusChange?.(clamped);
+      };
+      handle.on("drag", () => applyHandle(false));
+      handle.on("dragend", () => applyHandle(true));
+
+      marker.on("drag", () => moveTo(marker.getLatLng()));
       marker.on("dragend", () => {
         const pos = marker.getLatLng();
-        circle.setLatLng(pos);
-        onCenterChange?.({ lat: pos.lat, lng: pos.lng });
+        moveTo(pos);
+        cbRef.current.onCenterChange?.({ lat: pos.lat, lng: pos.lng });
       });
     }
 
@@ -143,6 +249,7 @@ export default function LeadsMap({
       mapRef.current = null;
       circleRef.current = null;
       markerRef.current = null;
+      handleRef.current = null;
       pinsLayerRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -171,10 +278,24 @@ export default function LeadsMap({
     if (marker) {
       marker.setLatLng([lat, lng]);
     }
+    if (handleRef.current) {
+      const kmPerDegLng = 111.32 * Math.max(0.01, Math.cos((lat * Math.PI) / 180));
+      handleRef.current.setLatLng([lat, lng + radiusKm / kmPerDegLng]);
+    }
 
-    if (centerMoved || radiusChanged) {
-      const zoom = radiusChanged ? zoomFromRadius(radiusKm) : map.getZoom();
+    // Zoom belongs to the user once they have touched it. Every radius change
+    // used to slam the view back to zoomFromRadius, so zooming in to place the
+    // pin and then nudging the slider threw the zoom away. Refit only when
+    // there is no view yet, when the search moves somewhere new, or when the
+    // area has grown past what is actually on screen.
+    const firstView = last.lat === null;
+    const circleOffScreen =
+      radiusChanged && circle && !map.getBounds().contains(circle.getBounds());
+    if (firstView || centerMoved) {
+      const zoom = firstView ? zoomFromRadius(radiusKm) : map.getZoom();
       map.setView([lat, lng], zoom);
+    } else if (circleOffScreen) {
+      map.fitBounds(circle.getBounds(), { padding: [24, 24] });
     }
     lastViewRef.current = { lat, lng, radiusKm };
   }, [center?.lat, center?.lng, radiusKm]);

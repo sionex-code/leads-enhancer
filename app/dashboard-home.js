@@ -1364,9 +1364,17 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
   // If the place does happen to be a city we cover, the dropdowns move onto it
   // as well, so the search can be served instantly from the warehouse.
   //
-  // Requires HTTPS, which production is.
+  // Requires a secure context, which production is; checked explicitly below.
   function locateMe() {
-    if (typeof navigator === "undefined" || !navigator.geolocation) {
+    if (typeof window === "undefined") return;
+    // Browsers hide navigator.geolocation entirely on a non-secure origin, so
+    // without this the insecure case reports itself as an old browser and sends
+    // the user looking for a setting that was never the problem.
+    if (!window.isSecureContext) {
+      setGeoNote({ tone: "warn", text: "Location needs a secure (https) connection. Pick a city from the dropdown instead." });
+      return;
+    }
+    if (!navigator.geolocation) {
       setGeoNote({ tone: "warn", text: "This browser can't share a location." });
       return;
     }
@@ -1472,15 +1480,25 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
       },
       (err) => {
         setGeoBusy(false);
+        // The three failures need three different answers: one is a permission
+        // to grant, one is a retry, and one is not fixable from here. Collapsing
+        // the last two into "pick a city instead" hid the fact that a timeout is
+        // worth trying again.
+        const byCode = {
+          1: "Location access was blocked. Allow it from the icon in your address bar, then try again.",
+          2: "Your device couldn't work out where it is. Pick a city from the dropdown instead.",
+          3: "Finding your location took too long. Try again, or pick a city from the dropdown.",
+        };
         setGeoNote({
           tone: "warn",
-          text:
-            err?.code === 1
-              ? "Location access was blocked. Allow it from the icon in your address bar, then try again."
-              : "Couldn't get your location. Pick a city from the dropdown instead.",
+          text: byCode[err?.code] || "Couldn't get your location. Pick a city from the dropdown instead.",
         });
       },
-      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
+      // "Near me" is a claim about a neighbourhood, and the coarse fix can be
+      // kilometres out — which is how a search from Rawalpindi came back
+      // centred on Islamabad sectors. Ask for the precise fix, and allow the
+      // longer wait that needs; a five-minute-old cached position is still fine.
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 300000 }
     );
   }
 
@@ -1965,7 +1983,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
         <div className="mb-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <MapPin className="h-3.5 w-3.5" />
-            <span>Drag the pin to refine the search center</span>
+            <span>Drag the circle to move the search area, or its edge to resize</span>
           </div>
           <button
             type="button"
@@ -2000,6 +2018,11 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
           center={center}
           radiusKm={Number(radiusKm) || 10}
           onCenterChange={setCenter}
+          // Dragging the circle's edge is the same input as the slider, so it
+          // writes to the same state and the km readout follows along.
+          onRadiusChange={(km) => setRadiusKm(km)}
+          minRadiusKm={1}
+          maxRadiusKm={200}
           height={210}
         />
       </div>
