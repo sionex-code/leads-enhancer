@@ -2412,9 +2412,20 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
     }
   }
 
+  // The sidebar carries the project list and its count on *every* screen, so the
+  // list has to load on the find page too. It used to bail out here whenever
+  // simpleMode was on, which is the find page, so the badge read 0 and the
+  // nested list was empty for anyone who had not opened the workspace yet —
+  // "you have 0 projects" to someone with 128 of them.
+  //
+  // Only the fetch moves. The 1.5s status poll below stays in the workspace,
+  // which is the only place that needs live run progress.
   useEffect(() => {
-    if (simpleMode) return;
-    loadProjects().catch((err) => setError(err.message));
+    loadProjects().catch((err) => {
+      // On the find page this is a sidebar nicety; failing it must not put an
+      // error banner across a page the user is trying to search from.
+      if (!simpleMode) setError(err.message);
+    });
   }, [simpleMode]);
 
   useEffect(() => {
