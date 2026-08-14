@@ -75,7 +75,7 @@ const LeadsMap = dynamic(() => import("./components/LeadsMap"), { ssr: false });
 // are all on-screen). Passed to AppShell as tourKey="find".
 const FIND_TOUR = [
   { key: "find-query", title: "Type what you're after", body: "Search in plain English — \"plumber in Austin\" or just \"plumber\" to search wherever the map below is centered. The dropdowns underneath do the same job if you'd rather click than type; edit either one and the other follows." },
-  { key: "find-source", title: "Our database or live", body: "\"Our database\" answers instantly from leads we already hold. \"Live via extension\" scrapes Google Maps in your browser right now — automatic for anything we don't already have." },
+  { key: "find-source", title: "Readymade data or Google", body: "\"Readymade data\" answers instantly from leads we already hold, already enriched. \"Find from Google\" scrapes Google Maps in your browser right now — automatic for anything we don't already have." },
   { key: "find-service", title: "Pick a service", body: "Choose the type of business you want to reach, such as plumbers, dentists, real estate agencies, and so on." },
   { key: "find-country", title: "Choose a country", body: "Pick the country to search in. The city list below updates to match." },
   { key: "find-city", title: "Pick a city", body: "Select a city, or choose \"All cities\" to search the whole country at once." },
@@ -492,7 +492,7 @@ const startsWithWord = (hay, prefix) => hay === prefix || hay.startsWith(`${pref
 // How well `text` matches `name`: 3 exact, 2 word-boundary prefix, 1 word-boundary
 // substring, 0 no match. Ranking by this keeps "plumber" ahead of "commercial
 // plumber". Every comparison is word-boundary aware: a bare substring hit is not
-// a match, because a suggestion we show under "Ready in our database" is a claim.
+// a match, because a suggestion we show under "Readymade & enriched" is a claim.
 function matchScore(text, name) {
   const t = norm(text);
   const n = norm(name);
@@ -634,10 +634,10 @@ function SourcePicker({ source, setSource, ext, lockedLive }) {
             value={source}
             onChange={(e) => setSource(e.target.value)}
             className="h-9"
-            title="Our database answers instantly from leads we already hold. Live searches the map right now, in this browser."
+            title="Readymade data answers instantly from leads we already hold, already enriched with emails, socials and scores. Find from Google scrapes the map right now, in this browser."
           >
-            <option value="warehouse">Our database</option>
-            <option value="live">Live via extension</option>
+            <option value="warehouse">Readymade data (enriched)</option>
+            <option value="live">Find from Google (live)</option>
           </Select>
         </label>
         <div className="flex flex-wrap items-center gap-2">
@@ -645,16 +645,16 @@ function SourcePicker({ source, setSource, ext, lockedLive }) {
           <span
             title={
               lockedLive
-                ? "Our database only covers the services in the dropdown, so what you typed is searched live in your browser."
+                ? "Our readymade data only covers the services in the dropdown, so what you typed is fetched from Google live in your browser."
                 : active === "live"
-                  ? "This search scrapes the map right now, in this browser."
-                  : "This search is answered instantly from leads we already hold."
+                  ? "This search scrapes Google Maps right now, in this browser."
+                  : "This search is answered instantly from readymade, enriched leads we already hold."
             }
             className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-xs"
           >
             <ActiveIcon className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="font-medium text-foreground">
-              {active === "live" ? "Live via extension" : "Our database"}
+              {active === "live" ? "Find from Google (live)" : "Readymade data (enriched)"}
             </span>
           </span>
         </div>
@@ -670,8 +670,8 @@ function SourcePicker({ source, setSource, ext, lockedLive }) {
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {lockedLive
-              ? "Our database only covers the services in the dropdown, so what you typed has to be searched live, and live search runs inside your own browser."
-              : "Live search runs inside your own browser, so it needs the LeadsFunda extension. Nothing here will run until it is installed."}
+              ? "Our readymade data only covers the services in the dropdown, so what you typed has to come from Google live, and that runs inside your own browser."
+              : "Finding from Google runs inside your own browser, so it needs the LeadsFunda extension. Nothing here will run until it is installed."}
           </p>
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
             {/* New tab: installing is a detour, and the search being set up
@@ -693,7 +693,7 @@ function SourcePicker({ source, setSource, ext, lockedLive }) {
                 onClick={() => setSource("warehouse")}
                 className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-accent"
               >
-                Use our database instead
+                Use readymade data instead
               </button>
             )}
           </div>
@@ -1156,7 +1156,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
   // warehouse lookup for somewhere else.
   const bestMatch = matches.length && matches[0].score >= 6 ? matches[0] : null;
 
-  // The list we're willing to put under "Ready in our database" holds itself to
+  // The list we're willing to put under "Readymade & enriched" holds itself to
   // the same bar as the one we'd actually run. A weak match is not worth showing:
   // an empty dropdown reads as "we don't have this", which is the truth, whereas
   // a confident wrong suggestion costs the user a search to discover.
@@ -1469,7 +1469,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
             tone: "ok",
             text: `You're in ${named.place}${
               named.countryName ? `, ${named.countryName}` : ""
-            }. We have no leads stored there yet, so this runs as a live search.`,
+            }. We have no readymade data there yet, so this comes from Google live.`,
           });
           return;
         }
@@ -1809,7 +1809,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
           {suggestOpen && suggestions.length > 0 && (
             <ul className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-lg">
               <li className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                Ready in our database
+                Readymade &amp; enriched
               </li>
               {suggestions.map((m) => (
                 <li key={`${m.service}-${m.city.id ?? m.city.name}`}>
@@ -1852,7 +1852,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
               <Database className="h-3.5 w-3.5 shrink-0 text-primary" />
               We already have <span className="font-semibold text-foreground">{bestMatch.leadCount.toLocaleString()}</span>
               {" "}<span className="capitalize">{bestMatch.service}</span> leads in{" "}
-              <span className="font-semibold text-foreground">{bestMatch.city.name}</span>, which runs instantly from our database.
+              <span className="font-semibold text-foreground">{bestMatch.city.name}</span>, readymade and enriched, so this runs instantly.
             </>
           ) : bestMatch ? (
             // Matched, but the user asked for live anyway. Say so rather than
@@ -1860,12 +1860,12 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
             <>
               <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />
               We hold <span className="font-semibold text-foreground">{bestMatch.leadCount.toLocaleString()}</span> of these in{" "}
-              <span className="font-semibold text-foreground">{bestMatch.city.name}</span>, but Lead source is set to live, so this will scrape fresh results.
+              <span className="font-semibold text-foreground">{bestMatch.city.name}</span> readymade, but Lead source is set to Google, so this will scrape fresh results.
             </>
           ) : (
             <>
               <Zap className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-              Nothing matching in our database, so this one is scraped live in your browser.
+              No readymade data for that, so this one is fetched from Google live in your browser.
             </>
           )}
         </p>
