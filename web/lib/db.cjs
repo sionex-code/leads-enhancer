@@ -1126,6 +1126,21 @@ async function exportCsv(userId, filters = {}) {
   return lines.join("");
 }
 
+// Just the ids matching a filter set — the work list for a CRM push. Separate
+// from queryLeads because that one pulls whole rows plus a per-row list_count
+// subquery; a push only needs to know *which* leads, and then loads them a
+// chunk at a time. Capped, like exportCsv, so a broad filter can't queue an
+// unbounded job.
+async function queryLeadIds(userId, filters = {}, cap = 2000) {
+  const { clause, params } = buildLeadWhere(userId, filters);
+  const limit = Math.max(1, Math.min(Number(cap) || 2000, 100000));
+  const { rows } = await q(
+    `SELECT id FROM leads ${clause} ORDER BY last_updated DESC LIMIT ${limit}`,
+    params
+  );
+  return rows.map((r) => r.id);
+}
+
 // ---- first-run guided tour flag --------------------------------------------
 async function isOnboarded(userId) {
   try {
@@ -1177,6 +1192,12 @@ module.exports = {
   listCities,
   statsLeads,
   exportCsv,
+  queryLeadIds,
+  // The allowlist a CRM field map validates its sources against — a mapping may
+  // only read columns that actually exist on a lead.
+  LEAD_COLUMNS,
+  WORKFLOW_COLUMNS,
+  EXPORT_COLUMNS,
   listLists,
   createList,
   getLeadListIds,

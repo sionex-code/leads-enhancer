@@ -2,19 +2,23 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import AppShell from "../components/app/AppShell";
 import AnimatedNumber from "../components/AnimatedNumber";
 import ReportModal from "../components/ReportModal";
 import ListsDialog from "../components/leads/ListsDialog";
+import PushToCrmDialog from "../components/crm/PushToCrmDialog";
 import ManageListsDialog from "../components/leads/ManageListsDialog";
 import BottomDock from "../components/ui/bottom-dock";
 import {
   Ban,
   BarChart3,
   Bot,
+  AlertTriangle,
   CheckCircle2,
   Columns3,
   Download,
+  Share2,
   ExternalLink,
   FileText,
   Globe2,
@@ -42,6 +46,7 @@ import { Select } from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
 import { Textarea } from "../components/ui/textarea";
 import { Sheet, SheetContent } from "../components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/table";
 import { InfoPopover } from "../components/ui/info-popover";
 import useColumnVisibility from "../components/useColumnVisibility";
@@ -674,6 +679,12 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
   // poller are shared; `kind` ("report" | "audit") just switches the labels.
   // { kind, total, done, failed, latest, finished, jobIds }.
   const [batch, setBatch] = useState(null);
+  // A CRM push runs server-side and outlives this component's render, so it is
+  // tracked by job id and polled, exactly like the report/audit batches.
+  const [crmDialog, setCrmDialog] = useState(null);
+  const [crmJob, setCrmJob] = useState(null);
+  const [crmFailures, setCrmFailures] = useState(null);
+  const crmPollRef = useRef(null);
   const batchPollRef = useRef(null);
   // Set to the latest `load` so the batch poller can refresh the list on finish
   // without depending on declaration order.
@@ -863,6 +874,45 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
   const refreshCredits = useCallback(() => {
     jsonFetch("/api/me").then((d) => setCredits(d?.entitlement?.credits ?? null)).catch(() => {});
   }, []);
+
+  // Poll a CRM push. Same 2.5s cadence as pollBatch, but the server already
+  // aggregates, so this is a single job rather than a fan-in.
+  const pollCrmJob = useCallback((jobId) => {
+    clearTimeout(crmPollRef.current);
+    const tick = async () => {
+      const job = await jsonFetch(`/api/crm/push/${jobId}`).catch(() => null);
+      if (!job) return;
+      setCrmJob(job);
+      const finished = ["done", "failed", "cancelled"].includes(job.status);
+      if (!finished) crmPollRef.current = setTimeout(tick, 2500);
+    };
+    tick();
+  }, []);
+
+  useEffect(() => () => clearTimeout(crmPollRef.current), []);
+
+  const cancelCrmPush = useCallback(async (jobId) => {
+    try { await jsonFetch(`/api/crm/push/${jobId}`, { method: "DELETE" }); } catch { /* already finished */ }
+  }, []);
+
+  const openCrmFailures = useCallback(async (jobId) => {
+    setCrmFailures({ loading: true, rows: [] });
+    try {
+      const d = await jsonFetch(`/api/crm/push/${jobId}/failures`);
+      setCrmFailures({ loading: false, rows: d.rows || [] });
+    } catch (e) {
+      setCrmFailures({ loading: false, rows: [], error: e.message });
+    }
+  }, []);
+
+  const retryCrmPush = useCallback(async (jobId) => {
+    try {
+      const d = await jsonFetch(`/api/crm/push/${jobId}/retry`, { method: "POST" });
+      setCrmFailures(null);
+      setCrmJob({ id: d.jobId, status: "queued", total: d.total, done: 0, succeeded: 0, failed: 0, skipped: 0, connection: d.connection });
+      pollCrmJob(d.jobId);
+    } catch (e) { alert(e.message); }
+  }, [pollCrmJob]);
 
   // Poll every job in a bulk batch (reports or audits) and roll the per-job
   // progress up into a single { done / total } figure for the progress panel.
@@ -1250,6 +1300,21 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
       <Button variant="outline" size="sm" disabled={!!batchBusy || loading} onClick={() => batchScan("status")} title="Check website status for all leads on this page">
         {batchBusy === "status" ? <Loader2 size={16} className="animate-spin" /> : <Globe2 size={16} />} <span className="hidden lg:inline">Check status</span>
       </Button>
+      {/* Same selection rule as Export right beside it: checked rows if there
+          are any, otherwise everything matching the current filters. */}
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={!!crmJob && !["done", "failed", "cancelled"].includes(crmJob.status)}
+        onClick={() => setCrmDialog(
+          selected.size > 0
+            ? { mode: "ids", ids: [...selected] }
+            : { mode: "filters", filters: Object.fromEntries(buildLeadParams()) }
+        )}
+        title={selected.size > 0 ? "Send the selected leads to your CRM" : "Send every lead matching the current filters to your CRM"}
+      >
+        <Share2 size={16} /> <span className="hidden lg:inline">{selected.size > 0 ? `Send ${selected.size}` : "Send to CRM"}</span>
+      </Button>
       <Button asChild size="sm">
         <a href={exportHref} data-tour="leads-export" title={selected.size > 0 ? "Export selected leads" : "Export all leads matching the current filters"}><Download size={16} /> <span className="hidden sm:inline">{exportLabel}</span></a>
       </Button>
@@ -1417,6 +1482,15 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
             <span className="font-medium tabular-nums">{selectedCount.toLocaleString()} selected</span>
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="outline" size="sm" onClick={() => setListDialog({ ids: [...selected] })}><ListPlus size={15} /> Add to list</Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!!crmJob && !["done", "failed", "cancelled"].includes(crmJob.status)}
+                onClick={() => setCrmDialog({ mode: "ids", ids: [...selected] })}
+                title="Send the selected leads to your CRM"
+              >
+                <Share2 size={15} /> Send to CRM
+              </Button>
               <Button variant="outline" size="sm" disabled={!!batchBusy || !!batch || !reportableCount} onClick={bulkReport} title={reportableCount ? (SHOW_CREDITS ? `Generate website reports (${REPORT_COST} credits each = ${reportCost} credits)` : "Generate website reports for the selected leads") : "Select leads with a website first"}>
                 {batchBusy === "report" ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
                 Report {SHOW_CREDITS && reportableCount ? `(${reportCost})` : ""}
@@ -1804,6 +1878,121 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
         </div>
         );
       })()}
+
+      {crmDialog && (
+        <PushToCrmDialog
+          target={crmDialog}
+          count={selected.size}
+          onClose={() => setCrmDialog(null)}
+          onStarted={(d) => {
+            setCrmJob({ id: d.jobId, status: "queued", total: d.total, done: 0, succeeded: 0, failed: 0, skipped: 0, connection: d.connection });
+            pollCrmJob(d.jobId);
+          }}
+        />
+      )}
+
+      {/* CRM push progress. Counts are always shown, including skipped — a
+          silent "done" after 41 leads were skipped reads as a broken feature. */}
+      {crmJob && (() => {
+        const finished = ["done", "failed", "cancelled"].includes(crmJob.status);
+        const pct = crmJob.total ? Math.round((crmJob.done / crmJob.total) * 100) : 0;
+        const broke = crmJob.status === "failed" || (finished && crmJob.failed > 0);
+        return (
+          <div className="fixed bottom-4 right-4 z-50 w-80 rounded-xl border border-border bg-card p-4 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                {!finished ? <Loader2 size={16} className="animate-spin text-primary" />
+                  : broke ? <AlertTriangle size={16} className="text-amber-500" />
+                  : <CheckCircle2 size={16} className="text-emerald-500" />}
+                {!finished
+                  ? `Sending to ${crmJob.connection?.label || "your CRM"}…`
+                  : crmJob.status === "cancelled" ? "Push cancelled"
+                  : broke ? `${crmJob.succeeded} sent, ${crmJob.failed} failed`
+                  : `${crmJob.succeeded} lead${crmJob.succeeded === 1 ? "" : "s"} sent`}
+              </div>
+              {finished && (
+                <button onClick={() => setCrmJob(null)} className="shrink-0 text-muted-foreground hover:text-foreground" title="Dismiss">
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+
+            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn("h-full rounded-full transition-[width] duration-500",
+                  !finished ? "bg-primary" : broke ? "bg-amber-500" : "bg-emerald-500")}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+              <span>{crmJob.done} / {crmJob.total}</span>
+              <span>{pct}%</span>
+            </div>
+            {crmJob.skipped ? (
+              <p className="mt-1.5 text-[11px] text-muted-foreground">{crmJob.skipped} skipped (unchanged or nothing to send)</p>
+            ) : null}
+            {crmJob.lastError ? (
+              <p className="mt-1.5 text-[11px] text-destructive">{crmJob.lastError}</p>
+            ) : null}
+
+            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+              {!finished && (
+                <button onClick={() => cancelCrmPush(crmJob.id)}
+                        className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-medium hover:bg-accent">
+                  Cancel
+                </button>
+              )}
+              {finished && crmJob.failed > 0 && (
+                <>
+                  <button onClick={() => openCrmFailures(crmJob.id)}
+                          className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-medium hover:bg-accent">
+                    View failures
+                  </button>
+                  <button onClick={() => retryCrmPush(crmJob.id)}
+                          className="rounded-lg bg-primary px-2.5 py-1 text-[11px] font-semibold text-primary-foreground hover:opacity-90">
+                    Retry failed
+                  </button>
+                </>
+              )}
+              {crmJob.status === "failed" && (
+                <Link href="/integrations" className="text-[11px] font-medium text-primary hover:underline">
+                  Check the integration
+                </Link>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {crmFailures && (
+        <Dialog open onOpenChange={(v) => { if (!v) setCrmFailures(null); }}>
+          <DialogContent className="max-w-xl">
+            <DialogHeader>
+              <DialogTitle>Leads that didn&apos;t send</DialogTitle>
+              <DialogDescription>Each one with the reason your CRM gave.</DialogDescription>
+            </DialogHeader>
+            <div className="max-h-[50vh] overflow-y-auto">
+              {crmFailures.loading ? (
+                <p className="flex items-center gap-2 py-4 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</p>
+              ) : crmFailures.error ? (
+                <p className="text-sm text-destructive">{crmFailures.error}</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {crmFailures.rows.map((r) => (
+                    <li key={r.leadId} className="rounded-lg border border-border p-2.5">
+                      <p className="truncate text-sm font-medium text-foreground">{r.name || `Lead #${r.leadId}`}</p>
+                      <p className="text-xs text-muted-foreground">{r.error}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCrmFailures(null)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </AppShell>
   );
 }

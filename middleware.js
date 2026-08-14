@@ -37,10 +37,11 @@ const APP_ONLY = [
   "/login",
   "/extension",
   "/domain-finder",
+  "/integrations",
 ];
 // Subset that requires a Google session (/admin self-authenticates with its own
 // cookie, so it is intentionally excluded here).
-const GOOGLE_GATED = ["/dashboard", "/leads", "/watchlist", "/agent", "/billing", "/lists", "/domain-finder"];
+const GOOGLE_GATED = ["/dashboard", "/leads", "/watchlist", "/agent", "/billing", "/lists", "/domain-finder", "/integrations"];
 
 function matchPrefix(pathname, prefixes) {
   return prefixes.some((p) => pathname === p || pathname.startsWith(p + "/"));

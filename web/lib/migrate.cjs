@@ -95,6 +95,77 @@ const STATEMENTS = [
    )`,
   `CREATE INDEX IF NOT EXISTS idx_credit_txn_user ON credit_transactions (user_id, id DESC)`,
 
+  // ---- CRM integrations ------------------------------------------------
+  // One row per connected CRM. `secret_enc` is an AES-256-GCM blob sealed by
+  // web/lib/crypto.cjs — the only encrypted column in the database, because a
+  // CRM token can write to a customer's system of record. Everything a UI needs
+  // to render lives in `config`, so no route ever has to decrypt to list.
+  `CREATE TABLE IF NOT EXISTS crm_connections (
+     id serial PRIMARY KEY,
+     user_id text NOT NULL,
+     provider text NOT NULL,
+     label text NOT NULL,
+     secret_enc text,
+     config jsonb NOT NULL DEFAULT '{}'::jsonb,
+     field_map jsonb NOT NULL DEFAULT '[]'::jsonb,
+     status text NOT NULL DEFAULT 'unverified',
+     last_error text,
+     last_tested_at text,
+     last_push_at text,
+     created_at text NOT NULL,
+     updated_at text NOT NULL
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_crm_connections_user ON crm_connections (user_id, id DESC)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_crm_connections_user_label ON crm_connections (user_id, lower(label))`,
+
+  // The dedupe ledger: what we already sent where, and what the CRM called it.
+  // Deliberately NOT columns on `leads` — EXPORT_COLUMNS is derived from
+  // LEAD_COLUMNS, so a crm_record_id there would leak into every CSV, and one
+  // user can hold several connections at once.
+  `CREATE TABLE IF NOT EXISTS crm_lead_sync (
+     connection_id integer NOT NULL,
+     lead_id integer NOT NULL,
+     user_id text NOT NULL,
+     remote_id text,
+     remote_org_id text,
+     remote_url text,
+     status text NOT NULL,
+     action text,
+     payload_hash text,
+     error text,
+     attempts integer NOT NULL DEFAULT 0,
+     first_pushed_at text,
+     last_pushed_at text NOT NULL,
+     PRIMARY KEY (connection_id, lead_id)
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_crm_lead_sync_user ON crm_lead_sync (user_id, connection_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_crm_lead_sync_lead ON crm_lead_sync (lead_id)`,
+
+  // One row per push. `cursor` is an index into `lead_ids`, checkpointed after
+  // every chunk, which is what lets a job resume after a restart instead of
+  // starting over (and re-sending leads that already landed).
+  `CREATE TABLE IF NOT EXISTS crm_push_jobs (
+     id serial PRIMARY KEY,
+     user_id text NOT NULL,
+     connection_id integer NOT NULL,
+     status text NOT NULL,
+     mode text NOT NULL,
+     source jsonb NOT NULL DEFAULT '{}'::jsonb,
+     lead_ids integer[] NOT NULL DEFAULT '{}',
+     total integer NOT NULL DEFAULT 0,
+     done integer NOT NULL DEFAULT 0,
+     succeeded integer NOT NULL DEFAULT 0,
+     failed integer NOT NULL DEFAULT 0,
+     skipped integer NOT NULL DEFAULT 0,
+     cursor integer NOT NULL DEFAULT 0,
+     last_error text,
+     cancel_requested integer NOT NULL DEFAULT 0,
+     heartbeat_at text,
+     created_at text NOT NULL,
+     finished_at text
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_crm_push_jobs_user ON crm_push_jobs (user_id, id DESC)`,
+
   // ---- account ban flag (admin) ----
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS banned integer NOT NULL DEFAULT 0`,
 

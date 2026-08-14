@@ -13,4 +13,14 @@ export async function register() {
   }
   const queue = (await import("./web/lib/queue.cjs")).default;
   queue.start();
+
+  // CRM pushes run in this process, so a restart mid-push leaves jobs stranded
+  // in 'running'. They carry a checkpointed cursor, so this resumes them where
+  // they stopped rather than re-sending leads that already landed.
+  try {
+    const crmRunner = (await import("./web/lib/crm/runner.cjs")).default;
+    await crmRunner.recover();
+  } catch (err) {
+    console.error("[instrumentation] CRM push recovery skipped:", err?.message || err);
+  }
 }

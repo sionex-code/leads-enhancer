@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Database, List, ListPlus, Star, Loader2, ArrowRight, Pencil, Trash2, Check, X } from "lucide-react";
+import { Database, List, ListPlus, Star, Loader2, ArrowRight, Pencil, Trash2, Check, X, Share2 } from "lucide-react";
 import AppShell from "../components/app/AppShell";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import PushToCrmDialog from "../components/crm/PushToCrmDialog";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
@@ -33,6 +34,8 @@ export default function ListsClient() {
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState("");
   const [savingId, setSavingId] = useState(null);
+  // The list whose "send to CRM" dialog is open.
+  const [crmList, setCrmList] = useState(null);
 
   const load = () => jsonFetch("/api/lists").then((d) => setLists(d.lists || [])).catch(() => setLists([]));
   useEffect(() => { load(); }, []);
@@ -202,6 +205,18 @@ export default function ListsClient() {
                         <Button
                           size="icon"
                           variant="ghost"
+                          className="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Send this list to your CRM"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setCrmList(l);
+                          }}
+                        >
+                          <Share2 className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
                           className="h-8 w-8 text-muted-foreground hover:bg-destructive/15 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
                           title="Delete list"
                           onClick={(e) => {
@@ -225,6 +240,14 @@ export default function ListsClient() {
           </div>
         )}
       </div>
+
+      {crmList && (
+        <PushToCrmDialog
+          target={{ mode: "list", list: crmList.id }}
+          count={crmList.count}
+          onClose={() => setCrmList(null)}
+        />
+      )}
     </AppShell>
   );
 }

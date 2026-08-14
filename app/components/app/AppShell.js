@@ -5,6 +5,7 @@ import Link, { useLinkStatus } from "next/link";
 import Image from "next/image";
 import {
   Globe,
+  Plug,
   LayoutGrid,
   List,
   PanelLeftClose,
@@ -51,6 +52,7 @@ const PROJECT_NAV = [
 // of project.
 const MISC_NAV = [
   { key: "domain-finder", label: "Domain Leads Finder", href: "/domain-finder", icon: Globe },
+  { key: "integrations", label: "Integrations", href: "/integrations", icon: Plug },
 ];
 
 // Live search runs in the extension, so "is it installed?" is a standing piece

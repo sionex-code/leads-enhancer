@@ -33,4 +33,13 @@ async function markRead(userId, ids) {
   }
 }
 
-module.exports = { list, unreadCount, markRead };
+// Raise one. queue.cjs writes these inline with its own INSERT; this is the
+// same statement, named, for callers that would otherwise repeat it.
+async function create(userId, type, payload = {}) {
+  await pool().query(
+    `INSERT INTO notifications (user_id, type, payload) VALUES ($1, $2, $3)`,
+    [userId, type, payload]
+  );
+}
+
+module.exports = { list, unreadCount, markRead, create };
