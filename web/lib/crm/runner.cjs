@@ -77,11 +77,17 @@ async function run(jobId) {
       const prev = prevById.get(lead.id) || null;
 
       if (!Object.keys(mapped).length) {
-        results.push({ leadId: lead.id, status: "skipped", action: "skipped", error: "Nothing to send — every mapped field is empty for this lead.", payloadHash: hash });
+        results.push({ leadId: lead.id, status: "skipped", counted: "skipped", action: "skipped", error: "Nothing to send — every mapped field is empty for this lead.", payloadHash: hash });
         continue;
       }
       if (job.source?.skipUnchanged !== false && prev?.status === "ok" && prev.payload_hash === hash) {
-        results.push({ leadId: lead.id, status: "skipped", action: "unchanged", payloadHash: hash, remoteId: prev.remote_id, remoteOrgId: prev.remote_org_id, remoteUrl: prev.remote_url });
+        // Counted as skipped for this push, but the ledger still says 'ok':
+        // the lead *is* in the CRM, and writing 'skipped' here would make the
+        // next push think it never landed and send it all over again.
+        results.push({
+          leadId: lead.id, status: "ok", counted: "skipped", action: "unchanged", payloadHash: hash,
+          remoteId: prev.remote_id, remoteOrgId: prev.remote_org_id, remoteUrl: prev.remote_url, attempts: 0,
+        });
         continue;
       }
       items.push({
@@ -100,9 +106,12 @@ async function run(jobId) {
     }
 
     await store.upsertSync(job.user_id, job.connection_id, results);
+    // `counted` is what this push did; `status` is what the ledger now says.
+    // They differ for an unchanged lead: skipped here, still 'ok' there.
     for (const r of results) {
-      if (r.status === "ok") succeeded++;
-      else if (r.status === "skipped") skipped++;
+      const outcome = r.counted || r.status;
+      if (outcome === "skipped") skipped++;
+      else if (outcome === "ok") succeeded++;
       else failed++;
     }
     done += slice.length;
@@ -189,7 +198,9 @@ function normalize(res, items) {
       };
     }
     if (r.skipped) {
-      return { leadId, status: "skipped", action: "skipped", error: r.reason || null, attempts: 1, payloadHash: item.payloadHash };
+      // The adapter declined this one (HubSpot with no email, say). It never
+      // reached the CRM, so the ledger says so too.
+      return { leadId, status: "skipped", counted: "skipped", action: "skipped", error: r.reason || null, attempts: 1, payloadHash: item.payloadHash };
     }
     return {
       leadId, status: "ok", action: r.action || "delivered",
