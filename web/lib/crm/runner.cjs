@@ -186,11 +186,19 @@ async function withRetries(fn, batch) {
 }
 
 // Adapters return their own shapes; the store wants one.
+//
+// Pairing is by leadId wherever the adapter reports it, NOT by position: a
+// batch adapter may reorder (Smartlead answers its skipped leads first), and
+// pairing by index would staple one lead's payload hash onto another's ledger
+// row — which then breaks dedupe silently on the next push.
 function normalize(res, items) {
   const arr = Array.isArray(res) ? res : [res];
+  const byLeadId = new Map();
+  for (const r of arr) if (r && r.leadId != null) byLeadId.set(r.leadId, r);
+
   return items.map((item, i) => {
-    const r = arr[i] || arr[0] || {};
-    const leadId = r.leadId ?? item.lead.id;
+    const leadId = item.lead.id;
+    const r = byLeadId.get(leadId) || (byLeadId.size ? {} : arr[i] || arr[0] || {});
     if (r.ok === false) {
       return {
         leadId, status: "failed", error: r.error || "The integration rejected this lead.",

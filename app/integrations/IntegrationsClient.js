@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Plug, Webhook, Building2, Handshake, Loader2, CheckCircle2, AlertTriangle,
-  Trash2, Pencil, Zap, RefreshCw,
+  Trash2, Pencil, RefreshCw, Send, Mail,
 } from "lucide-react";
 import AppShell from "../components/app/AppShell";
 import { Button } from "../components/ui/button";
@@ -24,10 +24,10 @@ async function jsonFetch(url, options = {}) {
   return data;
 }
 
-const PROVIDER_ICON = { webhook: Webhook, hubspot: Building2, pipedrive: Handshake };
+const PROVIDER_ICON = { smartlead: Send, instantly: Mail, webhook: Webhook, hubspot: Building2, pipedrive: Handshake };
 
 const INTEGRATIONS_TOUR = [
-  { key: "int-add", title: "Connect a CRM", body: "Pick HubSpot, Pipedrive, or a plain webhook — a webhook covers Zapier, Make and n8n, which reach almost anything else. All you need is a token or a URL." },
+  { key: "int-add", title: "Connect a tool", body: "Smartlead and Instantly drop leads straight into a cold-email campaign. HubSpot and Pipedrive are proper CRMs. A plain webhook covers Zapier, Make and n8n, which reach almost anything else. All you need is an API key or a URL." },
   { key: "int-list", title: "Your connections", body: "Test one at any time. If a token stops working the badge turns red here before a push wastes its time." },
   { key: "int-history", title: "Recent pushes", body: "Every send is recorded with how many landed, how many were skipped, and what failed." },
 ];
@@ -95,10 +95,14 @@ export default function IntegrationsClient() {
   const providerFor = (id) => providers.find((p) => p.id === id);
 
   return (
-    <AppShell active="integrations" title="Integrations" subtitle="Send your leads straight into your CRM"
+    <AppShell active="integrations" title="Integrations" subtitle="Send your leads straight into your CRM or cold-email tool"
               tourKey="integrations" tourSteps={INTEGRATIONS_TOUR}>
+      {/* AppShell's <main> adds no padding of its own — every page brings its
+          own content wrapper (see BillingClient). Without this the sections sit
+          flush against the sidebar and stretch the full window width. */}
+      <div className="mx-auto max-w-5xl space-y-8 p-4 sm:p-6 lg:p-8">
       {!configured && (
-        <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/5 p-4">
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-4">
           <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
             Integrations aren&apos;t switched on for this server yet
@@ -109,9 +113,9 @@ export default function IntegrationsClient() {
         </div>
       )}
 
-      {error ? <p className="mb-4 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{error}</p> : null}
+      {error ? <p className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{error}</p> : null}
 
-      <section className="mb-8" data-tour="int-list">
+      <section data-tour="int-list">
         <h2 className="mb-3 text-sm font-semibold text-foreground">Your connections</h2>
         {loading ? (
           <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</p>
@@ -159,7 +163,7 @@ export default function IntegrationsClient() {
         )}
       </section>
 
-      <section className="mb-8" data-tour="int-add">
+      <section data-tour="int-add">
         <h2 className="mb-3 text-sm font-semibold text-foreground">Add an integration</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {providers.map((p) => {
@@ -223,6 +227,8 @@ export default function IntegrationsClient() {
           </div>
         )}
       </section>
+
+      </div>
 
       {dialog ? (
         <ConnectDialog

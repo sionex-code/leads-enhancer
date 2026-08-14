@@ -2,10 +2,16 @@
 // writing one file and adding one line here — nothing else in the app knows the
 // difference between HubSpot and a webhook.
 const webhook = require("./webhook.cjs");
+const smartlead = require("./smartlead.cjs");
+const instantly = require("./instantly.cjs");
 const hubspot = require("./hubspot.cjs");
 const pipedrive = require("./pipedrive.cjs");
 
+// Order is the order they appear on /integrations. The cold-email tools come
+// first because that is what most people scraping Maps are actually feeding.
 const PROVIDERS = {
+  [smartlead.id]: smartlead,
+  [instantly.id]: instantly,
   [webhook.id]: webhook,
   [hubspot.id]: hubspot,
   [pipedrive.id]: pipedrive,

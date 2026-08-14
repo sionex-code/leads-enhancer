@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, CheckCircle2, AlertTriangle, ExternalLink } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../ui/dialog";
 import { Button } from "../ui/button";
@@ -39,10 +39,36 @@ export default function ConnectDialog({ provider, connection, sources = [], tran
   );
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
+  // Campaign lists (Smartlead, Instantly). Only fetchable once the connection
+  // exists and its key works, so this fills in after the first successful test.
+  const [targets, setTargets] = useState(null);
+  const [targetsError, setTargetsError] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => { setError(""); }, [tab]);
+
+  const needsTargets = (provider?.configFields || []).some((f) => f.type === "remote-select");
+
+  const loadTargets = useCallback(async (connectionId) => {
+    if (!connectionId) return;
+    setTargetsError("");
+    try {
+      const d = await jsonFetch(`/api/crm/connections/${connectionId}/targets`);
+      if (!d.ok) { setTargets([]); setTargetsError(d.error || "Could not load campaigns."); return; }
+      setTargets(d.targets || []);
+      if (!d.targets?.length) setTargetsError("No campaigns found in that account yet — create one first.");
+    } catch (e) {
+      setTargets([]);
+      setTargetsError(e.message);
+    }
+  }, []);
+
+  // An existing connection already has working credentials, so its campaign
+  // list can load straight away.
+  useEffect(() => {
+    if (editing && needsTargets && connection?.status === "ok") loadTargets(connection.id);
+  }, [editing, needsTargets, connection?.id, connection?.status, loadTargets]);
 
   // Field map as a lookup so each target row can find its own entry.
   const byTarget = useMemo(() => {
@@ -85,6 +111,8 @@ export default function ConnectDialog({ provider, connection, sources = [], tran
         const t = await jsonFetch(`/api/crm/connections/${saved.connection.id}/test`, { method: "POST" });
         setTestResult(t);
         onSaved?.(t.connection || saved.connection);
+        // The campaign picker can only be populated once the key is proven.
+        if (t.ok && needsTargets) await loadTargets(saved.connection.id);
         setSaving(false);
         return;
       }
@@ -113,6 +141,7 @@ export default function ConnectDialog({ provider, connection, sources = [], tran
       const t = await jsonFetch(`/api/crm/connections/${connection.id}/test`, { method: "POST" });
       setTestResult(t);
       onSaved?.(t.connection);
+      if (t.ok && needsTargets) await loadTargets(connection.id);
     } catch (e) {
       setError(e.message);
     }
@@ -182,14 +211,32 @@ export default function ConnectDialog({ provider, connection, sources = [], tran
               {(p.configFields || []).map((f) => (
                 <label key={f.key} className="block space-y-1">
                   <span className="text-xs font-medium text-muted-foreground">{f.label}</span>
-                  {f.type === "select" ? (
+                  {f.type === "remote-select" ? (
+                    // Populated from the user's own account, which needs a
+                    // working key first — so until then this says so rather
+                    // than showing an empty dropdown with no explanation.
+                    targets === null ? (
+                      <p className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+                        Paste your API key and press <strong className="text-foreground">Test connection</strong> — your campaigns load here.
+                      </p>
+                    ) : (
+                      <Select value={config[f.key] ?? ""} onChange={(e) => setConfig((c) => ({ ...c, [f.key]: e.target.value }))}>
+                        <option value="">— choose a campaign —</option>
+                        {targets.map((t) => (
+                          <option key={t.value} value={t.value}>{t.label}{t.hint ? ` · ${t.hint}` : ""}</option>
+                        ))}
+                      </Select>
+                    )
+                  ) : f.type === "select" ? (
                     <Select value={config[f.key] ?? f.default ?? ""} onChange={(e) => setConfig((c) => ({ ...c, [f.key]: e.target.value }))}>
                       {(f.options || []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </Select>
                   ) : (
                     <Input value={config[f.key] ?? ""} onChange={(e) => setConfig((c) => ({ ...c, [f.key]: e.target.value }))} />
                   )}
-                  {f.help ? <span className="block text-xs text-muted-foreground">{f.help}</span> : null}
+                  {f.type === "remote-select" && targetsError
+                    ? <span className="block text-xs text-amber-600 dark:text-amber-400">{targetsError}</span>
+                    : f.help ? <span className="block text-xs text-muted-foreground">{f.help}</span> : null}
                 </label>
               ))}
             </>

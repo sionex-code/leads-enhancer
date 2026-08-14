@@ -1,5 +1,6 @@
 import db from "../../../../web/lib/db.cjs";
 import store from "../../../../web/lib/crm/store.cjs";
+import crm from "../../../../web/lib/crm/index.cjs";
 import runner from "../../../../web/lib/crm/runner.cjs";
 import billing from "../../../../web/lib/billing.cjs";
 import { requireUser } from "../../../../web/lib/session.js";
@@ -61,6 +62,17 @@ export async function POST(request) {
   if (connection.status === "error") {
     return Response.json(
       { error: `"${connection.label}" needs reconnecting before it can receive leads.`, code: "connection_error" },
+      { status: 409 }
+    );
+  }
+
+  // A campaign tool with no campaign chosen would fail identically on every
+  // lead. Say it once, here, instead of 500 times in the failure drawer.
+  const adapter = crm.get(connection.provider);
+  const missing = (adapter?.configFields || []).find((f) => f.required && !connection.config?.[f.key]);
+  if (missing) {
+    return Response.json(
+      { error: `Choose a ${missing.label.toLowerCase()} for "${connection.label}" in Integrations first.`, code: "connection_incomplete" },
       { status: 409 }
     );
   }
