@@ -176,7 +176,12 @@ module.exports = {
     // push made with this off leaves leads that cannot be verified from its UI
     // afterwards. The cost of asking is one extra line; the cost of not asking
     // is a re-push, or a campaign sent to addresses nobody checked.
-    { key: "verifyOnImport", label: "Verify emails on import", type: "select", default: "no", prominent: true,
+    //
+    // `pushOverride` also puts it on the Send-to-CRM dialog: whether a batch is
+    // worth spending verification credits on is a per-push decision (a scraped
+    // list yes, a hand-checked one no), not a property of the connection.
+    { key: "verifyOnImport", label: "Verify emails on import", type: "select", default: "no",
+      prominent: true, pushOverride: true,
       options: [{ value: "no", label: "No" }, { value: "yes", label: "Yes (uses Instantly credits)" }],
       help: "Instantly can only verify at import. Turn this on now, or re-push the list later to verify - there is no way to verify these leads from Instantly's own screens afterwards." },
   ],

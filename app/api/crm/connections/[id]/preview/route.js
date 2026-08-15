@@ -78,10 +78,17 @@ export async function POST(request, { params }) {
     }
   }
 
+  // How many of the sampled leads the CRM would refuse outright, as a number
+  // rather than only as prose in `warnings`. The dialog needs to tell "some of
+  // these will be skipped" apart from "this push will send nothing at all",
+  // and it cannot do that by reading English.
+  const blocked = mappedAll.filter((m) => !required.every((k) => m[k])).length;
+
   return Response.json({
     mapped: mappedAll[at],
     warnings,
     checked: leads.length,
+    blocked,
     sample: { leadId: leads[at].id, name: leads[at].name },
   });
 }

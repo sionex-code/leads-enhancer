@@ -59,6 +59,19 @@ export async function POST(request) {
     );
   }
 
+  // Per-push settings. Only fields the adapter marked `pushOverride` may be set,
+  // and a `select` may only take one of its own option values - this lands in
+  // the job row and is forwarded to a third-party API, so it is an allowlist on
+  // both the key and the value, never a spread of whatever the client sent.
+  const configOverride = {};
+  for (const field of (adapter.configFields || []).filter((f) => f.pushOverride)) {
+    const raw = body.configOverride?.[field.key];
+    if (raw == null) continue;
+    const value = String(raw);
+    if (field.type === "select" && !(field.options || []).some((o) => o.value === value)) continue;
+    if (value !== String(connection.config?.[field.key] ?? field.default ?? "")) configOverride[field.key] = value;
+  }
+
   const mode = target.modeOf(body);
   const resolved = await target.resolveLeadIds(userId, body, MAX_PUSH);
   if (!resolved.ok) return Response.json({ error: resolved.error }, { status: 400 });
@@ -69,7 +82,12 @@ export async function POST(request) {
   const job = await store.createJob(userId, {
     connectionId: connection.id,
     mode,
-    source: { ...(body.filters || {}), list: body.list || null, skipUnchanged: body.skipUnchanged !== false },
+    source: {
+      ...(body.filters || {}),
+      list: body.list || null,
+      skipUnchanged: body.skipUnchanged !== false,
+      ...(Object.keys(configOverride).length ? { configOverride } : {}),
+    },
     leadIds,
   });
 

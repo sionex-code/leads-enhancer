@@ -15,7 +15,13 @@ export async function GET() {
 
   const { userId, response } = await requireUser();
   if (response) return response;
-  const connections = await store.listConnections(userId);
+  // `pushFields` are the settings the Send-to-CRM dialog may override for one
+  // push without editing the connection. Sent with the connection so that
+  // dialog needs one request, not one per provider.
+  const connections = (await store.listConnections(userId)).map((c) => ({
+    ...c,
+    pushFields: (crm.get(c.provider)?.configFields || []).filter((f) => f.pushOverride),
+  }));
   // `configured` tells the UI whether this server can hold credentials at all,
   // so a missing key shows as a banner instead of a failure on first save.
   return Response.json({ connections, configured: cryptoLib.hasKey() });

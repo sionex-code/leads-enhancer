@@ -63,7 +63,10 @@ async function run(jobId) {
   const adapter = crm.get(opened.connection.provider);
   if (!adapter) return finish(job, "failed", "This integration type is no longer supported.");
 
-  const config = opened.connection.config || {};
+  // The connection's settings, with anything this particular push overrode on
+  // top. Validated against the adapter's `pushOverride` fields before it was
+  // stored on the job, so it is not re-checked here.
+  const config = { ...(opened.connection.config || {}), ...(job.source?.configOverride || {}) };
   const fieldMap = opened.connection.field_map?.length ? opened.connection.field_map : adapter.defaultFieldMap;
   const leadIds = job.lead_ids || [];
 

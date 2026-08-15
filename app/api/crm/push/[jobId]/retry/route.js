@@ -31,8 +31,13 @@ export async function POST(_request, { params }) {
     connectionId: connection.id,
     mode: "ids",
     // A retry must send even when nothing changed - the point is that last time
-    // it didn't arrive.
-    source: { retryOf: original.id, skipUnchanged: false },
+    // it didn't arrive. Per-push settings carry over, or a retry of a verified
+    // push would quietly arrive unverified.
+    source: {
+      retryOf: original.id,
+      skipUnchanged: false,
+      ...(original.source?.configOverride ? { configOverride: original.source.configOverride } : {}),
+    },
     leadIds,
   });
   runner.kick(job.id);
