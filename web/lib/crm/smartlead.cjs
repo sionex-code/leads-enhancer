@@ -121,16 +121,30 @@ module.exports = {
       return out;
     }
 
-    // Smartlead answers with counts, not per-lead results, so we cannot say
-    // which of the batch it deduped — only that the batch was accepted.
-    // `upload_count`/`already_added_to_campaign` naming varies by response, so
-    // treat anything non-erroring as delivered.
-    for (const it of sendable) out.push({ leadId: it.lead.id, ok: true, action: "delivered" });
+    // Smartlead answers with counts rather than per-lead results. When it names
+    // the ones it turned away we can pair them on email; otherwise the whole
+    // batch is simply "accepted".
+    const skippedEmails = new Set();
+    for (const s of res.data?.skipped_leads || []) {
+      const email = typeof s === "string" ? s : s?.email;
+      if (email) skippedEmails.add(String(email).toLowerCase());
+    }
+
+    for (const it of sendable) {
+      if (skippedEmails.has(String(it.mapped.email).toLowerCase())) {
+        // Turned away by Smartlead's block list or because it is already in the
+        // campaign — either way it is there, so the ledger says 'ok' and only
+        // the job summary counts it as skipped.
+        out.push({ leadId: it.lead.id, ok: true, action: "duplicate", counted: "skipped" });
+      } else {
+        out.push({ leadId: it.lead.id, ok: true, action: "delivered" });
+      }
+    }
     return out;
   },
 
   async pushLead(creds, config, item) {
     const [r] = await module.exports.pushBatch(creds, config, [item]);
-    return r?.ok ? { ok: true, action: r.action, skipped: r.skipped, reason: r.reason } : r;
+    return r;
   },
 };

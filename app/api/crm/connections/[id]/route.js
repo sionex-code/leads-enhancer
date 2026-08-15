@@ -47,7 +47,7 @@ export async function PATCH(request, { params }) {
       if (!checked.ok) return Response.json({ error: checked.error }, { status: 400 });
     }
     patch.credentials = credentials;
-    const secretish = credentials.token || credentials.secret;
+    const secretish = credentials.apiKey || credentials.token || credentials.secret;
     if (secretish) patch.config = { ...(patch.config || existing.config), tokenHint: cryptoLib.hint(secretish) };
     // New credentials are unproven until tested.
     patch.status = "unverified";

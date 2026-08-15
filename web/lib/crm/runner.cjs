@@ -16,9 +16,20 @@ const mapping = require("./mapping.cjs");
 const notifications = require("../notifications.cjs");
 
 const CHUNK = 25;          // leads loaded and checkpointed together
+const MAX_CHUNK = 500;     // ceiling, so a checkpoint still means something
 const CONCURRENCY = 4;     // parallel pushes within a chunk, for adapters without a batch call
 const MAX_ATTEMPTS = 3;
 const AUTH_FAILURE_LIMIT = 3;  // consecutive 401/403 before we stop burning requests
+
+// The chunk is also the most an adapter can be handed at once, so a fixed 25
+// silently capped Smartlead's 400-lead batch at 25 — 80 requests for a 2000-lead
+// push where 5 would do. Batch adapters get their own size; the one-at-a-time
+// ones stay at 25, where a crash costs at most 25 leads of progress.
+function chunkFor(adapter, config) {
+  if (!adapter?.pushBatch) return CHUNK;
+  const size = adapter.batchSizeFor ? adapter.batchSizeFor(config) : adapter.batchSize;
+  return Math.min(MAX_CHUNK, Math.max(CHUNK, Number(size) || CHUNK));
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -59,11 +70,12 @@ async function run(jobId) {
   let { done, succeeded, failed, skipped, cursor } = job;
   let authFailures = 0;
   let lastError = job.last_error || null;
+  const chunk = chunkFor(adapter, config);
 
   while (cursor < leadIds.length) {
     if (await store.isCancelRequested(jobId)) return finish(job, "cancelled", lastError, { done, succeeded, failed, skipped, cursor });
 
-    const slice = leadIds.slice(cursor, cursor + CHUNK);
+    const slice = leadIds.slice(cursor, cursor + chunk);
     const leads = await loadLeads(job.user_id, slice);
     const prevById = await store.getSyncForLeads(job.user_id, job.connection_id, slice);
 
@@ -212,6 +224,11 @@ function normalize(res, items) {
     }
     return {
       leadId, status: "ok", action: r.action || "delivered",
+      // An adapter can report a lead as landed-but-not-newly-sent (Instantly's
+      // own dedupe turning one away). The ledger keeps 'ok' — it *is* in the
+      // CRM — while the job summary counts it as skipped, the same split the
+      // runner's own skip-unchanged path makes above.
+      ...(r.counted ? { counted: r.counted } : {}),
       remoteId: r.remoteId ?? null, remoteOrgId: r.remoteOrgId ?? null, remoteUrl: r.remoteUrl ?? null,
       attempts: 1, payloadHash: item.payloadHash,
     };
@@ -245,4 +262,4 @@ async function recover() {
   }
 }
 
-module.exports = { kick, run, recover, CHUNK, CONCURRENCY, MAX_ATTEMPTS };
+module.exports = { kick, run, recover, chunkFor, CHUNK, MAX_CHUNK, CONCURRENCY, MAX_ATTEMPTS };

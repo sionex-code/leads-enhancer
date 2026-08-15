@@ -24,13 +24,48 @@ async function jsonFetch(url, options = {}) {
   return data;
 }
 
-const PROVIDER_ICON = { smartlead: Send, instantly: Mail, webhook: Webhook, hubspot: Building2, pipedrive: Handshake };
+// Icon plus its own tint, so Smartlead and Instantly are separable at a glance
+// — two grey envelopes side by side told you nothing about which was which.
+const PROVIDER_STYLE = {
+  smartlead: { icon: Send, tile: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
+  instantly: { icon: Mail, tile: "bg-violet-500/10 text-violet-600 dark:text-violet-400" },
+  hubspot: { icon: Building2, tile: "bg-orange-500/10 text-orange-600 dark:text-orange-400" },
+  pipedrive: { icon: Handshake, tile: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
+  webhook: { icon: Webhook, tile: "bg-slate-500/10 text-slate-600 dark:text-slate-300" },
+};
+const styleFor = (id) => PROVIDER_STYLE[id] || { icon: Plug, tile: "bg-muted text-muted-foreground" };
+
+// Cold email is what most people scraping Maps are actually feeding, so it
+// leads and gets the bigger cards.
+const EMAIL_TOOLS = ["smartlead", "instantly"];
 
 const INTEGRATIONS_TOUR = [
   { key: "int-add", title: "Connect a tool", body: "Smartlead and Instantly drop leads straight into a cold-email campaign. HubSpot and Pipedrive are proper CRMs. A plain webhook covers Zapier, Make and n8n, which reach almost anything else. All you need is an API key or a URL." },
   { key: "int-list", title: "Your connections", body: "Test one at any time. If a token stops working the badge turns red here before a push wastes its time." },
   { key: "int-history", title: "Recent pushes", body: "Every send is recorded with how many landed, how many were skipped, and what failed." },
 ];
+
+// The whole card is the button — a small "Connect" in the corner made people
+// hunt for the click target.
+function ProviderCard({ provider, compact = false, onConnect }) {
+  const { icon: Icon, tile } = styleFor(provider.id);
+  return (
+    <button
+      type="button"
+      onClick={onConnect}
+      className="flex flex-col rounded-xl border border-border bg-card/40 p-4 text-left transition hover:border-primary/50 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <span className={`mb-2 flex h-10 w-10 items-center justify-center rounded-lg ${tile}`}>
+        <Icon className="h-5 w-5" />
+      </span>
+      <span className="text-sm font-semibold text-foreground">{provider.label}</span>
+      <span className="mt-1 flex-1 text-xs text-muted-foreground">{provider.blurb}</span>
+      {!compact ? (
+        <span className="mt-3 text-xs font-medium text-primary">Connect →</span>
+      ) : null}
+    </button>
+  );
+}
 
 function StatusBadge({ status }) {
   if (status === "ok") return <Badge variant="success">Connected</Badge>;
@@ -100,7 +135,7 @@ export default function IntegrationsClient() {
       {/* AppShell's <main> adds no padding of its own — every page brings its
           own content wrapper (see BillingClient). Without this the sections sit
           flush against the sidebar and stretch the full window width. */}
-      <div className="mx-auto max-w-5xl space-y-8 p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-4xl space-y-8 p-4 sm:p-6 lg:p-8">
       {!configured && (
         <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-4">
           <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
@@ -115,23 +150,22 @@ export default function IntegrationsClient() {
 
       {error ? <p className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{error}</p> : null}
 
-      <section data-tour="int-list">
-        <h2 className="mb-3 text-sm font-semibold text-foreground">Your connections</h2>
-        {loading ? (
-          <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</p>
-        ) : connections.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border p-6 text-center">
-            <Plug className="mx-auto mb-2 h-6 w-6 text-muted-foreground" />
-            <p className="text-sm font-medium text-foreground">Nothing connected yet</p>
-            <p className="mt-1 text-xs text-muted-foreground">Pick one below and you can start sending leads in a minute.</p>
-          </div>
-        ) : (
+      {/* An account with nothing connected should read the menu first, not be
+          told it is empty — so the chooser leads and this section is skipped
+          entirely until there is something to list. */}
+      {loading ? (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</p>
+      ) : connections.length > 0 ? (
+        <section data-tour="int-list">
+          <h2 className="mb-3 text-sm font-semibold text-foreground">Your connections</h2>
           <ul className="space-y-2">
             {connections.map((c) => {
-              const Icon = PROVIDER_ICON[c.provider] || Plug;
+              const { icon: Icon, tile } = styleFor(c.provider);
               return (
                 <li key={c.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card/40 p-3">
-                  <Icon className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${tile}`}>
+                    <Icon className="h-4 w-4" />
+                  </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-foreground">{c.label}</p>
                     <p className="truncate text-xs text-muted-foreground">
@@ -160,28 +194,38 @@ export default function IntegrationsClient() {
               );
             })}
           </ul>
-        )}
-      </section>
+        </section>
+      ) : null}
 
-      <section data-tour="int-add">
-        <h2 className="mb-3 text-sm font-semibold text-foreground">Add an integration</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {providers.map((p) => {
-            const Icon = PROVIDER_ICON[p.id] || Plug;
-            return (
-              <div key={p.id} className="flex flex-col rounded-xl border border-border bg-card/40 p-4">
-                <Icon className="mb-2 h-6 w-6 text-primary" />
-                <p className="text-sm font-semibold text-foreground">{p.label}</p>
-                <p className="mt-1 flex-1 text-xs text-muted-foreground">{p.blurb}</p>
-                <Button className="mt-3" size="sm" variant="outline" onClick={() => setDialog({ provider: p })}>
-                  Connect
-                </Button>
-              </div>
-            );
-          })}
-        </div>
-      </section>
+      {!loading ? (
+        <section data-tour="int-add">
+          <h2 className="text-sm font-semibold text-foreground">
+            {connections.length ? "Add another" : "Where should your leads go?"}
+          </h2>
+          <p className="mb-3 mt-1 text-xs text-muted-foreground">
+            Each one takes about half a minute — paste an API key, pick where leads land, done.
+          </p>
 
+          <div className="grid gap-3 sm:grid-cols-2">
+            {providers.filter((p) => EMAIL_TOOLS.includes(p.id)).map((p) => (
+              <ProviderCard key={p.id} provider={p} onConnect={() => setDialog({ provider: p })} />
+            ))}
+          </div>
+
+          <p className="mb-2 mt-5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            CRM &amp; automation
+          </p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {providers.filter((p) => !EMAIL_TOOLS.includes(p.id)).map((p) => (
+              <ProviderCard key={p.id} provider={p} compact onConnect={() => setDialog({ provider: p })} />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* An empty table of pushes helps nobody until there is something that
+          could have pushed. */}
+      {connections.length > 0 ? (
       <section data-tour="int-history">
         <h2 className="mb-3 text-sm font-semibold text-foreground">Recent pushes</h2>
         {jobs.length === 0 ? (
@@ -227,6 +271,7 @@ export default function IntegrationsClient() {
           </div>
         )}
       </section>
+      ) : null}
 
       </div>
 

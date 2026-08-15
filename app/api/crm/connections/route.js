@@ -21,6 +21,18 @@ export async function GET() {
   return Response.json({ connections, configured: cryptoLib.hasKey() });
 }
 
+// "Smartlead", then "Smartlead 2"… The unique index is on lower(label), so the
+// comparison has to be too.
+async function autoLabel(userId, base) {
+  const taken = new Set((await store.listConnections(userId)).map((c) => String(c.label).toLowerCase()));
+  if (!taken.has(base.toLowerCase())) return base;
+  for (let n = 2; n < 100; n++) {
+    const candidate = `${base} ${n}`;
+    if (!taken.has(candidate.toLowerCase())) return candidate;
+  }
+  return `${base} ${Date.now()}`;
+}
+
 export async function POST(request) {
   const { userId, response } = await requireUser();
   if (response) return response;
@@ -29,8 +41,11 @@ export async function POST(request) {
   const adapter = crm.get(body.provider);
   if (!adapter) return Response.json({ error: "Unknown integration type." }, { status: 400 });
 
-  const label = String(body.label || adapter.label).trim().slice(0, 80);
-  if (!label) return Response.json({ error: "Give this integration a name." }, { status: 400 });
+  // The quick-connect flow never asks for a name — most people have exactly one
+  // Smartlead account and naming it is a question with no interesting answer.
+  // Only fall back to the generated name when the user left the field alone.
+  const typed = String(body.label || "").trim().slice(0, 80);
+  const label = typed || (await autoLabel(userId, adapter.label));
 
   const credentials = body.credentials || {};
   for (const field of adapter.authFields || []) {
@@ -59,7 +74,7 @@ export async function POST(request) {
   }
   // Shown in the UI so a user can tell two tokens apart without us ever
   // decrypting one to render a list.
-  const secretish = credentials.token || credentials.secret;
+  const secretish = credentials.apiKey || credentials.token || credentials.secret;
   if (secretish) config.tokenHint = cryptoLib.hint(secretish);
 
   let created;
@@ -70,9 +85,22 @@ export async function POST(request) {
   } catch (err) {
     // The (user_id, lower(label)) unique index — a name collision, not a fault.
     if (String(err?.code) === "23505") {
-      return Response.json({ error: `You already have an integration called "${label}".` }, { status: 409 });
+      // A generated name colliding means two connects raced, not that the user
+      // chose a name twice. Say nothing about it; just take the next one.
+      if (!typed) {
+        try {
+          created = await store.createConnection(userId, {
+            provider: adapter.id, label: await autoLabel(userId, adapter.label), credentials, config, fieldMap: valid.map,
+          });
+        } catch {
+          return Response.json({ error: "Could not save that integration — try again." }, { status: 409 });
+        }
+      } else {
+        return Response.json({ error: `You already have an integration called "${label}".` }, { status: 409 });
+      }
+    } else {
+      return Response.json({ error: String(err?.message || err) }, { status: 500 });
     }
-    return Response.json({ error: String(err?.message || err) }, { status: 500 });
   }
   if (!created.ok) {
     return Response.json(

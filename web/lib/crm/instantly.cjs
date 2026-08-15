@@ -7,7 +7,7 @@
 //
 // Dedupe is Instantly's own: skip_if_in_campaign is sent on every lead, so
 // re-pushing a list does not duplicate anyone.
-// https://developer.instantly.ai/api-reference/lead/create-lead
+// https://developer.instantly.ai/api-reference/lead/add-leads-in-bulk-to-a-campaign-or-list
 const { fetchJson, describe, retryable } = require("./http.cjs");
 
 const API = "https://api.instantly.ai/api/v2";
@@ -81,28 +81,81 @@ module.exports = {
     };
   },
 
-  // v2 creates one lead per request.
-  async pushLead(creds, config, { lead, mapped }) {
+  // /leads/add takes 1000 at a time. The single-lead POST /leads works too, but
+  // a 2000-lead push through it is 2000 round trips.
+  batchSize: 1000,
+  batchSizeFor: () => 1000,
+
+  async pushBatch(creds, config, items) {
     const campaignId = config?.campaignId;
     if (!campaignId) {
-      return { ok: false, retryable: false, error: "No Instantly campaign chosen for this integration — pick one in Integrations." };
+      return items.map((it) => ({
+        leadId: it.lead.id, ok: false, retryable: false,
+        error: "No Instantly campaign chosen for this integration — pick one in Integrations.",
+      }));
     }
-    // With `campaign` set, Instantly requires an email.
-    if (!mapped.email) return { ok: true, skipped: true, reason: "no email" };
 
-    const body = {
-      campaign: campaignId,
-      ...mapped,
-      // Instantly does the deduping for us, which is what keeps a re-push from
-      // adding the same business to a campaign twice.
-      skip_if_in_campaign: true,
-      verify_leads_on_import: config?.verifyOnImport === "yes",
-    };
+    const out = [];
+    const sendable = [];
+    for (const it of items) {
+      // With a campaign (rather than a list) Instantly requires an email.
+      if (!it.mapped.email) out.push({ leadId: it.lead.id, ok: true, skipped: true, reason: "no email" });
+      else sendable.push(it);
+    }
+    if (!sendable.length) return out;
 
-    const res = await fetchJson(`${API}/leads`, { method: "POST", headers: auth(creds), body: JSON.stringify(body) });
-    if (!res.ok) return fail(res);
+    const res = await fetchJson(`${API}/leads/add`, {
+      method: "POST",
+      headers: auth(creds),
+      body: JSON.stringify({
+        campaign_id: campaignId,
+        leads: sendable.map((it) => it.mapped),
+        // Instantly does the deduping for us, which is what keeps a re-push
+        // from adding the same business to a campaign twice.
+        skip_if_in_campaign: true,
+        verify_leads_on_import: config?.verifyOnImport === "yes",
+      }),
+      timeoutMs: 60000,
+    });
 
-    const id = res.data?.id ? String(res.data.id) : null;
-    return { ok: true, remoteId: id, action: "delivered" };
+    if (!res.ok) {
+      const f = fail(res);
+      for (const it of sendable) out.push({ leadId: it.lead.id, ...f });
+      return out;
+    }
+
+    // `created_leads[].index` indexes into the array we just sent, so every
+    // lead Instantly actually created can be paired back exactly — no guessing
+    // from order, which is what made the Smartlead path lossy.
+    const created = new Map();
+    for (const c of res.data?.created_leads || []) {
+      if (Number.isInteger(c?.index) && sendable[c.index]) created.set(c.index, c);
+      else if (c?.email) {
+        const i = sendable.findIndex((it, n) => !created.has(n) && it.mapped.email === c.email);
+        if (i >= 0) created.set(i, c);
+      }
+    }
+
+    sendable.forEach((it, i) => {
+      const c = created.get(i);
+      if (c) {
+        out.push({ leadId: it.lead.id, ok: true, action: "delivered", remoteId: c.id ? String(c.id) : null });
+        return;
+      }
+      // Not created, but the batch was accepted — Instantly's own dedupe turned
+      // it away, which means the lead is already there. Recorded as ok so the
+      // ledger keeps saying "this one landed"; the runner still tallies it as
+      // skipped for the job summary. A lead rejected for an unparseable email
+      // lands here too — Instantly doesn't say which is which, so the counts
+      // below carry that detail instead.
+      out.push({ leadId: it.lead.id, ok: true, action: "duplicate", counted: "skipped" });
+    });
+
+    return out;
+  },
+
+  async pushLead(creds, config, item) {
+    const [r] = await module.exports.pushBatch(creds, config, [item]);
+    return r;
   },
 };

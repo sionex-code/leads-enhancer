@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, CheckCircle2, AlertTriangle, ExternalLink } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../ui/dialog";
 import { Button } from "../ui/button";
@@ -19,28 +19,264 @@ async function jsonFetch(url, options = {}) {
   return data;
 }
 
-// Connect a new integration, or edit an existing one.
-//
-// Two tabs rather than one long form: pasting a token and deciding which lead
-// column becomes "company name" are different jobs, and most people only ever
-// do the first.
-export default function ConnectDialog({ provider, connection, sources = [], transforms = [], onClose, onSaved }) {
-  const editing = !!connection;
-  const [tab, setTab] = useState("credentials");
-  const [label, setLabel] = useState(connection?.label || provider?.label || "");
+// Connecting and re-configuring are different jobs, so they get different
+// dialogs. Connecting should be over in half a minute: paste a key, pick a
+// campaign, done. Re-configuring is where field mapping and re-testing live,
+// and almost nobody goes there.
+export default function ConnectDialog(props) {
+  return props.connection ? <EditConnection {...props} /> : <QuickConnect {...props} />;
+}
+
+/* ------------------------------------------------------------------ connect */
+
+function QuickConnect({ provider, onClose, onSaved }) {
+  const p = provider || {};
+  const authFields = p.authFields || [];
+  const configFields = p.configFields || [];
+
+  // A remote-select is the one setting worth interrupting for — you cannot send
+  // to Smartlead without naming a campaign. Everything else has a working
+  // default and belongs behind "Advanced".
+  //
+  // Memoised because runProbe closes over these: a fresh array each render would
+  // reset the debounce timer every render and the probe would never fire.
+  const targetFields = useMemo(() => configFields.filter((f) => f.type === "remote-select"), [configFields]);
+  const extraFields = useMemo(() => configFields.filter((f) => f.type !== "remote-select"), [configFields]);
+
   const [credentials, setCredentials] = useState({});
   const [config, setConfig] = useState(() => {
     const base = {};
-    for (const f of provider?.configFields || []) base[f.key] = connection?.config?.[f.key] ?? f.default ?? "";
+    for (const f of configFields) base[f.key] = f.default ?? "";
+    return base;
+  });
+  const [label, setLabel] = useState("");
+  const [probe, setProbe] = useState({ state: "idle" });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const complete = authFields.every((f) => !f.required || String(credentials[f.key] || "").trim());
+
+  // Only the newest probe is allowed to write state — a slow first attempt must
+  // not overwrite the result of the key the user has since corrected.
+  const probeSeq = useRef(0);
+  // Read, never depended on: picking a campaign changes config, and that must
+  // not re-run the probe and re-select it underneath the user.
+  const configRef = useRef(config);
+  configRef.current = config;
+
+  const runProbe = useCallback(async () => {
+    if (!complete) return;
+    const seq = ++probeSeq.current;
+    setProbe({ state: "checking" });
+    try {
+      const d = await jsonFetch("/api/crm/probe", {
+        method: "POST",
+        body: JSON.stringify({ provider: p.id, credentials, config: configRef.current }),
+      });
+      if (seq !== probeSeq.current) return;
+      if (!d.ok) { setProbe({ state: "error", error: d.error }); return; }
+      setProbe({ state: "ok", account: d.account, targets: d.targets, targetsError: d.targetsError });
+      // One campaign is not a choice. Pick it and let them press Connect.
+      if (d.targets?.length === 1 && targetFields.length) {
+        setConfig((c) => ({ ...c, [targetFields[0].key]: d.targets[0].value }));
+      }
+    } catch (e) {
+      if (seq !== probeSeq.current) return;
+      setProbe({ state: "error", error: e.message });
+    }
+  }, [complete, credentials, p.id, targetFields]);
+
+  // Typing a key is a paste, so checking as soon as it settles feels instant.
+  // A URL is typed character by character, though, and probing a webhook means
+  // POSTing to it — so those wait for blur instead of firing at every prefix.
+  const autoProbe = !authFields.some((f) => f.type === "url");
+  useEffect(() => {
+    if (!autoProbe || !complete) return undefined;
+    const t = setTimeout(runProbe, 600);
+    return () => clearTimeout(t);
+    // runProbe changes with every keystroke by design; the timer is what debounces.
+  }, [autoProbe, complete, runProbe]);
+
+  const missingTarget = targetFields.find((f) => f.required && !config[f.key]);
+  const canConnect = probe.state === "ok" && !missingTarget && !saving;
+
+  async function connect() {
+    setSaving(true);
+    setError("");
+    try {
+      // The probe already proved these credentials, and the campaign is chosen,
+      // so this row lands complete and usable — no follow-up test, and no 409
+      // on the first push.
+      const saved = await jsonFetch("/api/crm/connections", {
+        method: "POST",
+        body: JSON.stringify({ provider: p.id, credentials, config, ...(label.trim() ? { label: label.trim() } : {}) }),
+      });
+      onSaved?.(saved.connection);
+      onClose?.();
+    } catch (e) {
+      setError(e.message);
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(v) => { if (!v) onClose?.(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Connect {p.label}</DialogTitle>
+          <DialogDescription>{p.blurb}</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {authFields.map((f) => (
+            <div key={f.key} className="space-y-1">
+              <div className="flex items-baseline justify-between gap-3">
+                <label htmlFor={`cf-${f.key}`} className="text-xs font-medium text-muted-foreground">
+                  {f.label}{f.required ? "" : " (optional)"}
+                </label>
+                {p.docsUrl && f.required ? (
+                  <a href={p.docsUrl} target="_blank" rel="noreferrer"
+                     className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                    Where do I find this? <ExternalLink className="h-3 w-3" />
+                  </a>
+                ) : null}
+              </div>
+              <Input
+                id={`cf-${f.key}`}
+                type={f.type === "password" ? "password" : "text"}
+                placeholder={f.placeholder || ""}
+                autoFocus={f === authFields[0]}
+                value={credentials[f.key] ?? ""}
+                onChange={(e) => setCredentials((c) => ({ ...c, [f.key]: e.target.value }))}
+                onBlur={() => { if (!autoProbe) runProbe(); }}
+              />
+              {f.help ? <p className="text-xs text-muted-foreground">{f.help}</p> : null}
+            </div>
+          ))}
+
+          <ProbeStatus probe={probe} label={p.label} complete={complete} autoProbe={autoProbe} onCheck={runProbe} />
+
+          {probe.state === "ok" && targetFields.map((f) => (
+            <div key={f.key} className="space-y-1">
+              <label htmlFor={`ct-${f.key}`} className="text-xs font-medium text-muted-foreground">Send leads to</label>
+              {probe.targets?.length ? (
+                <Select id={`ct-${f.key}`} value={config[f.key] ?? ""}
+                        onChange={(e) => setConfig((c) => ({ ...c, [f.key]: e.target.value }))}>
+                  <option value="">— choose a {f.label.toLowerCase()} —</option>
+                  {probe.targets.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}{t.hint ? ` · ${t.hint}` : ""}</option>
+                  ))}
+                </Select>
+              ) : (
+                <p className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+                  {probe.targetsError || `No ${f.label.toLowerCase()}s in that account yet — create one in ${p.label} first, then reopen this.`}
+                </p>
+              )}
+            </div>
+          ))}
+
+          <details className="rounded-lg border border-border px-3 py-2">
+              <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Advanced</summary>
+              <div className="mt-3 space-y-3">
+                <div className="space-y-1">
+                  <label htmlFor="cf-label" className="text-xs font-medium text-muted-foreground">Name</label>
+                  <Input id="cf-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={p.label} />
+                  <p className="text-xs text-muted-foreground">Only matters if you connect more than one.</p>
+                </div>
+                {extraFields.map((f) => (
+                  <div key={f.key} className="space-y-1">
+                    <label htmlFor={`cx-${f.key}`} className="text-xs font-medium text-muted-foreground">{f.label}</label>
+                    {f.type === "select" ? (
+                      <Select id={`cx-${f.key}`} value={config[f.key] ?? f.default ?? ""}
+                              onChange={(e) => setConfig((c) => ({ ...c, [f.key]: e.target.value }))}>
+                        {(f.options || []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </Select>
+                    ) : (
+                      <Input id={`cx-${f.key}`} value={config[f.key] ?? ""}
+                             onChange={(e) => setConfig((c) => ({ ...c, [f.key]: e.target.value }))} />
+                    )}
+                    {f.help ? <p className="text-xs text-muted-foreground">{f.help}</p> : null}
+                  </div>
+                ))}
+                <p className="text-xs text-muted-foreground">
+                  Which lead field feeds which {p.label} field is set from the defaults. Change it later with the pencil icon.
+                </p>
+            </div>
+          </details>
+        </div>
+
+        {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={connect} disabled={!canConnect} title={missingTarget ? `Choose a ${missingTarget.label.toLowerCase()} first` : ""}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Connect
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// The one line that tells you whether the key you just pasted works.
+function ProbeStatus({ probe, label, complete, autoProbe, onCheck }) {
+  if (probe.state === "checking") {
+    return (
+      <p className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" /> Checking your {label} account…
+      </p>
+    );
+  }
+  if (probe.state === "ok") {
+    const count = probe.targets?.length;
+    return (
+      <p className="flex items-start gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-3 text-sm text-foreground">
+        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+        <span>
+          Connected{probe.account?.name ? ` · ${probe.account.name}` : ""}
+          {count ? ` · ${count} campaign${count === 1 ? "" : "s"} found` : ""}
+        </span>
+      </p>
+    );
+  }
+  if (probe.state === "error") {
+    return (
+      <p className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-sm text-foreground">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        <span>{probe.error}</span>
+      </p>
+    );
+  }
+  // Idle. When we don't check as you type, say how the check happens.
+  if (!autoProbe && complete) {
+    return (
+      <button type="button" onClick={onCheck} className="text-xs font-medium text-primary hover:underline">
+        Check this endpoint
+      </button>
+    );
+  }
+  return null;
+}
+
+/* --------------------------------------------------------------------- edit */
+
+// Everything the quick path deliberately hides: renaming, re-keying, field
+// mapping, and an explicit re-test.
+function EditConnection({ provider, connection, sources = [], transforms = [], onClose, onSaved }) {
+  const p = provider || {};
+  const [tab, setTab] = useState("credentials");
+  const [label, setLabel] = useState(connection?.label || p.label || "");
+  const [credentials, setCredentials] = useState({});
+  const [config, setConfig] = useState(() => {
+    const base = {};
+    for (const f of p.configFields || []) base[f.key] = connection?.config?.[f.key] ?? f.default ?? "";
     return base;
   });
   const [fieldMap, setFieldMap] = useState(() =>
-    connection?.field_map?.length ? connection.field_map : provider?.defaultFieldMap || []
+    connection?.field_map?.length ? connection.field_map : p.defaultFieldMap || []
   );
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
-  // Campaign lists (Smartlead, Instantly). Only fetchable once the connection
-  // exists and its key works, so this fills in after the first successful test.
   const [targets, setTargets] = useState(null);
   const [targetsError, setTargetsError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -48,7 +284,7 @@ export default function ConnectDialog({ provider, connection, sources = [], tran
 
   useEffect(() => { setError(""); }, [tab]);
 
-  const needsTargets = (provider?.configFields || []).some((f) => f.type === "remote-select");
+  const needsTargets = (p.configFields || []).some((f) => f.type === "remote-select");
 
   const loadTargets = useCallback(async (connectionId) => {
     if (!connectionId) return;
@@ -64,13 +300,12 @@ export default function ConnectDialog({ provider, connection, sources = [], tran
     }
   }, []);
 
-  // An existing connection already has working credentials, so its campaign
-  // list can load straight away.
+  // The stored credentials already work, so the campaign list can load straight
+  // away rather than waiting on a test.
   useEffect(() => {
-    if (editing && needsTargets && connection?.status === "ok") loadTargets(connection.id);
-  }, [editing, needsTargets, connection?.id, connection?.status, loadTargets]);
+    if (needsTargets && connection?.status === "ok") loadTargets(connection.id);
+  }, [needsTargets, connection?.id, connection?.status, loadTargets]);
 
-  // Field map as a lookup so each target row can find its own entry.
   const byTarget = useMemo(() => {
     const m = new Map();
     for (const entry of fieldMap) m.set(entry.target, entry);
@@ -89,33 +324,21 @@ export default function ConnectDialog({ provider, connection, sources = [], tran
     });
   }
 
-  async function save({ thenTest } = {}) {
+  function payload() {
+    const body = { label, config, fieldMap };
+    // Only send credentials the user actually typed: an untouched form must
+    // leave the stored token alone.
+    if (Object.keys(credentials).length) body.credentials = credentials;
+    return body;
+  }
+
+  async function save() {
     setSaving(true);
     setError("");
     try {
-      const body = { label, config, fieldMap };
-      // Only send credentials the user actually typed: on an edit, an untouched
-      // form must leave the stored token alone.
-      if (Object.keys(credentials).length) body.credentials = credentials;
-
-      let saved;
-      if (editing) {
-        saved = await jsonFetch(`/api/crm/connections/${connection.id}`, { method: "PATCH", body: JSON.stringify(body) });
-      } else {
-        saved = await jsonFetch("/api/crm/connections", {
-          method: "POST",
-          body: JSON.stringify({ ...body, provider: provider.id, credentials: credentials }),
-        });
-      }
-      if (thenTest) {
-        const t = await jsonFetch(`/api/crm/connections/${saved.connection.id}/test`, { method: "POST" });
-        setTestResult(t);
-        onSaved?.(t.connection || saved.connection);
-        // The campaign picker can only be populated once the key is proven.
-        if (t.ok && needsTargets) await loadTargets(saved.connection.id);
-        setSaving(false);
-        return;
-      }
+      const saved = await jsonFetch(`/api/crm/connections/${connection.id}`, {
+        method: "PATCH", body: JSON.stringify(payload()),
+      });
       onSaved?.(saved.connection);
       onClose?.();
     } catch (e) {
@@ -125,19 +348,12 @@ export default function ConnectDialog({ provider, connection, sources = [], tran
   }
 
   async function test() {
-    // Testing needs a stored connection, so an unsaved form saves first. Saving
-    // an unverified connection is fine — it lands as "unverified" and the test
-    // result decides its badge.
-    if (!editing) return save({ thenTest: true });
     setTesting(true);
     setError("");
     try {
       // Save what's on screen first, so the test exercises the token the user
       // just typed rather than the one still in the database.
-      await jsonFetch(`/api/crm/connections/${connection.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ label, config, fieldMap, ...(Object.keys(credentials).length ? { credentials } : {}) }),
-      });
+      await jsonFetch(`/api/crm/connections/${connection.id}`, { method: "PATCH", body: JSON.stringify(payload()) });
       const t = await jsonFetch(`/api/crm/connections/${connection.id}/test`, { method: "POST" });
       setTestResult(t);
       onSaved?.(t.connection);
@@ -148,13 +364,11 @@ export default function ConnectDialog({ provider, connection, sources = [], tran
     setTesting(false);
   }
 
-  const p = provider || {};
-
   return (
     <Dialog open onOpenChange={(v) => { if (!v) onClose?.(); }}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{editing ? `Edit ${connection.label}` : `Connect ${p.label}`}</DialogTitle>
+          <DialogTitle>Edit {connection.label}</DialogTitle>
           <DialogDescription>{p.blurb}</DialogDescription>
         </DialogHeader>
 
@@ -190,7 +404,7 @@ export default function ConnectDialog({ provider, connection, sources = [], tran
                   <Input
                     type={f.type === "password" ? "password" : "text"}
                     placeholder={
-                      editing && connection?.config?.tokenHint && f.type === "password"
+                      connection?.config?.tokenHint && f.type === "password"
                         ? `Saved ${connection.config.tokenHint} — leave blank to keep it`
                         : f.placeholder || ""
                     }
@@ -212,12 +426,9 @@ export default function ConnectDialog({ provider, connection, sources = [], tran
                 <label key={f.key} className="block space-y-1">
                   <span className="text-xs font-medium text-muted-foreground">{f.label}</span>
                   {f.type === "remote-select" ? (
-                    // Populated from the user's own account, which needs a
-                    // working key first — so until then this says so rather
-                    // than showing an empty dropdown with no explanation.
                     targets === null ? (
                       <p className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-                        Paste your API key and press <strong className="text-foreground">Test connection</strong> — your campaigns load here.
+                        Press <strong className="text-foreground">Test connection</strong> to load the list from your account.
                       </p>
                     ) : (
                       <Select value={config[f.key] ?? ""} onChange={(e) => setConfig((c) => ({ ...c, [f.key]: e.target.value }))}>
@@ -301,10 +512,9 @@ export default function ConnectDialog({ provider, connection, sources = [], tran
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving || testing}>Cancel</Button>
           <Button variant="outline" onClick={test} disabled={saving || testing}>
-            {testing || (saving && testResult === null) ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Test connection
+            {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Test connection
           </Button>
-          <Button onClick={() => save()} disabled={saving || testing || !label.trim()}>
+          <Button onClick={save} disabled={saving || testing || !label.trim()}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Save
           </Button>
         </DialogFooter>
