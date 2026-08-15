@@ -46,7 +46,13 @@ export default function PushToCrmDialog({ target, count, onClose, onStarted }) {
     setShowPreview(next);
     if (!next || preview || !chosen) return;
     try {
-      const d = await jsonFetch(`/api/crm/connections/${chosen}/preview`, { method: "POST", body: JSON.stringify({}) });
+      // The same target the Send button will use, so the preview describes the
+      // leads actually going out rather than an unrelated one off the top of
+      // the account.
+      const d = await jsonFetch(`/api/crm/connections/${chosen}/preview`, {
+        method: "POST",
+        body: JSON.stringify({ ...target }),
+      });
       setPreview(d);
     } catch (e) { setPreview({ error: e.message }); }
   }
@@ -149,6 +155,7 @@ export default function PushToCrmDialog({ target, count, onClose, onStarted }) {
                     <>
                       <p className="mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">
                         Example - {preview.sample?.name}
+                        {preview.checked > 1 ? ` (1 of ${preview.checked} checked)` : ""}
                       </p>
                       <pre className="overflow-x-auto text-[11px] leading-relaxed text-foreground">
 {JSON.stringify(preview.mapped, null, 2)}

@@ -30,21 +30,37 @@ async function fetchJson(url, { method = "GET", headers = {}, body, timeoutMs = 
   }
 }
 
+// Whatever the CRM said in its own words, if it said anything useful. HTML
+// error pages (a proxy in front of the API, say) are not words a user can act
+// on, so only the parsed JSON is trusted here.
+function detailOf(result) {
+  const raw = result?.data?.message || result?.data?.error || result?.data?.error_info;
+  const text = typeof raw === "string" ? raw.trim() : "";
+  return text ? text.slice(0, 200) : "";
+}
+
 // Turn a status into something a user can act on. "HTTP 401" tells them
 // nothing; "reconnect the integration" tells them exactly what to do.
 function describe(result, label = "The service") {
   if (result?.error === "timeout") return `${label} did not respond in time.`;
   if (result?.network) return `${label} could not be reached (${result.error}).`;
   const status = result?.status;
-  if (status === 401) return `${label} rejected the credentials. Reconnect the integration.`;
-  if (status === 403) return `${label} accepted the credentials but refused the request - check the token's permissions.`;
+  const detail = detailOf(result);
+  if (status === 401) return `${label} rejected the credentials. Reconnect the integration.${detail ? ` (${detail})` : ""}`;
+  // The body is what separates "your token lacks a scope" from "your plan is
+  // out of leads" - two 403s that need completely different action from the
+  // user. Dropping it sent people to re-enter a working API key.
+  if (status === 403) {
+    return detail
+      ? `${label} refused the request: ${detail}`
+      : `${label} accepted the credentials but refused the request - check the token's permissions.`;
+  }
   if (status === 404) return `${label} could not find that record.`;
   if (status === 409) return `${label} reported a conflict with an existing record.`;
   if (status === 429) return `${label} rate limit reached.`;
   if (status === 400 || status === 422) {
     // These carry the useful detail - the CRM is telling us which field it hated.
-    const detail = result?.data?.message || result?.data?.error || result?.data?.error_info;
-    return `${label} rejected this lead's data${detail ? `: ${String(detail).slice(0, 200)}` : "."}`;
+    return `${label} rejected this lead's data${detail ? `: ${detail}` : "."}`;
   }
   if (status >= 500) return `${label} is having problems (HTTP ${status}).`;
   return `${label} returned HTTP ${status}.`;

@@ -1,7 +1,7 @@
-import db from "../../../../web/lib/db.cjs";
 import store from "../../../../web/lib/crm/store.cjs";
 import crm from "../../../../web/lib/crm/index.cjs";
 import runner from "../../../../web/lib/crm/runner.cjs";
+import target from "../../../../web/lib/crm/target.cjs";
 import billing from "../../../../web/lib/billing.cjs";
 import { requireUser } from "../../../../web/lib/session.js";
 
@@ -11,35 +11,6 @@ export const maxDuration = 60;
 // Hard ceiling on one push. Not a billing limit - just a bound on how much work
 // a single click can queue.
 const MAX_PUSH = 2000;
-
-// The same filter names /api/leads/export reads, so "send what I'm looking at"
-// means exactly what "export what I'm looking at" means.
-function filtersFrom(source = {}) {
-  const str = (k) => String(source[k] ?? "");
-  return {
-    search: str("search"),
-    hasEmail: str("hasEmail"),
-    hasWhatsapp: str("hasWhatsapp"),
-    hasWebsite: str("hasWebsite"),
-    hasPhone: source.hasPhone === "yes" ? "yes" : source.hasPhone === "no" ? "no" : "",
-    reviews: str("reviews"),
-    rating: str("rating"),
-    social: str("social"),
-    enriched: str("enriched"),
-    httpStatus: str("httpStatus"),
-    minScore: Number(source.minScore || 0),
-    project: str("project"),
-    country: str("country"),
-    city: str("city"),
-    workflow: str("workflow"),
-    emailStatus: str("emailStatus"),
-    outreachStatus: str("outreachStatus"),
-    watchlist: source.watchlist === "1" || source.watchlist === true,
-    contactList: source.contactList === "1" || source.contactList === true,
-    list: str("list"),
-    source: str("source"),
-  };
-}
 
 export async function GET(request) {
   const { userId, response } = await requireUser();
@@ -88,17 +59,10 @@ export async function POST(request) {
     );
   }
 
-  const mode = body.mode === "ids" || body.mode === "list" || body.mode === "filters" ? body.mode : "ids";
-  let leadIds = [];
-
-  if (mode === "ids") {
-    leadIds = [...new Set((Array.isArray(body.ids) ? body.ids : []).map(Number).filter(Number.isFinite))].slice(0, MAX_PUSH);
-  } else if (mode === "list") {
-    if (!body.list) return Response.json({ error: "Pick a list to send." }, { status: 400 });
-    leadIds = await db.queryLeadIds(userId, { ...filtersFrom({}), list: String(body.list) }, MAX_PUSH);
-  } else {
-    leadIds = await db.queryLeadIds(userId, filtersFrom(body.filters || {}), MAX_PUSH);
-  }
+  const mode = target.modeOf(body);
+  const resolved = await target.resolveLeadIds(userId, body, MAX_PUSH);
+  if (!resolved.ok) return Response.json({ error: resolved.error }, { status: 400 });
+  const leadIds = resolved.leadIds;
 
   if (!leadIds.length) return Response.json({ error: "No leads matched - nothing to send." }, { status: 400 });
 

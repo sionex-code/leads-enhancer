@@ -69,6 +69,7 @@ async function run(jobId) {
 
   let { done, succeeded, failed, skipped, cursor } = job;
   let authFailures = 0;
+  let quotaHit = false;
   let lastError = job.last_error || null;
   const chunk = chunkFor(adapter, config);
 
@@ -112,7 +113,8 @@ async function run(jobId) {
     const pushed = await pushItems(adapter, opened.credentials, config, items);
     for (const r of pushed) {
       results.push(r);
-      if (r.status === "failed" && (r.httpStatus === 401 || r.httpStatus === 403)) authFailures++;
+      if (r.quota) quotaHit = true;
+      else if (r.status === "failed" && (r.httpStatus === 401 || r.httpStatus === 403)) authFailures++;
       else if (r.status !== "failed") authFailures = 0;
       if (r.status === "failed") lastError = r.error || lastError;
     }
@@ -129,6 +131,12 @@ async function run(jobId) {
     done += slice.length;
     cursor += slice.length;
     await store.patchJob(jobId, { done, succeeded, failed, skipped, cursor, lastError });
+
+    // The CRM's own allowance is spent. Every remaining lead would be refused
+    // the same way, so stop - but leave the connection alone: the credentials
+    // are fine, and marking it 'error' would send the user to reconnect a key
+    // that was never the problem.
+    if (quotaHit) return finish(job, "failed", lastError, { done, succeeded, failed, skipped, cursor });
 
     // A dead token fails every remaining lead identically. Stop, and say so on
     // the connection so the next push is blocked before it starts.
@@ -215,6 +223,8 @@ function normalize(res, items) {
       return {
         leadId, status: "failed", error: r.error || "The integration rejected this lead.",
         httpStatus: r.status, attempts: 1, payloadHash: item.payloadHash,
+        // A refusal the credentials cannot fix (the CRM's own plan allowance).
+        ...(r.quota ? { quota: true } : {}),
       };
     }
     if (r.skipped) {

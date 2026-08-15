@@ -8,10 +8,43 @@
 // Dedupe is Instantly's own: skip_if_in_campaign is sent on every lead, so
 // re-pushing a list does not duplicate anyone.
 // https://developer.instantly.ai/api-reference/lead/add-leads-in-bulk-to-a-campaign-or-list
+const crypto = require("node:crypto");
 const { fetchJson, describe, retryable } = require("./http.cjs");
 
 const API = "https://api.instantly.ai/api/v2";
 const LABEL = "Instantly";
+
+// Every plan caps how many leads the workspace may upload, and /leads/add is
+// all-or-nothing about it: a batch larger than what is left is refused whole,
+// with a 403, rather than filled up to the limit. A 600-lead push therefore
+// loses ~330 perfectly good leads to one refusal while a later, smaller batch
+// sails through - which reads like a permissions fault and is not one.
+//
+// So: remember the `remaining_in_plan` every success reports, pre-slice the
+// next batch to fit it, and halve-and-retry on a 403 to rediscover the ceiling
+// when we have not seen one yet (a fresh process, or another tool spending the
+// same allowance behind our back).
+// Deliberately short-lived. The number is only trustworthy for as long as
+// nothing else spends the allowance, and it must go stale on its own: caching
+// "0" forever would mean a workspace that upgrades its plan, or simply waits
+// for the allowance to reset, can never push again until the process restarts.
+const REMAINING_TTL_MS = 60_000;
+const remainingByKey = new Map();
+const keyOf = (creds) => crypto.createHash("sha256").update(String(creds?.apiKey || "")).digest("hex").slice(0, 16);
+
+function rememberRemaining(key, value) {
+  remainingByKey.set(key, { value: Math.max(0, value), at: Date.now() });
+}
+
+function knownRemaining(key) {
+  const hit = remainingByKey.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > REMAINING_TTL_MS) {
+    remainingByKey.delete(key);
+    return null;
+  }
+  return hit.value;
+}
 
 const auth = (creds) => ({
   Authorization: `Bearer ${creds?.apiKey || ""}`,
@@ -25,6 +58,103 @@ const fail = (res) => ({
   retryable: retryable(res),
   retryAfterMs: res.retryAfterMs,
 });
+
+// The one 403 that really is about permissions. Everything else Instantly
+// refuses with a 403 is the plan allowance, which is a size problem, not an
+// access problem, and must not be reported as "check the token".
+const deniedCampaign = (res) =>
+  /no access to this campaign/i.test(String(res?.data?.message || res?.text || ""));
+
+const planExhausted = (it) => ({
+  leadId: it.lead.id,
+  ok: false,
+  status: 403,
+  // Retryable would just burn the remaining requests: the allowance does not
+  // come back within a push.
+  retryable: false,
+  // Not an auth failure. Without this the runner's 401/403 counter would trip
+  // and flag the connection as needing to be reconnected, sending the user to
+  // re-enter a key that was never the problem.
+  quota: true,
+  error: `${LABEL}'s plan allowance is used up - no more leads can be uploaded until the workspace plan is upgraded.`,
+});
+
+// Send one group, splitting it to fit whatever the plan has left.
+async function send(creds, config, campaignId, group) {
+  if (!group.length) return [];
+  const key = keyOf(creds);
+
+  // A ceiling we already know about: send exactly what fits, then deal with
+  // the remainder separately (which will be short-circuited once it is spent).
+  const known = knownRemaining(key);
+  if (Number.isInteger(known) && known < group.length) {
+    if (known <= 0) return group.map(planExhausted);
+    return [
+      ...(await send(creds, config, campaignId, group.slice(0, known))),
+      ...(await send(creds, config, campaignId, group.slice(known))),
+    ];
+  }
+
+  const res = await fetchJson(`${API}/leads/add`, {
+    method: "POST",
+    headers: auth(creds),
+    body: JSON.stringify({
+      campaign_id: campaignId,
+      leads: group.map((it) => it.mapped),
+      // Instantly does the deduping for us, which is what keeps a re-push
+      // from adding the same business to a campaign twice.
+      skip_if_in_campaign: true,
+      verify_leads_on_import: config?.verifyOnImport === "yes",
+    }),
+    timeoutMs: 60000,
+  });
+
+  if (!res.ok) {
+    if (res.status === 403 && !deniedCampaign(res)) {
+      // Over the allowance. Halve until it fits; a single lead still refused
+      // means there is genuinely nothing left.
+      if (group.length > 1) {
+        const mid = Math.ceil(group.length / 2);
+        return [
+          ...(await send(creds, config, campaignId, group.slice(0, mid))),
+          ...(await send(creds, config, campaignId, group.slice(mid))),
+        ];
+      }
+      rememberRemaining(key, 0);
+      return group.map(planExhausted);
+    }
+    const f = fail(res);
+    return group.map((it) => ({ leadId: it.lead.id, ...f }));
+  }
+
+  // Instantly reports what the upload left behind. Trusting it beats guessing,
+  // and it is what lets the next batch be sized instead of refused.
+  const left = Number(res.data?.remaining_in_plan);
+  if (Number.isFinite(left)) rememberRemaining(key, left);
+
+  // `created_leads[].index` indexes into the array we just sent, so every
+  // lead Instantly actually created can be paired back exactly - no guessing
+  // from order, which is what made the Smartlead path lossy.
+  const created = new Map();
+  for (const c of res.data?.created_leads || []) {
+    if (Number.isInteger(c?.index) && group[c.index]) created.set(c.index, c);
+    else if (c?.email) {
+      const i = group.findIndex((it, n) => !created.has(n) && it.mapped.email === c.email);
+      if (i >= 0) created.set(i, c);
+    }
+  }
+
+  return group.map((it, i) => {
+    const c = created.get(i);
+    if (c) return { leadId: it.lead.id, ok: true, action: "delivered", remoteId: c.id ? String(c.id) : null };
+    // Not created, but the batch was accepted - Instantly's own dedupe turned
+    // it away, which means the lead is already there. Recorded as ok so the
+    // ledger keeps saying "this one landed"; the runner still tallies it as
+    // skipped for the job summary. A lead rejected for an unparseable email
+    // lands here too - Instantly doesn't say which is which.
+    return { leadId: it.lead.id, ok: true, action: "duplicate", counted: "skipped" };
+  });
+}
 
 module.exports = {
   id: "instantly",
@@ -107,53 +237,7 @@ module.exports = {
     }
     if (!sendable.length) return out;
 
-    const res = await fetchJson(`${API}/leads/add`, {
-      method: "POST",
-      headers: auth(creds),
-      body: JSON.stringify({
-        campaign_id: campaignId,
-        leads: sendable.map((it) => it.mapped),
-        // Instantly does the deduping for us, which is what keeps a re-push
-        // from adding the same business to a campaign twice.
-        skip_if_in_campaign: true,
-        verify_leads_on_import: config?.verifyOnImport === "yes",
-      }),
-      timeoutMs: 60000,
-    });
-
-    if (!res.ok) {
-      const f = fail(res);
-      for (const it of sendable) out.push({ leadId: it.lead.id, ...f });
-      return out;
-    }
-
-    // `created_leads[].index` indexes into the array we just sent, so every
-    // lead Instantly actually created can be paired back exactly - no guessing
-    // from order, which is what made the Smartlead path lossy.
-    const created = new Map();
-    for (const c of res.data?.created_leads || []) {
-      if (Number.isInteger(c?.index) && sendable[c.index]) created.set(c.index, c);
-      else if (c?.email) {
-        const i = sendable.findIndex((it, n) => !created.has(n) && it.mapped.email === c.email);
-        if (i >= 0) created.set(i, c);
-      }
-    }
-
-    sendable.forEach((it, i) => {
-      const c = created.get(i);
-      if (c) {
-        out.push({ leadId: it.lead.id, ok: true, action: "delivered", remoteId: c.id ? String(c.id) : null });
-        return;
-      }
-      // Not created, but the batch was accepted - Instantly's own dedupe turned
-      // it away, which means the lead is already there. Recorded as ok so the
-      // ledger keeps saying "this one landed"; the runner still tallies it as
-      // skipped for the job summary. A lead rejected for an unparseable email
-      // lands here too - Instantly doesn't say which is which, so the counts
-      // below carry that detail instead.
-      out.push({ leadId: it.lead.id, ok: true, action: "duplicate", counted: "skipped" });
-    });
-
+    out.push(...(await send(creds, config, campaignId, sendable)));
     return out;
   },
 
