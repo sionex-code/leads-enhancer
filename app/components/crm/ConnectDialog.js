@@ -36,12 +36,22 @@ function QuickConnect({ provider, onClose, onSaved }) {
 
   // A remote-select is the one setting worth interrupting for - you cannot send
   // to Smartlead without naming a campaign. Everything else has a working
-  // default and belongs behind "Advanced".
+  // default and belongs behind "Advanced" - unless the adapter marks it
+  // `prominent`, which means its default silently costs the user something they
+  // would have chosen differently had they seen it (email verification being
+  // the case in point: off by default, and not changeable after the push).
   //
   // Memoised because runProbe closes over these: a fresh array each render would
   // reset the debounce timer every render and the probe would never fire.
   const targetFields = useMemo(() => configFields.filter((f) => f.type === "remote-select"), [configFields]);
-  const extraFields = useMemo(() => configFields.filter((f) => f.type !== "remote-select"), [configFields]);
+  const mainFields = useMemo(
+    () => configFields.filter((f) => f.type !== "remote-select" && f.prominent),
+    [configFields]
+  );
+  const extraFields = useMemo(
+    () => configFields.filter((f) => f.type !== "remote-select" && !f.prominent),
+    [configFields]
+  );
 
   const [credentials, setCredentials] = useState({});
   const [config, setConfig] = useState(() => {
@@ -179,6 +189,11 @@ function QuickConnect({ provider, onClose, onSaved }) {
             </div>
           ))}
 
+          {probe.state === "ok" && mainFields.map((f) => (
+            <ConfigField key={f.key} field={f} idPrefix="cm" value={config[f.key]}
+                         onChange={(v) => setConfig((c) => ({ ...c, [f.key]: v }))} />
+          ))}
+
           <details className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 [&[open]]:pb-3">
               <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground">
                 Advanced
@@ -190,19 +205,8 @@ function QuickConnect({ provider, onClose, onSaved }) {
                   <p className="text-xs text-muted-foreground">Only matters if you connect more than one.</p>
                 </div>
                 {extraFields.map((f) => (
-                  <div key={f.key} className="space-y-1">
-                    <label htmlFor={`cx-${f.key}`} className="text-xs font-medium text-muted-foreground">{f.label}</label>
-                    {f.type === "select" ? (
-                      <Select id={`cx-${f.key}`} value={config[f.key] ?? f.default ?? ""}
-                              onChange={(e) => setConfig((c) => ({ ...c, [f.key]: e.target.value }))}>
-                        {(f.options || []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                      </Select>
-                    ) : (
-                      <Input id={`cx-${f.key}`} value={config[f.key] ?? ""}
-                             onChange={(e) => setConfig((c) => ({ ...c, [f.key]: e.target.value }))} />
-                    )}
-                    {f.help ? <p className="text-xs text-muted-foreground">{f.help}</p> : null}
-                  </div>
+                  <ConfigField key={f.key} field={f} idPrefix="cx" value={config[f.key]}
+                               onChange={(v) => setConfig((c) => ({ ...c, [f.key]: v }))} />
                 ))}
                 <p className="text-xs text-muted-foreground">
                   Which lead field feeds which {p.label} field is set from the defaults. Change it later with the pencil icon.
@@ -221,6 +225,26 @@ function QuickConnect({ provider, onClose, onSaved }) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// One config setting, rendered the same whether it sits in the body or behind
+// "Advanced" - the two used to carry their own copies of this markup and had
+// already drifted (only one of them honoured `default`).
+function ConfigField({ field: f, idPrefix, value, onChange }) {
+  const id = `${idPrefix}-${f.key}`;
+  return (
+    <div className="space-y-1">
+      <label htmlFor={id} className="text-xs font-medium text-muted-foreground">{f.label}</label>
+      {f.type === "select" ? (
+        <Select id={id} value={value ?? f.default ?? ""} onChange={(e) => onChange(e.target.value)}>
+          {(f.options || []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </Select>
+      ) : (
+        <Input id={id} value={value ?? f.default ?? ""} onChange={(e) => onChange(e.target.value)} />
+      )}
+      {f.help ? <p className="text-xs text-muted-foreground">{f.help}</p> : null}
+    </div>
   );
 }
 

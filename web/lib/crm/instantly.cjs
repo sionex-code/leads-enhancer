@@ -172,8 +172,13 @@ module.exports = {
   configFields: [
     { key: "campaignId", label: "Campaign", type: "remote-select", required: true,
       help: "Which campaign new leads are added to." },
-    { key: "verifyOnImport", label: "Verify emails on import", type: "select", default: "no",
-      options: [{ value: "no", label: "No" }, { value: "yes", label: "Yes (uses Instantly credits)" }] },
+    // Prominent, not behind "Advanced": Instantly only verifies at import, so a
+    // push made with this off leaves leads that cannot be verified from its UI
+    // afterwards. The cost of asking is one extra line; the cost of not asking
+    // is a re-push, or a campaign sent to addresses nobody checked.
+    { key: "verifyOnImport", label: "Verify emails on import", type: "select", default: "no", prominent: true,
+      options: [{ value: "no", label: "No" }, { value: "yes", label: "Yes (uses Instantly credits)" }],
+      help: "Instantly can only verify at import. Turn this on now, or re-push the list later to verify - there is no way to verify these leads from Instantly's own screens afterwards." },
   ],
 
   mappableFields: [
