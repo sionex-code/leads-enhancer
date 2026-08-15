@@ -41,6 +41,7 @@ import {
   SlidersHorizontal,
   Share2,
   TrendingUp,
+  Map,
   MapPin,
   MoreHorizontal,
   LocateFixed,
@@ -78,7 +79,7 @@ const FIND_TOUR = [
   { key: "find-source", title: "Readymade data or Google", body: "\"Readymade data\" answers instantly from leads we already hold, already enriched. \"Find from Google\" scrapes Google Maps in your browser right now - automatic for anything we don't already have." },
   { key: "find-service", title: "Pick a service", body: "Choose the type of business you want to reach, such as plumbers, dentists, real estate agencies, and so on." },
   { key: "find-country", title: "Choose a country", body: "Pick the country to search in. The city list below updates to match." },
-  { key: "find-city", title: "Pick a city", body: "Select a city, or choose \"All cities\" to search the whole country at once." },
+  { key: "find-city", title: "Pick a city or province", body: "Type a city, or type a province to search the whole of it at once. \"All cities\" searches the entire country." },
   { key: "find-rating", title: "Filter by rating", body: "Target top-rated businesses, or pick \"Below 4.0\" to find low-rated ones that need help, which is a great angle for selling websites or reputation services." },
   { key: "find-max", title: "How many leads", body: SHOW_CREDITS
     ? "Set how many leads to pull (up to 10,000). You're only charged 1 credit per brand-new lead."
@@ -747,23 +748,66 @@ function dedupeAdminTwins(list, nameOf, adminOf) {
   });
 }
 
+const normPlace = (s) =>
+  String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+
 // Same ranking the server uses: prefix matches ahead of mid-word ones, accents
 // folded so "cordoba" finds "Córdoba". The source array is population-ordered,
 // so ties resolve to the city people actually mean.
+//
+// The province is matched as well as the city name. Every row already carries
+// one (it is shown right there in the list as "Lahore, Punjab"), but only `n`
+// used to be searched - so typing "punjab" found the single city whose *name*
+// contains it and answered "No city matches that", while the 207 cities of
+// Punjab sat in this very array.
 function filterCities(all, text, cap = 50) {
-  const t = String(text || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+  const t = normPlace(text);
   if (!t) return all.slice(0, cap);
   const starts = [];
   const contains = [];
   for (const c of all) {
-    const n = String(c.n).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    const n = normPlace(c.n);
     if (n.startsWith(t)) {
       if (starts.length < cap) starts.push(c);
       if (starts.length >= cap) break;
-    } else if (contains.length < cap && n.includes(t)) {
+    } else if (contains.length < cap && (n.includes(t) || normPlace(c.s).includes(t))) {
       contains.push(c);
     }
   }
+  return starts.concat(contains).slice(0, cap);
+}
+
+// The provinces of the loaded country, as pickable places in their own right.
+//
+// Derived here rather than fetched: every city row already names its province,
+// so the list costs one pass over an array the browser has already downloaded.
+//
+// A province is shaped like a city on purpose - {n, s, la, ln} - so everything
+// downstream keeps working untouched. pickLiveCity joins [n, s, country] into
+// the query text, and an empty `s` makes that "hair transplant in Punjab,
+// Pakistan": exactly what someone would type into Google Maps themselves.
+function provincesOf(cities) {
+  const by = new Map();
+  for (const c of cities) {
+    const name = String(c.s || "").trim();
+    if (!name) continue;
+    let p = by.get(name);
+    if (!p) {
+      // The array is population-ordered, so the first city seen in a province
+      // is its largest - the most sensible place to centre the preview map.
+      p = { n: name, s: "", la: c.la, ln: c.ln, province: true, count: 0 };
+      by.set(name, p);
+    }
+    p.count++;
+  }
+  return [...by.values()].sort((a, b) => b.count - a.count);
+}
+
+function filterProvinces(provinces, text, cap = 5) {
+  const t = normPlace(text);
+  if (!t) return [];
+  const starts = provinces.filter((p) => normPlace(p.n).startsWith(t));
+  const contains = provinces.filter((p) => !normPlace(p.n).startsWith(t) && normPlace(p.n).includes(t));
   return starts.concat(contains).slice(0, cap);
 }
 
@@ -886,6 +930,8 @@ function LiveAreaPicker({ countryCode, onCountry, city, onCity, onCountryCities 
   // Recomputed as they type, straight off the loaded array - no network, no
   // debounce, no waiting.
   const results = useMemo(() => filterCities(cities, text), [cities, text]);
+  const provinces = useMemo(() => provincesOf(cities), [cities]);
+  const provinceHits = useMemo(() => filterProvinces(provinces, text), [provinces, text]);
   const label = city ? `${city.n}${city.s ? `, ${city.s}` : ""}` : "";
 
   return (
@@ -916,11 +962,11 @@ function LiveAreaPicker({ countryCode, onCountry, city, onCity, onCountryCities 
       </label>
 
       <label className="relative space-y-1" data-tour="find-city">
-        <span className="text-xs text-muted-foreground">City</span>
+        <span className="text-xs text-muted-foreground">City or province</span>
         <Input
           className="h-9"
           value={open ? text : label}
-          placeholder="Search any city"
+          placeholder="Search any city or province"
           autoComplete="off"
           onFocus={() => { setText(""); setOpen(true); }}
           onBlur={() => setTimeout(() => setOpen(false), 120)}
@@ -931,8 +977,32 @@ function LiveAreaPicker({ countryCode, onCountry, city, onCity, onCountryCities 
           <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-64 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-lg">
             {loading && !results.length ? (
               <div className="px-3 py-2 text-xs text-muted-foreground">Loading cities…</div>
-            ) : results.length ? (
-              results.map((c) => (
+            ) : results.length || provinceHits.length ? (
+              <>
+              {/* Provinces first: someone who typed "punjab" meant the province,
+                  and burying it under 50 of its own cities would hide the thing
+                  they actually asked for. */}
+              {provinceHits.map((p) => (
+                <button
+                  key={`prov-${p.n}`}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    onCity(p, countries.find((x) => x.code === countryCode)?.name || "");
+                    setOpen(false);
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent"
+                >
+                  <Map className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1 truncate">
+                    All of {p.n}
+                  </span>
+                  <span className="shrink-0 text-[11px] text-muted-foreground">
+                    province · {p.count} cities
+                  </span>
+                </button>
+              ))}
+              {results.map((c) => (
                 <button
                   key={`${c.n}-${c.s}-${c.la}`}
                   type="button"
@@ -951,9 +1021,10 @@ function LiveAreaPicker({ countryCode, onCountry, city, onCity, onCountryCities 
                     {c.s ? <span className="text-muted-foreground">{`, ${c.s}`}</span> : null}
                   </span>
                 </button>
-              ))
+              ))}
+              </>
             ) : (
-              <div className="px-3 py-2 text-xs text-muted-foreground">No city matches that</div>
+              <div className="px-3 py-2 text-xs text-muted-foreground">No city or province matches that</div>
             )}
           </div>
         )}
@@ -1345,6 +1416,10 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     const keyword = liveService || splitQuery().keyword || service;
     // State disambiguates: "Austin" alone is four different places, and the
     // extension geocodes this text to decide where to grid.
+    //
+    // A province arrives here as a city with no state of its own, so the same
+    // join yields "Punjab, Pakistan" rather than a city name - which is what
+    // makes searching a whole province need nothing more than this.
     const place = [c.n, c.s, countryName].filter(Boolean).join(", ");
     setQuery(`${keyword} in ${place}`.replace(/\s+/g, " ").trim());
   }
