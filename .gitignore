@@ -21,3 +21,7 @@ video/
 
 # World city index - built on deploy by scripts/build-geo-index.cjs (10MB)
 data/geo/
+
+# Built by scripts/pack-extension.cjs. Deliberately untracked: committing it
+# would auto-deploy a new extension version on the next push.
+public/leadsfunda-extension.zip
