@@ -30,7 +30,10 @@ import {
   FileSpreadsheet,
   Menu,
   X,
+  Share2,
+  Plug,
 } from "lucide-react";
+import { FAQ, INTEGRATIONS } from "./landing-data";
 import { GoogleSignInButton } from "./GoogleSignInButton";
 import { Button } from "./ui/button";
 import RecentSearches from "./RecentSearches";
@@ -45,6 +48,7 @@ const HATCH =
 const NAV = [
   { href: "#about", label: "About" },
   { href: "#features", label: "Features" },
+  { href: "#integrations", label: "Integrations" },
   { href: "#reviews", label: "Reviews" },
   { href: "#pricing", label: "Pricing" },
   { href: "#faq", label: "FAQ" },
@@ -59,7 +63,7 @@ const PILLS = [
   { label: "Social profiles", desc: "Gather Facebook, Instagram, and LinkedIn links.", icon: Globe2 },
   { label: "Ratings & reviews", desc: "Track ratings and reviews to find the best niches.", icon: Star },
   { label: "Phone numbers", desc: "Pull formatted phone numbers from listings and sites.", icon: Phone },
-  { label: "Clean CSV export", desc: "Export structured leads ready for your CRM.", icon: FileSpreadsheet },
+  { label: "CRM integrations", desc: "Push leads to Smartlead, Instantly, HubSpot or Pipedrive.", icon: Share2 },
 ];
 
 // Sticky-left card stack. This section deliberately does NOT repeat the
@@ -71,7 +75,8 @@ const DISCOVER = [
   { icon: Search, tag: "Stage 1 · Search", title: "Answered from leads we already hold", body: "Most niche and city combinations come straight out of our index in a few seconds. When a search covers ground we have not collected yet, the browser extension runs it live on your own machine, so you never sit behind anyone else's job.", grad: "from-amber-50 to-amber-100/40", ring: "ring-amber-200/70", dot: "bg-amber-400", chip: "bg-amber-500/10 text-amber-700" },
   { icon: Mail, tag: "Stage 2 · Enrich", title: "Contacts taken from their own website", body: "Every business we return gets crawled for emails, social profiles and a WhatsApp number. That is the difference between a list of map pins and a list you can actually send to on the day it arrives.", grad: "from-orange-50 to-orange-100/40", ring: "ring-orange-200/70", dot: "bg-orange-400", chip: "bg-orange-500/10 text-orange-700" },
   { icon: Gauge, tag: "Stage 3 · Qualify", title: "A real Chrome audit of their site", body: "SSL, load speed, mobile layout and whether they run a chatbot, checked in a real browser rather than guessed. The businesses with a broken site, or no site at all, are usually the easiest pitch, and the audit tells you which ones those are.", grad: "from-stone-50 to-stone-100/60", ring: "ring-stone-200/70", dot: "bg-stone-400", chip: "bg-stone-500/10 text-stone-700" },
-  { icon: ListChecks, tag: "Stage 4 · Work it", title: "Lists, a watch list and outreach status", body: "Save leads into named lists, keep the ones you are chasing on your watch list, mark where each conversation stands, and export a deduped CSV that drops straight into your CRM.", grad: "from-amber-50 to-orange-100/40", ring: "ring-orange-200/60", dot: "bg-primary", chip: "bg-primary/10 text-primary" },
+  { icon: ListChecks, tag: "Stage 4 · Work it", title: "Lists, a watch list and outreach status", body: "Save leads into named lists, keep the ones you are chasing on your watch list, and mark where each conversation stands.", grad: "from-amber-50 to-orange-100/40", ring: "ring-orange-200/60", dot: "bg-primary", chip: "bg-primary/10 text-primary" },
+  { icon: Share2, tag: "Stage 5 · Send", title: "Straight into the tool you send from", body: "Connect Smartlead, Instantly, HubSpot or Pipedrive with an API key, or point a webhook at Zapier, Make or n8n. Select the leads, pick the integration, and they are pushed across in the background while you carry on. Push the same list again and anything already there is updated, not duplicated.", grad: "from-emerald-50 to-emerald-100/40", ring: "ring-emerald-200/70", dot: "bg-emerald-400", chip: "bg-emerald-500/10 text-emerald-700" },
   { icon: Database, tag: "What it costs", title: "Credits, charged only for new work", body: "One credit finds a lead, a quick audit is three, a chatbot scan is five and a full website report is ten. Going back over a lead you already own costs nothing, so your own list stays free to revisit as often as you like.", grad: "from-stone-50 to-stone-100/60", ring: "ring-stone-200/70", dot: "bg-stone-400", chip: "bg-stone-500/10 text-stone-700" },
 ];
 
@@ -85,7 +90,7 @@ const STATS = [
 const STEPS = [
   { n: "01", icon: Search, title: "Pick a niche & city", body: "Choose a service and location, or paste your own search query, then set how many leads you want." },
   { n: "02", icon: Zap, title: "We scrape & enrich", body: "We pull every business, then crawl their sites for emails, socials and WhatsApp, automatically." },
-  { n: "03", icon: ListChecks, title: "Work the pipeline", body: "Filter, audit websites, mark outreach status and export a clean CSV ready for your campaigns." },
+  { n: "03", icon: ListChecks, title: "Send them where you sell", body: "Filter, audit websites, mark outreach status, then push straight into Smartlead, Instantly, HubSpot or Pipedrive — or export a clean CSV." },
 ];
 
 const FACES = [
@@ -123,16 +128,8 @@ const PLANS = [
 
 const PLAN_ICONS = { free: Rocket, p19: Sparkles, p35: Star, p49: Briefcase };
 
-const FAQ = [
-  { q: "Do I need to install anything?", a: "You sign in with Google, no account setup beyond that. Most searches are answered straight from leads we already hold. For a city or niche we haven't indexed yet, you'll need the free Chrome extension: it runs that search live on your own machine instead of putting you in a queue." },
-  { q: "How fast do leads actually arrive?", a: "Most searches are answered from leads we already hold and land in a few seconds. A search that has to be collected fresh runs through the Chrome extension on your own machine, so it needs that tab open until the job finishes." },
-  { q: "Where do the leads come from?", a: "Public business listings for the niche and location you pick. We then visit each business's own website and pull emails, social profiles and WhatsApp numbers from it, which is where most of the contact detail comes from." },
-  { q: "What is a credit, and what does each action cost?", a: "Finding a lead costs 1 credit, a quick audit 3, a chatbot scan 5 and a full website report 10. Anything you do to a lead you already own is free, so going back over your own list never costs you twice." },
-  { q: "What does the website audit check?", a: "We open the site in a real Chrome browser and check SSL, load speed, mobile layout and whether the business runs a chatbot. It is the quickest way to find the businesses whose site is broken, slow or missing altogether." },
-  { q: "Can I organise leads, or only export them?", a: "Both. Leads go into named lists, anything you are actively chasing sits on your watch list, and every lead carries an outreach status. A deduped CSV export is available whenever you want one." },
-  { q: "How does billing work, and is there a free plan?", a: "Yes, the Starter plan needs no card and includes enough credits to run real searches and export what you find. Paid plans are monthly and billed through Whop, so you can upgrade, downgrade or cancel at any time with no contract." },
-  { q: "Is my data safe?", a: "Every account's leads, lists and projects are isolated from every other account. We do not share or resell anything you collect." },
-];
+// FAQ and INTEGRATIONS now live in ./landing-data so the server component can
+// emit matching structured data from the same source.
 
 // Mock data for the product-window collage. The businesses are deliberately the
 // standard fictional-company names, on 555-01xx numbers and @example.com, so
@@ -944,6 +941,53 @@ export default function Landing({ recent = [], total = 0 }) {
               </div>
             </div>
           </BentoCell></Reveal>
+        </div>
+
+        {/* The exit — where a finished list actually goes. Deliberately outside
+            the grid above: auto-rows-fr would stretch a lone full-width cell to
+            match the tallest row and leave half of it empty. */}
+        <div className="mt-5">
+          <Reveal delay={150}><BentoCell icon={Share2} tile="bg-emerald-500/10 text-emerald-600" title="Send them to your CRM"
+            body="One click from your list into Smartlead, Instantly, HubSpot or Pipedrive. Push the same list twice and nothing duplicates.">
+            <div className="grid gap-2 sm:grid-cols-3">
+              {[
+                { t: "Smartlead", s: "412 added", c: "text-emerald-600" },
+                { t: "HubSpot", s: "88 updated", c: "text-orange-600" },
+                { t: "Instantly", s: "1,204 added", c: "text-violet-600" },
+              ].map((r) => (
+                <div key={r.t} className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2.5 text-[11px] shadow-sm">
+                  <CheckCircle2 className={`h-3.5 w-3.5 shrink-0 ${r.c}`} />
+                  <span className="font-semibold text-foreground">{r.t}</span>
+                  <span className="ml-auto text-muted-foreground">{r.s}</span>
+                </div>
+              ))}
+            </div>
+          </BentoCell></Reveal>
+        </div>
+      </section>
+
+      {/* ---- integrations: the "works with" band ---- */}
+      <section id="integrations" className="border-y border-border/60 bg-muted/20 py-20">
+        <div className="container">
+          <Reveal><SectionHead icon={Plug} eyebrow="Integrations" title="Works with the tools you already send from"
+            sub="Connect once with an API key, then push leads across whenever you like. Webhooks cover Zapier, Make and n8n, which reach almost everything else."
+            className="mb-10" /></Reveal>
+          <Reveal delay={90}>
+            <ul className="mx-auto flex max-w-3xl flex-wrap items-center justify-center gap-3">
+              {INTEGRATIONS.map((i) => (
+                <li key={i.name}
+                    className={`flex items-baseline gap-2 rounded-xl bg-background px-4 py-3 shadow-sm ring-1 ${i.ring}`}>
+                  <span className={`font-heading text-lg font-bold tracking-tight ${i.tint}`}>{i.name}</span>
+                  <span className="text-[11px] font-medium text-muted-foreground">{i.note}</span>
+                </li>
+              ))}
+            </ul>
+          </Reveal>
+          <Reveal delay={180}>
+            <p className="mt-8 text-center text-sm text-muted-foreground">
+              Already there? Re-pushing a list updates those leads instead of duplicating them.
+            </p>
+          </Reveal>
         </div>
       </section>
 

@@ -26,7 +26,7 @@ export default function robots() {
         allow: "/",
         // The app surface is per-user and behind auth; keeping it out of the
         // index also stops crawlers piling up on redirects to /login.
-        disallow: ["/api/", "/dashboard", "/leads", "/lists", "/watchlist", "/agent", "/billing", "/admin", "/login"],
+        disallow: ["/api/", "/dashboard", "/leads", "/lists", "/watchlist", "/agent", "/billing", "/admin", "/login", "/integrations", "/projects", "/domain-finder"],
       },
     ],
     sitemap: `${BASE}/sitemap.xml`,

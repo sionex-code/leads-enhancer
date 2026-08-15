@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || "https://leadsfunda.com";
 
 export const metadata = {
-  title: "Lead Directory: Business Lists by City and Service | LeadsFunda",
+  title: "Lead Directory: Business Lists by City and Service",
   description:
     "Browse ready-made B2B lead lists by city and service. Plumbers, dentists, restaurants and more, with ratings, review counts and contact details.",
   alternates: { canonical: `${MARKETING_URL}/directory` },

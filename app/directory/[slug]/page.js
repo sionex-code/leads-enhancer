@@ -201,12 +201,12 @@ export async function generateMetadata({ params }) {
   const { slug } = await params;
   const { onAppHost } = await resolveTier();
   const entry = await pub.bySlug(slug);
-  if (!entry) return { title: "Not found | LeadsFunda" };
+  if (!entry) return { title: "Not found" };
 
   const where = [entry.cityName, entry.countryName].filter(Boolean).join(", ");
   const count = entry.leadCount.toLocaleString();
   return {
-    title: `${entry.title}: ${count} Businesses | LeadsFunda`,
+    title: `${entry.title}: ${count} Businesses`,
     description:
       `${count} ${entry.service} businesses in ${where} with ratings, review counts, ` +
       `websites and contact details. Browse the list or export it with LeadsFunda.`,
