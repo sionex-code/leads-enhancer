@@ -1437,8 +1437,11 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
               <Select value={sort} onChange={(e) => setSort(e.target.value)} className="w-full sm:w-auto sm:min-w-[140px]" title="Sort">
                 <option value="recent">Newest first</option>
                 <option value="name">Name A–Z</option>
+                <option value="opportunity">Best opportunity</option>
+                <option value="opportunity_asc">Lowest opportunity</option>
                 <option value="reviews">Most reviews</option>
                 <option value="rating">Highest rated</option>
+                <option value="rating_asc">Lowest rated</option>
               </Select>
               <span className="ml-auto text-xs text-muted-foreground">
                 {loading ? "Loading..." : total ? `${pageStart}-${pageEnd} of ${total}` : "0 shown"}

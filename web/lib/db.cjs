@@ -8,6 +8,8 @@
 // schema.cjs is the source of truth for DDL (drizzle-kit migrations); this module
 // uses raw parameterized SQL for the hot CRUD paths.
 const { pool } = require("./pg.cjs");
+// The same scorer the Opportunity column renders with - see LEAD_SORTS below.
+const opportunity = require("./opportunity.cjs");
 
 const q = (text, params = []) => pool().query(text, params);
 const now = () => new Date().toISOString();
@@ -729,10 +731,70 @@ const LEAD_SORTS = {
   name: "lower(coalesce(name, '')) ASC",
   reviews: `${REVIEWS_EXPR} DESC NULLS LAST`,
   rating: `${RATING_EXPR} DESC NULLS LAST`,
+  // Worst-rated first is the prospecting order: a weak rating is the pitch, so
+  // this is the end of the list people selling reputation work actually want.
+  rating_asc: `${RATING_EXPR} ASC NULLS LAST`,
 };
+
+// Opportunity is not a column. It is computed from a dozen fields by
+// web/lib/opportunity.cjs, so it cannot be an ORDER BY - but it also cannot be
+// sorted on the client, because the table pages server-side and that would
+// reorder 120 of 10,000 rows while claiming to rank the lot.
+//
+// So it is computed here, over every row the filters match, using the same
+// module the column itself renders with. Only the fields the score reads are
+// fetched: ~1.8MB for 10,500 leads, against ~6MB for the whole rows.
+const OPPORTUNITY_SORTS = new Set(["opportunity", "opportunity_asc"]);
+
+// Above this the scan stops being something to do inside a page request, and
+// the score would need to be persisted on write instead. Well past any real
+// account today; the cap exists so the failure is a slower, truthful answer
+// over the newest rows rather than an out-of-memory.
+const OPPORTUNITY_SCAN_LIMIT = 50000;
+
+// Every field scoreLead() reads. Kept beside the scorer deliberately: a signal
+// added there without adding its column here would silently score as unknown.
+const OPPORTUNITY_COLUMNS = [
+  "id", "website", "tech", "reviews", "rating", "desktop_performance", "http_status",
+  "phone", "email", "all_emails", "address", "hours", "category", "enrich_status",
+  "facebook", "instagram", "linkedin", "twitter", "tiktok", "youtube", "owner_replied",
+];
+
+// Ids of every matching lead, ordered by opportunity score.
+async function opportunityOrderedIds(userId, opts, descending) {
+  const { clause, params } = buildLeadWhere(userId, opts);
+  const { rows } = await q(
+    `SELECT ${OPPORTUNITY_COLUMNS.join(", ")} FROM leads ${clause}
+      ORDER BY last_updated DESC LIMIT ${OPPORTUNITY_SCAN_LIMIT}`,
+    params
+  );
+  const scored = rows.map((row) => ({ id: row.id, score: opportunity.scoreLead(row).score }));
+  // Ties broken by id so paging is stable - without it, two leads on the same
+  // score can swap places between requests and one of them is never shown.
+  scored.sort((a, b) => (descending ? b.score - a.score : a.score - b.score) || a.id - b.id);
+  return scored.map((s) => s.id);
+}
 
 async function queryLeads(userId, opts = {}) {
   const { limit = 2000, offset = 0, sort = "recent" } = opts;
+
+  if (OPPORTUNITY_SORTS.has(sort)) {
+    const ids = await opportunityOrderedIds(userId, opts, sort === "opportunity");
+    const pageIds = ids.slice(Number(offset), Number(offset) + Number(limit));
+    if (!pageIds.length) return { total: ids.length, rows: [] };
+    // Fetch the page's full rows, then restore the scored order - SQL returns
+    // them in whatever order it likes, and `= ANY` does not preserve the array.
+    const { rows } = await q(
+      `SELECT *,
+              (SELECT COUNT(*)::int FROM list_members m JOIN lists l2 ON l2.id = m.list_id AND l2.user_id = $1
+                WHERE m.lead_id = leads.id) AS list_count
+         FROM leads WHERE user_id = $1 AND id = ANY($2::int[])`,
+      [userId, pageIds]
+    );
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    return { total: ids.length, rows: pageIds.map((id) => byId.get(id)).filter(Boolean) };
+  }
+
   const orderBy = LEAD_SORTS[sort] || LEAD_SORTS.recent;
   const { clause, params, add } = buildLeadWhere(userId, opts);
   const totalRes = await q(`SELECT COUNT(*)::int AS c FROM leads ${clause}`, params);
