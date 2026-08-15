@@ -16,6 +16,7 @@
     "audit:mobile": "node analyze.js --mobile",
     "report": "node report.js",
     "worker": "node worker.cjs",
+    "check:crm-docs": "node scripts/check-crm-docs.mjs",
     "project": "node project.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",

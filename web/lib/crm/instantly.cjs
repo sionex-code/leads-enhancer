@@ -30,11 +30,14 @@ module.exports = {
   id: "instantly",
   label: "Instantly",
   blurb: "Add leads straight into an Instantly campaign, deduped against everyone already in it.",
-  docsUrl: "https://developer.instantly.ai/api/v2/apikey",
+  // The developer-reference deep links (developer.instantly.ai/api/v2/…) are a
+  // client-rendered SPA and 404 when opened directly, which is what a user
+  // clicking this actually does. The help-centre article is a real page.
+  docsUrl: "https://help.instantly.ai/en/articles/10432807-api-v2",
 
   authFields: [
     { key: "apiKey", label: "API key (V2)", type: "password", required: true,
-      help: "Instantly → Settings → Integrations → API keys → create a V2 key. A V1 key will not work here, and V2 needs the Growth plan or above." },
+      help: "Instantly → Settings → Integrations → API keys → create a V2 key with the leads:create scope (or All). A V1 key will not work here." },
   ],
   configFields: [
     { key: "campaignId", label: "Campaign", type: "remote-select", required: true,

@@ -30,11 +30,13 @@ module.exports = {
   id: "hubspot",
   label: "HubSpot",
   blurb: "Create and update HubSpot contacts, matched on email so re-pushing never duplicates.",
-  docsUrl: "https://developers.hubspot.com/docs/api/private-apps",
+  // The old /docs/api/private-apps path only redirects here now; link the
+  // destination so the click doesn't take an extra hop.
+  docsUrl: "https://developers.hubspot.com/docs/apps/legacy-apps/private-apps/overview",
 
   authFields: [
     { key: "token", label: "Private app token", type: "password", required: true, placeholder: "pat-na1-…",
-      help: "HubSpot → Settings → Integrations → Private Apps → create an app with the crm.objects.contacts.write scope, then copy its access token." },
+      help: "HubSpot → Settings → Integrations → Private apps (listed under Legacy apps in newer accounts) → create an app with the crm.objects.contacts.write scope, then copy its access token from the Auth tab. You need to be a super admin." },
   ],
   configFields: [
     { key: "noEmail", label: "Leads with no email", type: "select", default: "skip",

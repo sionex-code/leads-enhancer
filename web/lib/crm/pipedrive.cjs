@@ -44,7 +44,7 @@ module.exports = {
 
   authFields: [
     { key: "token", label: "API token", type: "password", required: true,
-      help: "Pipedrive → your avatar → Personal preferences → API → copy your personal API token." },
+      help: "Pipedrive → your account name (top right) → Company settings → Personal preferences → API → copy your personal API token." },
   ],
   configFields: [
     { key: "createLead", label: "Also create", type: "select", default: "lead",

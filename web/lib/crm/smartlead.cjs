@@ -29,7 +29,9 @@ module.exports = {
   id: "smartlead",
   label: "Smartlead",
   blurb: "Add leads straight into a Smartlead campaign, ready to send.",
-  docsUrl: "https://helpcenter.smartlead.ai/en/articles/8981107-how-to-get-your-smartlead-api-key",
+  // The previous link answered 200 with a "Not found" body — a soft 404, so a
+  // status check alone would not have caught it. This one is a real article.
+  docsUrl: "https://helpcenter.smartlead.ai/en/articles/125-full-api-documentation",
 
   authFields: [
     { key: "apiKey", label: "API key", type: "password", required: true,
