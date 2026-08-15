@@ -127,7 +127,10 @@ function QuickConnect({ provider, onClose, onSaved }) {
           <DialogDescription>{p.blurb}</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        {/* DialogHeader and DialogFooter bring their own padding; the body
+            between them has none, so it has to bring its own or it runs
+            edge to edge. Same pattern as ListsDialog. */}
+        <div className="flex flex-col gap-4 overflow-y-auto p-5">
           {authFields.map((f) => (
             <div key={f.key} className="space-y-1">
               <div className="flex items-baseline justify-between gap-3">
@@ -154,7 +157,8 @@ function QuickConnect({ provider, onClose, onSaved }) {
             </div>
           ))}
 
-          <ProbeStatus probe={probe} label={p.label} complete={complete} autoProbe={autoProbe} onCheck={runProbe} />
+          <ProbeStatus probe={probe} label={p.label} complete={complete} autoProbe={autoProbe}
+                       onCheck={runProbe} expectsTargets={targetFields.length > 0} />
 
           {probe.state === "ok" && targetFields.map((f) => (
             <div key={f.key} className="space-y-1">
@@ -175,8 +179,10 @@ function QuickConnect({ provider, onClose, onSaved }) {
             </div>
           ))}
 
-          <details className="rounded-lg border border-border px-3 py-2">
-              <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Advanced</summary>
+          <details className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 [&[open]]:pb-3">
+              <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground">
+                Advanced
+              </summary>
               <div className="mt-3 space-y-3">
                 <div className="space-y-1">
                   <label htmlFor="cf-label" className="text-xs font-medium text-muted-foreground">Name</label>
@@ -203,9 +209,9 @@ function QuickConnect({ provider, onClose, onSaved }) {
                 </p>
             </div>
           </details>
-        </div>
 
-        {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
+          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
@@ -219,7 +225,7 @@ function QuickConnect({ provider, onClose, onSaved }) {
 }
 
 // The one line that tells you whether the key you just pasted works.
-function ProbeStatus({ probe, label, complete, autoProbe, onCheck }) {
+function ProbeStatus({ probe, label, complete, autoProbe, onCheck, expectsTargets }) {
   if (probe.state === "checking") {
     return (
       <p className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -255,7 +261,17 @@ function ProbeStatus({ probe, label, complete, autoProbe, onCheck }) {
       </button>
     );
   }
-  return null;
+  // Otherwise say what is about to happen, so the empty half of the dialog
+  // reads as "one more step" rather than as a form that failed to load. Kept
+  // as a plain line: the field's own help text sits right above it, and two
+  // bordered grey boxes in a row read as clutter.
+  return (
+    <p className="text-xs text-muted-foreground">
+      {expectsTargets
+        ? `Your ${label} campaigns load here as soon as the key checks out.`
+        : `We'll check the key against ${label} before anything is saved.`}
+    </p>
+  );
 }
 
 /* --------------------------------------------------------------------- edit */
@@ -372,7 +388,7 @@ function EditConnection({ provider, connection, sources = [], transforms = [], o
           <DialogDescription>{p.blurb}</DialogDescription>
         </DialogHeader>
 
-        <div className="mb-3 flex gap-1 border-b border-border">
+        <div className="flex gap-1 border-b border-border px-5">
           {[["credentials", "Connection"], ["mapping", "Field mapping"]].map(([key, text]) => (
             <button
               key={key}
@@ -387,7 +403,7 @@ function EditConnection({ provider, connection, sources = [], transforms = [], o
           ))}
         </div>
 
-        <div className="max-h-[52vh] space-y-4 overflow-y-auto pr-1">
+        <div className="max-h-[52vh] space-y-4 overflow-y-auto p-5">
           {tab === "credentials" ? (
             <>
               <label className="block space-y-1">
@@ -493,7 +509,7 @@ function EditConnection({ provider, connection, sources = [], transforms = [], o
         </div>
 
         {testResult ? (
-          <div className={`mt-3 flex items-start gap-2 rounded-lg border p-3 text-sm ${
+          <div className={`mx-5 mb-4 flex items-start gap-2 rounded-lg border p-3 text-sm ${
             testResult.ok ? "border-emerald-500/40 bg-emerald-500/5" : "border-amber-500/40 bg-amber-500/5"
           }`}>
             {testResult.ok
@@ -507,7 +523,7 @@ function EditConnection({ provider, connection, sources = [], transforms = [], o
           </div>
         ) : null}
 
-        {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
+        {error ? <p className="mx-5 mb-4 text-sm text-destructive">{error}</p> : null}
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving || testing}>Cancel</Button>
