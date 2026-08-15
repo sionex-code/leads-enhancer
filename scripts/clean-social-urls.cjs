@@ -2,8 +2,8 @@
 // One-time cleanup for social URLs stored before web/lib/social-urls.cjs
 // existed.
 //
-// The crawler's old check only rejected the obvious junk — login pages, share
-// dialogs, /profile.php with no id — so directory indexes and share permalinks
+// The crawler's old check only rejected the obvious junk - login pages, share
+// dialogs, /profile.php with no id - so directory indexes and share permalinks
 // were saved as if they were profiles. "https://facebook.com/people" is the one
 // that got reported: it renders as a Facebook icon on the lead and opens
 // Facebook's people directory. The report crawler validated nothing at all.
@@ -84,7 +84,7 @@ async function cleanTable(db, table) {
 
 async function main() {
   const db = pool();
-  console.log(DRY_RUN ? "DRY RUN — nothing will be written" : "Applying changes");
+  console.log(DRY_RUN ? "DRY RUN - nothing will be written" : "Applying changes");
   for (const table of TABLES) {
     try {
       await cleanTable(db, table);

@@ -4,7 +4,7 @@ import { ImageResponse } from "next/og";
 // repo, and without any image every shared link previews as a bare text card.
 // This renders at build/request time and is cached by Next.
 export const runtime = "nodejs";
-export const alt = "LeadsFunda — Google Maps lead generation with email enrichment";
+export const alt = "LeadsFunda - Google Maps lead generation with email enrichment";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 

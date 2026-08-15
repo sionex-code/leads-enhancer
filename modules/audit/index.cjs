@@ -1,4 +1,4 @@
-// Website-audit / report module — public entry point. Call sites (web-runner and
+// Website-audit / report module - public entry point. Call sites (web-runner and
 // web/lib/site-report.cjs) import THIS file. `auditUrl` is a drop-in for
 // web-audit.cjs#auditUrl so the heavy scan offloads when AUDIT_WORKER_URL is set;
 // runReport stays local because it only assembles HTML from local summaries.

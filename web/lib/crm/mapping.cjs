@@ -1,10 +1,10 @@
 // Turning a lead row into whatever shape a CRM wants.
 //
 // A field map is [{ target, source, transform?, constant? }]:
-//   target    — a key the adapter declared in mappableFields
-//   source    — a lead column (snake_case, as it comes back from Postgres),
+//   target    - a key the adapter declared in mappableFields
+//   source    - a lead column (snake_case, as it comes back from Postgres),
 //               or "__constant" to send a fixed value
-//   transform — an optional named transform from TRANSFORMS
+//   transform - an optional named transform from TRANSFORMS
 //
 // Both ends are validated against allowlists before anything is stored, because
 // the target is forwarded verbatim to a third-party API and the source names a
@@ -83,7 +83,7 @@ function payloadHash(mapped) {
   return crypto.createHash("sha256").update(canonical).digest("hex");
 }
 
-// Stable for the same content, different when the content changes — so a retry
+// Stable for the same content, different when the content changes - so a retry
 // of the same push is recognisably the same request to the receiver, but an
 // edited lead is not.
 function idempotencyKey(connectionId, leadId, hash) {

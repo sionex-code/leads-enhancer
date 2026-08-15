@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // One-time cleanup for city names that are administrative units, not cities.
 //
-// Nominatim ranks a boundary above the settlement inside it — searching
+// Nominatim ranks a boundary above the settlement inside it - searching
 // "Bhalwal" returns "Bhalwal Tehsil" (importance 0.395) ahead of the town
-// "Bhalwal" (0.336) — and geo-resolve picked purely on importance. So searches
+// "Bhalwal" (0.336) - and geo-resolve picked purely on importance. So searches
 // were recorded under names like "Bhalwal Tehsil" and "Zone IV", which then
 // became real cities in the warehouse, real rows in the public directory, and
 // options in the find form's city dropdown.
@@ -36,7 +36,7 @@ const fixName = (name) => String(name || "").trim().replace(UNIT, "").trim();
 
 async function main() {
   const db = pool();
-  console.log(DRY_RUN ? "DRY RUN — nothing will be written\n" : "Applying changes\n");
+  console.log(DRY_RUN ? "DRY RUN - nothing will be written\n" : "Applying changes\n");
 
   // The public directory. The warehouse lives in its own database (see
   // web/lib/warehouse-pg.cjs); run this there too if the names appear in the

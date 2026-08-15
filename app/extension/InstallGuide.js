@@ -253,7 +253,7 @@ function ReadyPanel({ version, outdated, latestVersion }) {
           <ArrowUpCircle className="mt-0.5 h-5 w-5 shrink-0 text-sky-600" />
           <div className="min-w-0">
             <h2 className="font-medium text-foreground">
-              An update is ready{latestVersion ? ` — v${latestVersion}` : ""}
+              An update is ready{latestVersion ? ` - v${latestVersion}` : ""}
             </h2>
             <p className="mt-1.5 text-sm text-muted-foreground">
               You&apos;re running v{version}. Download the zip, unzip it over the
@@ -319,7 +319,7 @@ function ReadyPanel({ version, outdated, latestVersion }) {
 const FAQ = [
   {
     // Worded without "the amber badge above", because this list is also shown
-    // once the extension is in — where there is no amber badge to point at.
+    // once the extension is in - where there is no amber badge to point at.
     q: "It still says not installed, but I’ve installed it",
     a: (
       <>

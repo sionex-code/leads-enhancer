@@ -2,7 +2,7 @@
 //
 // One switch, read by everything that can speak to a crawler: the X-Robots-Tag
 // header in next.config.js, the root metadata in app/layout.js, the per-page
-// override on directory pages, robots.txt and the sitemap. They have to agree —
+// override on directory pages, robots.txt and the sitemap. They have to agree -
 // a page that says noindex while the sitemap still advertises it is the kind of
 // mixed signal that takes weeks to unpick.
 //

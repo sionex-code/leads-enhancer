@@ -5,13 +5,13 @@
 // now it was generated with a bare Math.random().toString(36) and never
 // checked against anything, so two things could be true of the existing data:
 // a project created before the field existed has none at all, and two
-// projects can legitimately hold the same code — 36^6 candidates sounds like
+// projects can legitimately hold the same code - 36^6 candidates sounds like
 // a lot until a tenant has a few hundred projects and the birthday paradox
 // stops being theoretical. New projects go through store.uniquePublicId,
 // which checks; this repairs what is already on disk.
 //
 // Per-tenant, not global: a project is only ever looked up within its own
-// tenant, so uniqueness only has to hold there — same scope uniquePublicId
+// tenant, so uniqueness only has to hold there - same scope uniquePublicId
 // uses.
 //
 // Usage:
@@ -27,10 +27,10 @@ const DATA_ROOT = process.env.GMAPS_DATA_DIR || process.cwd();
 const TENANTS_DIR = path.join(DATA_ROOT, "tenants");
 
 function main() {
-  console.log(DRY_RUN ? "DRY RUN — nothing will be written\n" : "Applying changes\n");
+  console.log(DRY_RUN ? "DRY RUN - nothing will be written\n" : "Applying changes\n");
 
   if (!fs.existsSync(TENANTS_DIR)) {
-    console.log(`No tenants directory at ${TENANTS_DIR} — nothing to do.`);
+    console.log(`No tenants directory at ${TENANTS_DIR} - nothing to do.`);
     return;
   }
 

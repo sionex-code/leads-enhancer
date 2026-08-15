@@ -1,18 +1,18 @@
-// warehouse.cjs — direct Postgres client for the gmaps-scraper-standalone warehouse DB.
+// warehouse.cjs - direct Postgres client for the gmaps-scraper-standalone warehouse DB.
 //
 // Replaces the previous HTTP-based client (WAREHOUSE_URL / WAREHOUSE_TOKEN) with a
 // dedicated pg.Pool so Find-leads queries bypass the single-threaded warehouse HTTP
 // server entirely.
 //
 // Required env:
-//   WAREHOUSE_DATABASE_URL — connection string for the standalone warehouse Postgres.
+//   WAREHOUSE_DATABASE_URL - connection string for the standalone warehouse Postgres.
 //                            Example: postgresql://warehouse:PASSWORD@127.0.0.1:5433/warehouse
 //                            In local dev you need an SSH tunnel to the VPS Postgres.
 //
 // Exports:
-//   catalog()         — returns { countries, services }. Cached 5 min in-module.
-//   queryLeads(f)     — returns { total, rows } using filters.
-//   toLeadRow(wh)     — maps a warehouse lead row to the shape expected by db.upsertLeads.
+//   catalog()         - returns { countries, services }. Cached 5 min in-module.
+//   queryLeads(f)     - returns { total, rows } using filters.
+//   toLeadRow(wh)     - maps a warehouse lead row to the shape expected by db.upsertLeads.
 
 "use strict";
 
@@ -79,7 +79,7 @@ function _loadDiskCache() {
   try {
     const obj = JSON.parse(fs.readFileSync(CATALOG_DISK, "utf8"));
     if (obj && obj.data && obj.at) { _catalogCache = obj.data; _catalogAt = obj.at; }
-  } catch { /* no disk cache yet — fine */ }
+  } catch { /* no disk cache yet - fine */ }
 }
 
 function _saveDiskCache() {
@@ -196,7 +196,7 @@ if (!_catalogCache || Date.now() - _catalogAt >= CATALOG_TTL_MS) {
 
 // ---- queryLeads ----------------------------------------------------------------
 
-// Qualify every column with `leads.` — when a service/country filter adds a JOIN
+// Qualify every column with `leads.` - when a service/country filter adds a JOIN
 // (services/cities/countries all have id, name, category, lat, lng), bare column
 // names like `id` would be ambiguous (Postgres error 42702). The result column
 // names are unchanged (Postgres drops the table qualifier), so toLeadRow/buildCsv
@@ -333,7 +333,7 @@ async function queryLeads(filters = {}) {
   const countRes = await pool.query(countSql, params);
   const total = Number(countRes.rows[0].total);
 
-  // Paginated query — add LIMIT and OFFSET as extra params
+  // Paginated query - add LIMIT and OFFSET as extra params
   const limitParam = addParam(limit);
   const offsetParam = addParam(offset);
   const rowsSql = `
@@ -355,7 +355,7 @@ async function queryLeads(filters = {}) {
  * (it accepts both snake_case and the camelCase alias listed in each call).
  *
  * Warehouse socials field is either a JSON string or an object like
- * { facebook, instagram, linkedin, twitter } — we expand it to flat keys.
+ * { facebook, instagram, linkedin, twitter } - we expand it to flat keys.
  *
  * @param {object} wh - a warehouse lead row
  * @returns {object} - row suitable for db.upsertLeads

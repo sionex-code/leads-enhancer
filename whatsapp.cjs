@@ -49,7 +49,7 @@ const WATCH = flags.has("--watch");
 const FORCE = flags.has("--force");
 const INPLACE = flags.has("--inplace"); // write columns back into the input CSV (pipeline use)
 
-// OpenWA connection — defaults are the user's working instance; override with
+// OpenWA connection - defaults are the user's working instance; override with
 // flags or env vars in other deployments. The api key is read from env first so
 // it never has to be hard-committed when callers prefer that.
 const API_URL = (flagValue("--apiUrl", process.env.OWA_API_URL || "http://144.91.104.65:26768") || "").replace(/\/+$/, "");
@@ -111,7 +111,7 @@ function normalizePhone(raw, defaultCc = DEFAULT_CC) {
   let digits = s.replace(/\D/g, "");
   if (!digits) return "";
   const cc = String(defaultCc || "").replace(/\D/g, "");
-  // International "00" prefix means a +country number — strip the 00.
+  // International "00" prefix means a +country number - strip the 00.
   if (digits.startsWith("00")) {
     digits = digits.slice(2);
   } else if (!hadPlus && cc) {
@@ -122,7 +122,7 @@ function normalizePhone(raw, defaultCc = DEFAULT_CC) {
     digits = local.startsWith(cc) ? local : cc + local;
   } else if (!hadPlus && /^[2-9]\d{2}[2-9]\d{6}$/.test(digits)) {
     // No country code known (US/Canada addresses usually omit the country), but
-    // this is a valid 10-digit North American number per NANP rules — default
+    // this is a valid 10-digit North American number per NANP rules - default
     // its country code to 1 so the WhatsApp lookup works.
     digits = "1" + digits;
   }
@@ -201,7 +201,7 @@ async function checkOnce(number) {
     const d = data && data.data ? data.data : data;
     const exists = !!(d && (d.exists ?? d.isRegistered ?? d.registered));
     // WhatsApp increasingly returns a "@lid" (linked ID) instead of the classic
-    // "@c.us" phone-based JID for some numbers — a LID's digits are an internal
+    // "@c.us" phone-based JID for some numbers - a LID's digits are an internal
     // WhatsApp identifier, NOT the phone number, so a wa.me link built from them
     // is broken. Only trust the API's id when it's actually phone-based; otherwise
     // fall back to the number we queried with, which we know is real.
@@ -383,7 +383,7 @@ if (require.main === module)
     let stop = false;
     process.on("SIGINT", () => {
       stop = true;
-      console.log("\n  Stopping (state saved — re-run to resume).");
+      console.log("\n  Stopping (state saved - re-run to resume).");
     });
     while (!stop && idleChecks < 12) {
       await runQueue();

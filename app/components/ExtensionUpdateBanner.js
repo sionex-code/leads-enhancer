@@ -10,7 +10,7 @@ import useExtension from "../lib/useExtension";
 // than the build we currently publish.
 //
 // It lives here rather than only on /extension because an outdated extension is
-// not something anybody goes looking for — the scraper keeps working, so the
+// not something anybody goes looking for - the scraper keeps working, so the
 // only signal a user ever gets is a search behaving oddly. The account menu's
 // status dot is too quiet to carry that on its own.
 //

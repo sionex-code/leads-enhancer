@@ -5,7 +5,7 @@
 //   • The rows come from the shared WAREHOUSE (city + service), never from a
 //     user's project. A project is that tenant's private working set; putting
 //     one on a public URL would leak one customer's research to everybody.
-//   • Only the *aggregate* of a search is recorded here — city, service,
+//   • Only the *aggregate* of a search is recorded here - city, service,
 //     country, row count. No user id, no free-typed query text, no timestamps
 //     tied to a person. A typed query can contain anything and belongs to the
 //     person who typed it.
@@ -74,7 +74,7 @@ function buildSlug({ service, cityName, countryCode }) {
 const titleCase = (s) =>
   String(s || "").trim().replace(/\s+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
-// "Lahore Plumber Leads" — the phrasing users actually search for.
+// "Lahore Plumber Leads" - the phrasing users actually search for.
 function displayTitle(row) {
   const city = titleCase(row.city_name);
   const service = titleCase(row.service);
@@ -101,7 +101,7 @@ function searcherLabel(name, email) {
 }
 
 // Anonymised label for a user id, or "" when unknown. Reads name/email only to
-// build the initials — neither is stored.
+// build the initials - neither is stored.
 async function labelForUser(userId) {
   if (!userId) return "";
   try {
@@ -205,7 +205,7 @@ async function bySlug(slug) {
 
 // Sibling lists: other services in the same city, and the same service in other
 // cities. These exist for the reader, but they are also what stops 1,394
-// near-identical pages looking like a doorway farm to a crawler — every page
+// near-identical pages looking like a doorway farm to a crawler - every page
 // gains inbound links from real neighbours instead of only the index.
 async function related(entry, limit = 8) {
   if (!entry) return { sameCity: [], sameService: [] };
@@ -251,7 +251,7 @@ function maskEmail(email) {
   const s = String(email || "").trim();
   const at = s.indexOf("@");
   if (at < 1) return "";
-  // Hide the local part — the mailbox is the part worth paying for. The domain
+  // Hide the local part - the mailbox is the part worth paying for. The domain
   // stays readable so the row still shows the lead is contactable, and it is
   // already implied by the business's own website column.
   const domain = s.slice(at + 1);

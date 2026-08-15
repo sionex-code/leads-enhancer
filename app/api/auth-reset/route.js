@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 // on the way out. Clearing it by hand in browser settings is fiddly.
 //
 // Keep this list tight. An earlier version emitted every name x suffix x domain
-// combination — 264 Set-Cookie headers — which overran nginx's proxy buffer and
+// combination - 264 Set-Cookie headers - which overran nginx's proxy buffer and
 // returned 502, so the endpoint that was meant to unstick sign-in did nothing
 // at all.
 
@@ -42,7 +42,7 @@ export async function GET(request) {
       kill(base, domain, false);
       kill(`__Secure-${base}`, domain, true);
     }
-    // __Host- cookies are invalid with a Domain attribute — sending one makes
+    // __Host- cookies are invalid with a Domain attribute - sending one makes
     // the browser ignore the deletion entirely.
     kill(`__Host-${base}`, null, true);
   }

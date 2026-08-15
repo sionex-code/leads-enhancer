@@ -13,7 +13,7 @@ import { cn } from "../lib/utils";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
-// Canonical plans — ids must match billing.cjs (p19/p35/p49). `rank` drives the
+// Canonical plans - ids must match billing.cjs (p19/p35/p49). `rank` drives the
 // "don't offer a downgrade" rule. One unified credit pool: a plan's monthly grant
 // IS its credit allowance (find a lead = 1 credit, audit 3, chatbot 5, report 10).
 const PLANS = [
@@ -148,7 +148,7 @@ export default function BillingClient() {
       <div className="mx-auto max-w-5xl space-y-8 p-4 sm:p-6 lg:p-8">
         {/* Current plan + credit balance */}
         <Card className="overflow-hidden rounded-lg">
-          {/* Status strip — current plan chip pinned to the very top */}
+          {/* Status strip - current plan chip pinned to the very top */}
           <div className="flex flex-wrap items-center gap-2 border-b border-border/60 bg-muted/30 px-5 py-3">
             <span className="text-sm font-medium text-muted-foreground">Current plan</span>
             {loading ? (
@@ -222,7 +222,7 @@ export default function BillingClient() {
           </div>
         </Card>
 
-        {/* Daily limits — searches + leads, with reset time */}
+        {/* Daily limits - searches + leads, with reset time */}
         <Card>
           <CardContent className="p-6">
             <div className="flex flex-wrap items-center justify-between gap-2">

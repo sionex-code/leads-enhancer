@@ -76,7 +76,7 @@ export default function DomainFinderClient() {
       return;
     }
     // An already-installed older extension answers PING fine (that part never
-    // changed) but silently drops ENRICH_DOMAINS — its bridge doesn't forward
+    // changed) but silently drops ENRICH_DOMAINS - its bridge doesn't forward
     // a message type it doesn't know, so the page would otherwise wait for a
     // RESULT that's never coming. Catch that here instead of just spinning.
     if (version !== "unknown" && !versionAtLeast(version, MIN_DOMAIN_FINDER_VERSION)) {
@@ -116,7 +116,7 @@ export default function DomainFinderClient() {
         </div>
         <p className="text-xs text-muted-foreground">
           Paste a single domain or up to {MAX_DOMAINS} URLs (one per line), or import a .txt/.csv file.
-          Runs in your browser via the LeadsFunda extension — emails, socials, and tracking pixels are
+          Runs in your browser via the LeadsFunda extension - emails, socials, and tracking pixels are
           pulled from each site with a 10-second timeout per domain.
         </p>
         <Textarea
@@ -141,7 +141,7 @@ export default function DomainFinderClient() {
               : `Find leads${domains.length ? ` (${domains.length})` : ""}`}
           </Button>
           <span className="text-xs text-muted-foreground">
-            {overLimit ? `Max ${MAX_DOMAINS} domains — trim the list.` : domains.length ? `${domains.length} domain${domains.length === 1 ? "" : "s"} ready` : ""}
+            {overLimit ? `Max ${MAX_DOMAINS} domains - trim the list.` : domains.length ? `${domains.length} domain${domains.length === 1 ? "" : "s"} ready` : ""}
           </span>
         </div>
         {error ? <div className="text-xs text-destructive">{error}</div> : null}
@@ -161,7 +161,7 @@ export default function DomainFinderClient() {
         open={needUpdate}
         onClose={() => setNeedUpdate(false)}
         title="Update the browser extension to use Domain Leads Finder"
-        body="You have an older version of the LeadsFunda extension installed that doesn't support this feature yet. Go to chrome://extensions, find LeadsFunda Lead Scraper, and click Reload — then try again."
+        body="You have an older version of the LeadsFunda extension installed that doesn't support this feature yet. Go to chrome://extensions, find LeadsFunda Lead Scraper, and click Reload - then try again."
       />
       <LeadsClient
         key={refreshKey}

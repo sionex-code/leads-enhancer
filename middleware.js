@@ -49,7 +49,7 @@ function matchPrefix(pathname, prefixes) {
 
 function hasSessionCookie(request) {
   // Local fake session: pretend the cookie is present so the gated pages render
-  // instead of bouncing to /login. Dev only — see web/lib/dev-auth.js.
+  // instead of bouncing to /login. Dev only - see web/lib/dev-auth.js.
   if (DEV_AUTH_ENABLED) return true;
   const c = request.cookies;
   return Boolean(

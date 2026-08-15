@@ -19,7 +19,7 @@ directories:
   buildResources: build
 # App dir (resources/app): just the Electron entry. The Next standalone bundle
 # is copied into resources/standalone manually by scripts/pack-electron.cjs AFTER
-# the unpacked build — electron-builder v26 rewrites any node_modules it packs
+# the unpacked build - electron-builder v26 rewrites any node_modules it packs
 # into a symlinked store that fails on Windows, so the bundle must bypass it.
 files:
   - electron/**/*

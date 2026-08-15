@@ -9,7 +9,7 @@ export async function POST(request) {
   const { userId, response } = await requireUser();
   if (response) return response;
 
-  // Credit gate — one unified pool (1 credit per new lead). Free accounts may
+  // Credit gate - one unified pool (1 credit per new lead). Free accounts may
   // spend their free grant; only block when truly out of credits.
   const entitlement = await billing.getEntitlement(userId);
   if (!entitlement.unlimited && (entitlement.credits || 0) <= 0) {
@@ -52,7 +52,7 @@ export async function POST(request) {
   const dir = store.safeProjectDir(store.slugify(projectName), userId);
   const state = store.readState(dir);
   if (state.activePid && store.processAlive(state.activePid)) {
-    // Give back the search we just counted — nothing was actually started.
+    // Give back the search we just counted - nothing was actually started.
     if (isScrape) await billing.releaseDailySearch(userId).catch(() => {});
     return Response.json({ error: "Project is already running" }, { status: 409 });
   }

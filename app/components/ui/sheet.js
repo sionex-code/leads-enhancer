@@ -33,7 +33,7 @@ const SheetContent = React.forwardRef(({ className, children, side = "right", sh
   const { onOpenChange } = React.useContext(SheetCtx);
   // Must render into <body>, not in place. Every page is wrapped by app/template.js
   // in `animate-page-in`, whose keyframes end on `transform: translateY(0)` with
-  // fill-mode `both` — so a real transform stays on that div forever. A transformed
+  // fill-mode `both` - so a real transform stays on that div forever. A transformed
   // ancestor becomes the containing block for `position: fixed` children, which
   // pinned this panel to the top of the *page* instead of the viewport: `h-full`
   // stretched it to the full document height and its header sat wherever the top

@@ -115,14 +115,14 @@ function stagesForResume() {
 }
 
 // Merge this project's latest CSVs into the global deduped leads DB. Never let a
-// sync error abort the run — the CSVs remain the source of truth.
+// sync error abort the run - the CSVs remain the source of truth.
 async function syncDb(stage) {
   try {
     const res = await syncProjectToDb(projectName);
     log(`DB sync: +${res.inserted} new, ${res.updated} updated`);
     // Record the new-vs-duplicate split so the dashboard can explain what was charged
     // ("X new · Y already in your leads"). Only the post-scrape sync of the browser
-    // path is meaningful here — the grid scraper upserts in realtime and records its
+    // path is meaningful here - the grid scraper upserts in realtime and records its
     // own running totals, so its post-scrape sync reports 0 new and is skipped.
     if (stage === "scrape" && res.inserted > 0) {
       writeState(dir, { dbSync: { inserted: res.inserted, updated: res.updated, at: new Date().toISOString() } });

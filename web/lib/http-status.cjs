@@ -1,4 +1,4 @@
-// Fast website status check — a plain HTTP request (no browser) so the dashboard
+// Fast website status check - a plain HTTP request (no browser) so the dashboard
 // can show each lead's site status (200 / 301 / 404 / 500 / unreachable) quickly
 // and in bulk. Tries a GET (some servers reject HEAD) following redirects.
 

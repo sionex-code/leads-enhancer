@@ -40,7 +40,7 @@ const SEARCH_SHARE = 0.7;
 
 // The catalog stores services lowercase ("general contractor"). Sentence case
 // in a control that sits at the top of the page reads as unfinished, so they
-// are cased for display only — the value posted is still the catalog's.
+// are cased for display only - the value posted is still the catalog's.
 const titleCase = (s) =>
   String(s || "").replace(/\b\p{L}/gu, (c) => c.toUpperCase());
 
@@ -69,7 +69,7 @@ function maskWebsite(site) {
 // A labelled select that carries its own icon.
 //
 // The icon sits in the padding, not in the flow, and the native chevron is
-// suppressed for a drawn one — a bare <select> renders three different control
+// suppressed for a drawn one - a bare <select> renders three different control
 // shapes across Chrome, Safari and Firefox, and the row has to look like one
 // designed component in all of them. It is still a real <select>, so the
 // keyboard, the mobile wheel picker and screen readers all behave normally.
@@ -287,7 +287,7 @@ export default function PublicSearch({ signedIn = false }) {
 
         {/* The search is the first thing on the page now, so this panel is what
             most visitors meet first. It has to answer "why am I being asked to
-            install something?" on the spot — a bare "get the extension" button
+            install something?" on the spot - a bare "get the extension" button
             in front of a stranger reads as a hurdle, not as the reason the
             search is free. */}
         {status === "needs-extension" && (

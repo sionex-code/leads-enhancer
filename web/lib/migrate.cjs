@@ -97,7 +97,7 @@ const STATEMENTS = [
 
   // ---- CRM integrations ------------------------------------------------
   // One row per connected CRM. `secret_enc` is an AES-256-GCM blob sealed by
-  // web/lib/crypto.cjs — the only encrypted column in the database, because a
+  // web/lib/crypto.cjs - the only encrypted column in the database, because a
   // CRM token can write to a customer's system of record. Everything a UI needs
   // to render lives in `config`, so no route ever has to decrypt to list.
   `CREATE TABLE IF NOT EXISTS crm_connections (
@@ -119,7 +119,7 @@ const STATEMENTS = [
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_crm_connections_user_label ON crm_connections (user_id, lower(label))`,
 
   // The dedupe ledger: what we already sent where, and what the CRM called it.
-  // Deliberately NOT columns on `leads` — EXPORT_COLUMNS is derived from
+  // Deliberately NOT columns on `leads` - EXPORT_COLUMNS is derived from
   // LEAD_COLUMNS, so a crm_record_id there would leak into every CSV, and one
   // user can hold several connections at once.
   `CREATE TABLE IF NOT EXISTS crm_lead_sync (
@@ -225,7 +225,7 @@ async function renamePlanKeysOnce(client) {
 }
 
 // Seed the shared enrichment cache from leads that were already enriched before
-// the cache existed — otherwise re-scraping a previously-enriched business finds
+// the cache existed - otherwise re-scraping a previously-enriched business finds
 // an empty cache and crawls it again. Picks the most-recently-updated enriched
 // lead per domain. Guarded by a flag so the leads scan only runs once (the
 // INSERT itself is also ON CONFLICT DO NOTHING, so re-running is harmless).
@@ -272,7 +272,7 @@ async function ensureSchema() {
     _done = true;
     console.log("[migrate] schema ensured (credits, proxies, enrichment_cache, app_settings)");
   } catch (err) {
-    // Never let a migration hiccup take down boot — log and let the app start;
+    // Never let a migration hiccup take down boot - log and let the app start;
     // routes that need a missing column will surface a clear error instead.
     console.error("[migrate] ensureSchema failed:", err.message);
   } finally {

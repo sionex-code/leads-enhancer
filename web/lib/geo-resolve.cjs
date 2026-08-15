@@ -4,7 +4,7 @@
 // Why this exists: a live search sends the typed text to Google Maps, but the
 // extension's grid engine geofences the results to the area it was given. When
 // that area came from the city dropdown, every result Google returned for the
-// typed location fell outside it and was silently discarded — a search for
+// typed location fell outside it and was silently discarded - a search for
 // "Gujrat Plumber" with the dropdown on Uppsala returned 20 Pakistani/Indian
 // plumbers and kept zero of them. The area has to come from the same text the
 // keyword does.
@@ -43,19 +43,19 @@ async function geocode(location, { strict = false, timeoutMs = 6000 } = {}) {
     const arr = await res.json();
     if (!Array.isArray(arr)) return null;
     // strict = the location is a guess taken from the tail of the query, so
-    // only accept an actual place/area — never a business or street that
+    // only accept an actual place/area - never a business or street that
     // happens to share the name.
     const usable = arr.filter(
       (r) => r.boundingbox && (!strict || r.category === "boundary" || r.category === "place")
     );
     if (!usable.length) return null;
     // Nominatim sorts by relevance to the string, not by how prominent the place
-    // is, so take the most important match rather than the first — but a
+    // is, so take the most important match rather than the first - but a
     // settlement beats an administrative boundary before importance is even
     // considered. Searching "Bhalwal" returns the boundary "Bhalwal Tehsil"
     // (importance 0.395) above the town "Bhalwal" (0.336), and picking on
     // importance alone is how projects ended up labelled "Bhalwal Tehsil" and
-    // "Zone IV" — administrative units nobody prospects by.
+    // "Zone IV" - administrative units nobody prospects by.
     const mostImportant = (list) =>
       list.reduce((a, b) => ((Number(b.importance) || 0) > (Number(a.importance) || 0) ? b : a));
     const places = usable.filter((r) => r.category === "place");
@@ -150,7 +150,7 @@ function splitCandidates(q) {
   for (let k = Math.min(4, words.length - 1); k >= 1; k--) {
     guess.push({ keyword: words.slice(0, -k).join(" "), location: words.slice(-k).join(" "), strict: true });
   }
-  // Leading words as the location ("Gujrat Plumber") — reverse word order is
+  // Leading words as the location ("Gujrat Plumber") - reverse word order is
   // normal in South Asian and many non-English queries, and a suffix-only scan
   // never resolves it.
   for (let k = 1; k <= Math.min(3, words.length - 1); k++) {
@@ -162,13 +162,13 @@ function splitCandidates(q) {
 
 // Below this, a "place" match is too obscure to be what the user meant. A
 // village in Nigeria called Pizza scores 0.15; Gujrat scores 0.46, Uppsala
-// 0.67. Only decisive when a single guess resolves — otherwise the guesses are
+// 0.67. Only decisive when a single guess resolves - otherwise the guesses are
 // ranked against each other.
 const MIN_GUESS_IMPORTANCE = 0.25;
 
 /**
  * Resolve free text to { keyword, location, display, bbox, latStep, lngStep }.
- * Returns null when nothing in the text names a place we can locate — the
+ * Returns null when nothing in the text names a place we can locate - the
  * caller should then fall back to the user's selected city.
  */
 async function resolveArea(query, { allowWholeQueryFallback = true } = {}) {
@@ -176,7 +176,7 @@ async function resolveArea(query, { allowWholeQueryFallback = true } = {}) {
   if (!q) return null;
 
   // The fallback flag changes what this function is willing to return for the
-  // exact same string, so it has to be part of the cache key — otherwise an
+  // exact same string, so it has to be part of the cache key - otherwise an
   // earlier unguarded call (or vice versa) serves its answer to a later call
   // that asked for the opposite, for as long as the entry lives.
   const key = `${allowWholeQueryFallback ? 1 : 0}:${q.toLowerCase()}`;
@@ -201,7 +201,7 @@ async function resolveArea(query, { allowWholeQueryFallback = true } = {}) {
   let calls = 0;
 
   // An explicit "in <place>" or "<thing>, <place>" says outright which half is
-  // the location, so the first one that resolves wins — nothing to weigh up.
+  // the location, so the first one that resolves wins - nothing to weigh up.
   for (const c of explicit) {
     if (calls++) await sleep(NOMINATIM_GAP_MS);
     const geo = await geocode(c.location, { strict: c.strict });
@@ -209,7 +209,7 @@ async function resolveArea(query, { allowWholeQueryFallback = true } = {}) {
   }
 
   // Guesses are a different problem: for "gujrat pizza" both halves resolve to
-  // *something* — the city of Gujrat and a village named Pizza. Taking the
+  // *something* - the city of Gujrat and a village named Pizza. Taking the
   // first hit picked the village and searched Nigeria. Score them all and keep
   // the most prominent place instead.
   if (!value) {
@@ -232,7 +232,7 @@ async function resolveArea(query, { allowWholeQueryFallback = true } = {}) {
     if (hits.length) value = pack(hits[0].c, hits[0].geo);
   }
 
-  // Nothing split cleanly. The whole query may just be a place — typing
+  // Nothing split cleanly. The whole query may just be a place - typing
   // "islamabad" with the service dropdown already set is a normal way to ask
   // for "that service, but over there". Every split needs both halves, so this
   // case can only be caught here. The keyword comes back empty for the caller
@@ -240,7 +240,7 @@ async function resolveArea(query, { allowWholeQueryFallback = true } = {}) {
   //
   // Dangerous when the "place" is actually just a service name: "spa" is also
   // a real, prominent town in Belgium, and geocoding it moved a live search's
-  // circle off Rawalpindi and onto Belgium without the user asking for that —
+  // circle off Rawalpindi and onto Belgium without the user asking for that -
   // a bare word with no "in"/"near"/"," has no location marker in it at all,
   // so there is nothing here that says the user meant a place over a service.
   // Callers that already know the text names a recognised service pass

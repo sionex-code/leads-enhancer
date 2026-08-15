@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 // answered from outside: `source` says whether the answer came from Cloudflare's
 // location headers, from an IP lookup, or from a cached one.
 //
-// Returns only what the caller's own request resolves to — their own location,
+// Returns only what the caller's own request resolves to - their own location,
 // never anybody else's, and never the IP itself.
 export async function GET() {
   const h = await headers();
@@ -33,7 +33,7 @@ export async function GET() {
       resolvedCity: city,
       hint: located
         ? city
-          ? `Location resolved (${where.source}) and matched — the form opens on this city.`
+          ? `Location resolved (${where.source}) and matched - the form opens on this city.`
           : `Location resolved (${where.source}) but no city in our index matched; the form falls back to the country.`
         : "No location beyond the country. Cloudflare's 'Add visitor location headers' managed transform would make this instant and free.",
     },

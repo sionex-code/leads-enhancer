@@ -67,7 +67,7 @@ async function main() {
   //    - output/  : the dev data dir (CSVs, leads.db, reports). At runtime the
   //                 app uses GMAPS_DATA_DIR (per-user writable) instead.
   //    - node_modules/electron : ~355MB, dragged in by Playwright's optional
-  //                 Electron driver support — the server never launches it.
+  //                 Electron driver support - the server never launches it.
   for (const junk of ["output", path.join("node_modules", "electron")]) {
     const p = path.join(STANDALONE, junk);
     if (fs.existsSync(p)) {
@@ -85,7 +85,7 @@ async function main() {
 
   // 2. Get the native better-sqlite3 binary for the exact runtime the packaged
   //    app uses. The server runs under Electron's utilityProcess, whose ABI is
-  //    that of Electron's bundled Node (e.g. Electron 42 = Node 24, ABI 146) —
+  //    that of Electron's bundled Node (e.g. Electron 42 = Node 24, ABI 146) -
   //    NOT the system Node that ran the build. Next traces only the .node + JS
   //    into the bundle (no binding.gyp/sources), so we compile in a temp copy of
   //    the FULL top-level better-sqlite3 (leaving the dev install's ABI intact)
@@ -93,11 +93,11 @@ async function main() {
   const bsqDest = path.join(STANDALONE, "node_modules", "better-sqlite3", "build", "Release", "better_sqlite3.node");
   const bsqSrc = path.join(ROOT, "node_modules", "better-sqlite3");
   if (!fs.existsSync(path.join(bsqSrc, "binding.gyp"))) {
-    console.warn("Top-level better-sqlite3 sources not found — skipping native build.");
+    console.warn("Top-level better-sqlite3 sources not found - skipping native build.");
   } else {
     // The packaged server runs under Electron's utilityProcess, which loads native
     // addons with ELECTRON'S module version (Electron overrides NODE_MODULE_VERSION,
-    // e.g. 146 for Electron 42 — different from official Node 24's 137). So build
+    // e.g. 146 for Electron 42 - different from official Node 24's 137). So build
     // against Electron's headers (--runtime=electron --dist-url electron headers).
     const electronVersion = require(path.join(ROOT, "node_modules", "electron", "package.json")).version;
 
@@ -111,7 +111,7 @@ async function main() {
     const prebuildInstall = path.join(ROOT, "node_modules", "prebuild-install", "bin.js");
     let res = spawnSync(process.execPath, [prebuildInstall, ...targetArgs, "--platform=win32"], { cwd: tmp, stdio: "inherit" });
     if (res.status !== 0) {
-      console.log("No prebuilt — compiling from source (node-gyp)...");
+      console.log("No prebuilt - compiling from source (node-gyp)...");
       const nodeGyp = path.join(ROOT, "node_modules", "node-gyp", "bin", "node-gyp.js");
       res = spawnSync(process.execPath, [nodeGyp, "rebuild", "--release", ...targetArgs], { cwd: tmp, stdio: "inherit" });
       if (res.status !== 0) throw new Error(`Failed to build better-sqlite3 for Electron ${electronVersion} (status ${res.status}). Ensure Python + MSVC build tools are installed.`);
@@ -131,7 +131,7 @@ async function main() {
   // 4. Bundle the runner CLI scripts + the raw web/ lib so the scrape → enrich →
   //    whatsapp → audit → report pipeline can be spawned inside the app. They sit
   //    next to standalone/node_modules so `require('patchright')` etc. resolve
-  //    normally. (enrich-crawlee needs crawlee, which isn't bundled — the default
+  //    normally. (enrich-crawlee needs crawlee, which isn't bundled - the default
   //    patchright enrich engine is fully self-contained.)
   const runnerFiles = [
     "web-runner.cjs", "web-runner.js",

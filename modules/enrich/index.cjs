@@ -1,4 +1,4 @@
-// Email-enrichment module — public entry point. Every call site imports THIS file
+// Email-enrichment module - public entry point. Every call site imports THIS file
 // (never enrich.cjs directly) so the backend can be swapped local↔remote per the
 // ENRICH_WORKER_URL config, with zero changes at the call site.
 const { isRemote } = require("../registry.cjs");

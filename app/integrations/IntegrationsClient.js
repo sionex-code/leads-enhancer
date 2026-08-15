@@ -25,7 +25,7 @@ async function jsonFetch(url, options = {}) {
 }
 
 // Icon plus its own tint, so Smartlead and Instantly are separable at a glance
-// — two grey envelopes side by side told you nothing about which was which.
+// - two grey envelopes side by side told you nothing about which was which.
 const PROVIDER_STYLE = {
   smartlead: { icon: Send, tile: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
   instantly: { icon: Mail, tile: "bg-violet-500/10 text-violet-600 dark:text-violet-400" },
@@ -45,7 +45,7 @@ const INTEGRATIONS_TOUR = [
   { key: "int-history", title: "Recent pushes", body: "Every send is recorded with how many landed, how many were skipped, and what failed." },
 ];
 
-// The whole card is the button — a small "Connect" in the corner made people
+// The whole card is the button - a small "Connect" in the corner made people
 // hunt for the click target.
 function ProviderCard({ provider, compact = false, onConnect }) {
   const { icon: Icon, tile } = styleFor(provider.id);
@@ -132,7 +132,7 @@ export default function IntegrationsClient() {
   return (
     <AppShell active="integrations" title="Integrations" subtitle="Send your leads straight into your CRM or cold-email tool"
               tourKey="integrations" tourSteps={INTEGRATIONS_TOUR}>
-      {/* AppShell's <main> adds no padding of its own — every page brings its
+      {/* AppShell's <main> adds no padding of its own - every page brings its
           own content wrapper (see BillingClient). Without this the sections sit
           flush against the sidebar and stretch the full window width. */}
       <div className="mx-auto max-w-4xl space-y-8 p-4 sm:p-6 lg:p-8">
@@ -151,7 +151,7 @@ export default function IntegrationsClient() {
       {error ? <p className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{error}</p> : null}
 
       {/* An account with nothing connected should read the menu first, not be
-          told it is empty — so the chooser leads and this section is skipped
+          told it is empty - so the chooser leads and this section is skipped
           entirely until there is something to list. */}
       {loading ? (
         <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</p>
@@ -203,7 +203,7 @@ export default function IntegrationsClient() {
             {connections.length ? "Add another" : "Where should your leads go?"}
           </h2>
           <p className="mb-3 mt-1 text-xs text-muted-foreground">
-            Each one takes about half a minute — paste an API key, pick where leads land, done.
+            Each one takes about half a minute - paste an API key, pick where leads land, done.
           </p>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -249,7 +249,7 @@ export default function IntegrationsClient() {
                 {jobs.map((j) => (
                   <tr key={j.id} className="border-t border-border">
                     <td className="px-3 py-2 text-muted-foreground"><RelativeTime iso={j.created_at} /></td>
-                    <td className="px-3 py-2 text-foreground">{j.connection_label || "—"}</td>
+                    <td className="px-3 py-2 text-foreground">{j.connection_label || "-"}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-foreground">{j.succeeded}/{j.total}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{j.skipped || 0}</td>
                     <td className={`px-3 py-2 text-right tabular-nums ${j.failed ? "text-destructive" : "text-muted-foreground"}`}>{j.failed || 0}</td>

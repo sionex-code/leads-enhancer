@@ -10,7 +10,7 @@ function zoomFromRadius(radiusKm) {
   return Math.min(15, Math.max(9, z));
 }
 
-// Brand-orange custom divIcon — avoids broken bundler asset paths for default marker.
+// Brand-orange custom divIcon - avoids broken bundler asset paths for default marker.
 function makeCenterIcon(L) {
   return L.divIcon({
     className: "",
@@ -25,7 +25,7 @@ function makeCenterIcon(L) {
 }
 
 // The grab handle that sits on the circle's edge. Small, high-contrast and
-// obviously draggable — a plain marker would read as a second search pin.
+// obviously draggable - a plain marker would read as a second search pin.
 function makeHandleIcon(L) {
   return L.divIcon({
     className: "",
@@ -36,22 +36,22 @@ function makeHandleIcon(L) {
 }
 
 /**
- * LeadsMap — a reusable Leaflet/OSM component.
+ * LeadsMap - a reusable Leaflet/OSM component.
  *
  * Props:
- *   center        {lat, lng}          — map center (required for anything to show)
- *   radiusKm      number              — radius in km; draws a circle and sets zoom
- *   points        Array<{lat,lng,name}> — lead pins (read-only markers)
- *   interactive   boolean             — if true, the search area can be moved and
+ *   center        {lat, lng}          - map center (required for anything to show)
+ *   radiusKm      number              - radius in km; draws a circle and sets zoom
+ *   points        Array<{lat,lng,name}> - lead pins (read-only markers)
+ *   interactive   boolean             - if true, the search area can be moved and
  *                                       resized directly on the map
- *   onCenterChange ({lat,lng}) => void — fired after moving the search area
- *   onRadiusChange (km) => void        — fired after dragging the resize handle
- *   height        number (px)         — container height (default 360)
- *   wheelZoom     boolean             — wheel zooms the map (default true). Turn
+ *   onCenterChange ({lat,lng}) => void - fired after moving the search area
+ *   onRadiusChange (km) => void        - fired after dragging the resize handle
+ *   height        number (px)         - container height (default 360)
+ *   wheelZoom     boolean             - wheel zooms the map (default true). Turn
  *                                       it off for a map inside a scrollable
  *                                       panel, where it would swallow the scroll
  *                                       the user meant for the panel.
- *   className     string              — extra class on the wrapper div
+ *   className     string              - extra class on the wrapper div
  *
  * Usage:
  *   const LeadsMap = dynamic(() => import("@/components/LeadsMap"), { ssr: false });
@@ -99,7 +99,7 @@ export default function LeadsMap({
 
     const map = L.map(containerRef.current, {
       // The wheel zooms, the way it does on Google Maps. This was off, which is
-      // why the map felt inert — the only way in or out was the +/- buttons.
+      // why the map felt inert - the only way in or out was the +/- buttons.
       scrollWheelZoom: wheelZoom,
       // Leaflet snaps to whole zoom levels by default, so one wheel notch jumps
       // a full power of two and the map lurches. Quarter steps with a smaller
@@ -119,7 +119,7 @@ export default function LeadsMap({
     // but a cartography much closer to what people expect from a map in a
     // product: muted land, clear road hierarchy, restrained labels. The plain OSM
     // style is why this looked like a wiki map. Attribution for both OSM and
-    // CARTO is a licence condition — it stays.
+    // CARTO is a licence condition - it stays.
     L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',

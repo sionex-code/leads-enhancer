@@ -1,7 +1,7 @@
 // Pipedrive, via a personal API token.
 //
 // Pipedrive has no upsert, so each lead is up to three calls: organization,
-// then person, then optionally a Lead. Dedupe is ours to do — we remember the
+// then person, then optionally a Lead. Dedupe is ours to do - we remember the
 // ids we created in crm_lead_sync and PUT them on the next push, falling back
 // to an exact search when we have no memory of this lead.
 //
@@ -92,7 +92,7 @@ module.exports = {
     const personName = mapped.name || lead.name || "Unnamed business";
     const orgName = mapped.org_name || personName;
 
-    // 1. Organization — reuse the one we made last time, else look for an exact
+    // 1. Organization - reuse the one we made last time, else look for an exact
     //    name match before creating another.
     let orgId = prev?.remote_org_id || null;
     if (orgId) {
@@ -119,7 +119,7 @@ module.exports = {
       }
     }
 
-    // 2. Person — same shape: known id wins, then an exact email match, then create.
+    // 2. Person - same shape: known id wins, then an exact email match, then create.
     const personBody = {
       name: personName,
       org_id: orgId || undefined,
@@ -153,7 +153,7 @@ module.exports = {
       action = "created";
     }
 
-    // 3. Lead — only on first sight. Making another one every push would bury
+    // 3. Lead - only on first sight. Making another one every push would bury
     //    the user's inbox in duplicates of the same business.
     if ((config?.createLead ?? "lead") === "lead" && !prev?.remote_id && personId) {
       const res = await call(creds, config, "/v1/leads", {
@@ -165,7 +165,7 @@ module.exports = {
           owner_id: config?.ownerId || undefined,
         },
       });
-      // A failed Lead should not fail the whole push — the person and org are
+      // A failed Lead should not fail the whole push - the person and org are
       // already in, which is the part that matters.
       if (!res.ok && retryable(res)) return fail(res);
     }

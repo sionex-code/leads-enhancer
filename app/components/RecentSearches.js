@@ -23,7 +23,7 @@ const titleCase = (s) =>
 // city, service, country and row count are the same four facts the directory
 // page itself publishes, and attribution is a first name plus a last initial.
 //
-// `me` is the anonymised label of whoever is signed in, or "" — the landing
+// `me` is the anonymised label of whoever is signed in, or "" - the landing
 // page asks /api/public/me once (see app/lib/useSignedIn.js) and hands the
 // answer down, so a signed-in visitor recognises their own searches in the list
 // without this section making a second request for the same fact.

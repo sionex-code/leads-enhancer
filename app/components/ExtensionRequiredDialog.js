@@ -5,7 +5,7 @@ import { Download, Puzzle, ShieldCheck, X, Zap } from "lucide-react";
 
 // Shown when a search needs a live Google Maps scrape but the browser
 // extension isn't installed. Live scraping runs in the user's own browser, so
-// without the extension there is nothing to run it — this explains why rather
+// without the extension there is nothing to run it - this explains why rather
 // than just failing.
 export default function ExtensionRequiredDialog({
   open,

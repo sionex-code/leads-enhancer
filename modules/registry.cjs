@@ -1,6 +1,6 @@
 // Central config for the pluggable-capability modules (scraper / enrich / whatsapp
 // / audit). Each module runs **in-process by default** and only switches to a
-// remote worker when its `<NAME>_WORKER_URL` env var is set — so a fresh checkout
+// remote worker when its `<NAME>_WORKER_URL` env var is set - so a fresh checkout
 // behaves exactly as before, and scaling out is purely additive (point a module at
 // a worker on another VPS; see modules/README.md).
 //

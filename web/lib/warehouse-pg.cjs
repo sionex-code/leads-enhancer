@@ -1,5 +1,5 @@
 // Read-only connection to the scraper warehouse Postgres (separate DB/container
-// from the app's own DATABASE_URL) — used only to surface lead counts in the
+// from the app's own DATABASE_URL) - used only to surface lead counts in the
 // admin panel. Connection: WAREHOUSE_DATABASE_URL=postgresql://user:pass@host:5433/warehouse
 require("../../scripts/load-env.cjs");
 const { Pool } = require("pg");

@@ -1,4 +1,4 @@
-// Map-scraper module — LOCAL backend. Owns the gridscrape→scrape fallback that used
+// Map-scraper module - LOCAL backend. Owns the gridscrape→scrape fallback that used
 // to live inline in web-runner.runScrape, plus a worker-side `runScrapeToDir` core.
 const fs = require("fs");
 const path = require("path");
@@ -43,7 +43,7 @@ async function runBatch(ctx) {
       return;
     } catch (err) {
       if (!/exited with code 3/.test(err.message)) throw err;
-      ctx.log("Grid scrape can't geocode this query — falling back to browser scraper");
+      ctx.log("Grid scrape can't geocode this query - falling back to browser scraper");
     }
   }
 
@@ -84,7 +84,7 @@ async function runScrapeToDir({ ROOT, query, max, outDir, project, userId, mode 
       return findRawCsv(outDir);
     } catch (err) {
       if (!/exited with code 3/.test(err.message)) throw err;
-      log("Grid scrape can't geocode this query — falling back to browser scraper");
+      log("Grid scrape can't geocode this query - falling back to browser scraper");
     }
   }
 

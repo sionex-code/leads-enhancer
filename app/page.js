@@ -5,7 +5,7 @@ import seo from "../web/lib/seo.cjs";
 
 const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || "https://leadsfunda.com";
 
-// `title.absolute` skips the "%s | LeadsFunda" template from the root layout —
+// `title.absolute` skips the "%s | LeadsFunda" template from the root layout -
 // the home title already carries the brand and would otherwise say it twice.
 export const metadata = {
   title: { absolute: "LeadsFunda: Google Maps Lead Generation with Email Enrichment" },
@@ -14,14 +14,14 @@ export const metadata = {
   alternates: { canonical: MARKETING_URL },
 };
 
-// Public marketing landing, served to everyone — signed in or not.
+// Public marketing landing, served to everyone - signed in or not.
 //
 // It used to bounce a signed-in visitor to /dashboard. That was wrong twice
 // over: on the marketing host the session cookie is invisible anyway (see
 // app/api/public/me/route.js) so the check never fired where it mattered, and
 // where it did fire it made the landing page unreachable for the very people
 // most likely to link someone to it. Signed-in state now changes the buttons,
-// not the destination — Landing asks /api/public/me and swaps its sign-in CTAs
+// not the destination - Landing asks /api/public/me and swaps its sign-in CTAs
 // for "Open dashboard".
 export const dynamic = "force-dynamic";
 
@@ -31,7 +31,7 @@ export default async function Page() {
     p35: process.env.WHOP_CHECKOUT_35 || "",
     p49: process.env.WHOP_CHECKOUT_49 || "",
   };
-  // Public directory teasers. Never let this break the landing page — it is
+  // Public directory teasers. Never let this break the landing page - it is
   // the marketing front door and a directory outage must not take it down.
   const [recent, total] = await Promise.all([
     pub.recent(12).catch(() => []),
@@ -39,7 +39,7 @@ export default async function Page() {
   ]);
   return (
     <>
-      {/* Structured data, skipped entirely while the site is noindex — offering
+      {/* Structured data, skipped entirely while the site is noindex - offering
           rich results for pages we are asking Google to drop is the same mixed
           signal web/lib/seo.cjs exists to avoid.
 

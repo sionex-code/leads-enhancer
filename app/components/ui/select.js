@@ -3,7 +3,7 @@ import * as React from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "../../lib/utils";
 
-// Native <select> styled to match the shadcn aesthetic — no Radix dependency.
+// Native <select> styled to match the shadcn aesthetic - no Radix dependency.
 // Pass children as <option> elements, same API as a normal select.
 const Select = React.forwardRef(({ className, children, ...props }, ref) => (
   <div className="relative">

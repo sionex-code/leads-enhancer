@@ -22,7 +22,7 @@ export default function useColumnVisibility() {
     setHydrated(true);
   }, []);
 
-  // Persist whenever hidden changes — but only after hydration so we don't
+  // Persist whenever hidden changes - but only after hydration so we don't
   // clobber saved prefs with the default empty array on first paint.
   useEffect(() => {
     if (!hydrated) return;

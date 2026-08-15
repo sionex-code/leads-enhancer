@@ -1,4 +1,4 @@
-// Smartlead — cold email campaigns.
+// Smartlead - cold email campaigns.
 //
 // Not a CRM: a push here means "add these businesses to a sending campaign",
 // which is the shape most people scraping Maps actually want. The campaign is
@@ -13,7 +13,7 @@ const { fetchJson, describe, retryable } = require("./http.cjs");
 const API = "https://server.smartlead.ai/api/v1";
 const LABEL = "Smartlead";
 
-// The key rides in the query string — Smartlead has no header form.
+// The key rides in the query string - Smartlead has no header form.
 const url = (creds, path, extra = "") =>
   `${API}${path}?api_key=${encodeURIComponent(creds?.apiKey || "")}${extra}`;
 
@@ -29,7 +29,7 @@ module.exports = {
   id: "smartlead",
   label: "Smartlead",
   blurb: "Add leads straight into a Smartlead campaign, ready to send.",
-  // The previous link answered 200 with a "Not found" body — a soft 404, so a
+  // The previous link answered 200 with a "Not found" body - a soft 404, so a
   // status check alone would not have caught it. This one is a real article.
   docsUrl: "https://helpcenter.smartlead.ai/en/articles/125-full-api-documentation",
 
@@ -94,7 +94,7 @@ module.exports = {
     if (!campaignId) {
       return items.map((it) => ({
         leadId: it.lead.id, ok: false, retryable: false,
-        error: "No Smartlead campaign chosen for this integration — pick one in Integrations.",
+        error: "No Smartlead campaign chosen for this integration - pick one in Integrations.",
       }));
     }
 
@@ -135,7 +135,7 @@ module.exports = {
     for (const it of sendable) {
       if (skippedEmails.has(String(it.mapped.email).toLowerCase())) {
         // Turned away by Smartlead's block list or because it is already in the
-        // campaign — either way it is there, so the ledger says 'ok' and only
+        // campaign - either way it is there, so the ledger says 'ok' and only
         // the job summary counts it as skipped.
         out.push({ leadId: it.lead.id, ok: true, action: "duplicate", counted: "skipped" });
       } else {

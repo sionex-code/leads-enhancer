@@ -2,9 +2,9 @@
 // Crawlee-based contact-detail enricher (fast alternative to enrich.cjs).
 //
 // Two passes, both managed by Crawlee's autoscaling pool:
-//   1. CheerioCrawler  — plain HTTP, homepage + up to 2 contact/about pages.
+//   1. CheerioCrawler  - plain HTTP, homepage + up to 2 contact/about pages.
 //      Covers the majority of small-business sites in a few hundred ms each.
-//   2. PlaywrightCrawler — only for the sites pass 1 found NO email on. Loads
+//   2. PlaywrightCrawler - only for the sites pass 1 found NO email on. Loads
 //      the page in the already-installed Chrome (channel: 'chrome', shared with
 //      patchright), scrolls to the bottom so lazy-loaded footers/contact blocks
 //      render, then grabs emails/socials off the live DOM. Stops the moment an
@@ -33,7 +33,7 @@ import trackingDetect from "./web/lib/tracking-detect.cjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Keep everything in memory — no ./storage request-queue dirs left behind, and
+// Keep everything in memory - no ./storage request-queue dirs left behind, and
 // every run starts clean (our own .enrich-state.jsonl is the resume source).
 Configuration.getGlobalConfig().set("persistStorage", false);
 log.setLevel(log.LEVELS.WARNING);
@@ -84,7 +84,7 @@ const EXTRA_HEADERS = [
   "whatsapp",
   "telegram",
   "enrichStatus",
-  // Must match enrich.cjs — this file is a drop-in for it, and the CSV only
+  // Must match enrich.cjs - this file is a drop-in for it, and the CSV only
   // carries the columns listed here.
   "tech",
   "favicon",
@@ -316,7 +316,7 @@ function extractFavicon(html, baseUrl) {
 
 // Per-page signals that aren't emails or socials: the marketing stack (unioned
 // across every page we see, since a pixel often sits only on the booking or
-// contact page) and the favicon (homepage only — inner pages declare the same
+// contact page) and the favicon (homepage only - inner pages declare the same
 // one, and the homepage is the page we always fetch first).
 function absorbPage(agg, html, url, isHome) {
   agg.tracking = trackingDetect.merge(agg.tracking, trackingDetect.detectTracking(html));
@@ -353,7 +353,7 @@ function finalizeResult(agg) {
   return result;
 }
 
-// ---- state (resume) — same files as enrich.cjs ------------------------------
+// ---- state (resume) - same files as enrich.cjs ------------------------------
 function loadState(stateFile) {
   const map = new Map();
   if (FORCE || !fs.existsSync(stateFile)) return map;
@@ -542,13 +542,13 @@ function loadState(stateFile) {
   }
   flushCsv();
 
-  // ---- Pass 2: PlaywrightCrawler — scroll-to-load fallback --------------------
+  // ---- Pass 2: PlaywrightCrawler - scroll-to-load fallback --------------------
   if (USE_BROWSER && needBrowser.length) {
     console.log(`\n  Scroll pass: ${needBrowser.length} sites with no email yet (Chrome, ${BROWSER_MAX} tabs)\n`);
 
     const byId = new Map(needBrowser.map((j) => [j.id, j]));
 
-    // True the moment an email is visible in the DOM — lets us stop scrolling
+    // True the moment an email is visible in the DOM - lets us stop scrolling
     // immediately instead of burning the full scroll budget on every site.
     const emailVisible = (page) =>
       page
@@ -574,7 +574,7 @@ function loadState(stateFile) {
 
     const browserCrawler = new PlaywrightCrawler({
       maxConcurrency: BROWSER_MAX,
-      minConcurrency: BROWSER_MAX, // start at full tilt — don't wait for the autoscaler to ramp
+      minConcurrency: BROWSER_MAX, // start at full tilt - don't wait for the autoscaler to ramp
       autoscaledPoolOptions: { desiredConcurrency: BROWSER_MAX },
       maxRequestRetries: 1,
       requestHandlerTimeoutSecs: SCROLL_SECS + 25,
@@ -590,9 +590,9 @@ function loadState(stateFile) {
       },
       preNavigationHooks: [
         async ({ page }, gotoOptions) => {
-          // Fire as soon as the DOM is parsed — don't wait for every last image/XHR.
+          // Fire as soon as the DOM is parsed - don't wait for every last image/XHR.
           if (gotoOptions) gotoOptions.waitUntil = "domcontentloaded";
-          // We only need HTML/text — drop images/media/fonts to keep tabs light.
+          // We only need HTML/text - drop images/media/fonts to keep tabs light.
           await page.route("**/*", (route) => {
             const t = route.request().resourceType();
             if (t === "image" || t === "media" || t === "font") return route.abort();
@@ -607,7 +607,7 @@ function loadState(stateFile) {
         let html = await grabFromPage(page);
         for (const e of extractEmails(html)) agg.emails.add(e);
         extractSocial(html, agg.socials);
-        // Before the early return below — this is rendered DOM, so it also
+        // Before the early return below - this is rendered DOM, so it also
         // catches tags a tag manager injected client-side, which the plain-HTTP
         // pass can only infer from the loader script.
         absorbPage(agg, html, page.url(), depth === 0);

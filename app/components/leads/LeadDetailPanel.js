@@ -6,7 +6,7 @@
 //
 // It answers the question the table can't: *why* is this lead worth a call. The
 // opportunity block lists the actual gaps, and Online Presence deliberately
-// shows the absences ("Not found") as loudly as the hits — a missing Facebook
+// shows the absences ("Not found") as loudly as the hits - a missing Facebook
 // page or missing pixel is the opening line, not an empty cell.
 
 import { useState } from "react";
@@ -46,7 +46,7 @@ function coordsOf(lead) {
   const lng = parseFloat(lead?.lng ?? lead?.longitude);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
-  if (lat === 0 && lng === 0) return null; // null island — a dropped coordinate
+  if (lat === 0 && lng === 0) return null; // null island - a dropped coordinate
   return { lat, lng };
 }
 
@@ -116,7 +116,7 @@ export default function LeadDetailPanel({
   locked = false,
 }) {
   // The drawer is only ever mounted with a lead, but never render an empty shell
-  // if that ever stops being true — a blank slide-over reads as a broken app.
+  // if that ever stops being true - a blank slide-over reads as a broken app.
   if (!lead) {
     return (
       <aside className="flex h-full w-full flex-col items-center justify-center gap-3 p-8 text-center">
@@ -134,7 +134,7 @@ export default function LeadDetailPanel({
 
   const { score, band, reasons, coverage } = scoreLead(lead);
   const tracking = trackingDetect.parse(lead.tech);
-  // parse() returns null for "" — which means "never scanned", NOT "no pixels".
+  // parse() returns null for "" - which means "never scanned", NOT "no pixels".
   const scanned = trackingDetect.isScanned(tracking);
   const stack = tracking ? trackingDetect.summarize(tracking) : "";
   // null = Google never gave us a count for this listing (its search record
@@ -143,7 +143,7 @@ export default function LeadDetailPanel({
   const reviewsRaw = String(lead.reviews ?? "").replace(/[^\d]/g, "");
   const reviews = reviewsRaw === "" ? null : parseInt(reviewsRaw, 10);
   const email = lead.email || "";
-  // waMeLink takes the lead, not a phone string — handing it `lead.phone` made it
+  // waMeLink takes the lead, not a phone string - handing it `lead.phone` made it
   // read .whatsapp off a String, so the button was dead for every lead.
   const waHref = waMeLink(lead);
   const coords = coordsOf(lead);
@@ -195,7 +195,7 @@ export default function LeadDetailPanel({
       </div>
 
       <div className="flex-1 space-y-5 overflow-y-auto p-4">
-        {/* Opportunity — the score plus the reasons behind it */}
+        {/* Opportunity - the score plus the reasons behind it */}
         <div className={cn("rounded-xl border p-3", bandTint)}>
           <div className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-1.5 text-sm font-semibold">
@@ -293,7 +293,7 @@ export default function LeadDetailPanel({
           </div>
         </Section>
 
-        {/* Marketing stack — what enrichment found running on their site. The
+        {/* Marketing stack - what enrichment found running on their site. The
             absence of a pixel is the sales hook, so say it in words. */}
         <Section title="Marketing stack">
           {!lead.website ? (
@@ -355,7 +355,7 @@ export default function LeadDetailPanel({
               get the address and a Maps link below, rather than an empty frame. */}
           {coords && (
             // wheelZoom off: the map sits inside a scrolling panel, where the
-            // wheel belongs to the panel. A small radius just sets the zoom —
+            // wheel belongs to the panel. A small radius just sets the zoom -
             // LeadsMap already drops its own pin on the centre.
             <LeadsMap center={coords} radiusKm={0.3} height={150} wheelZoom={false} />
           )}
@@ -379,7 +379,7 @@ export default function LeadDetailPanel({
         </Section>
       </div>
 
-      {/* Actions pinned under the content — always reachable, however long
+      {/* Actions pinned under the content - always reachable, however long
           the detail list gets. */}
       <div className="shrink-0 space-y-2 border-t border-border p-4">
         <div className="grid grid-cols-2 gap-2">

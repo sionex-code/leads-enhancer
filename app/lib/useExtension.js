@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { detectExtension, getLatestExtensionVersion, versionAtLeast } from "./extension-client";
 
 /**
- * Is the LeadsFunda browser extension installed and talking to us — and if so,
+ * Is the LeadsFunda browser extension installed and talking to us - and if so,
  * is it running the build we currently publish?
  *
  * Shared by the sidebar badge, the update banner and the /extension install

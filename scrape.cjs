@@ -71,7 +71,7 @@ const blockImages = !flags.has("--allowImages");
 // at the cost of a blank map you don't read from anyway.
 const blockCanvas = flags.has("--blockCanvas");
 // Network mode reads leads straight off the Maps "/search?tbm=map" RPC responses
-// (~20 detailed places per scroll, no per-card clicking) — much faster and it
+// (~20 detailed places per scroll, no per-card clicking) - much faster and it
 // doesn't slow down as the result set grows. --dom forces the legacy click path.
 const useNetwork = flags.has("--network") && !flags.has("--dom");
 const viewportWidth = parsePositiveInt(flagValue("--viewportWidth", "1920"), 1920);
@@ -126,7 +126,7 @@ function slugify(q) {
 
 const csvEsc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
 // UTF-8 BOM + header, written once. Rows are appended individually (O(1) each)
-// so a long run never rebuilds the whole CSV — keeps writes fast as leads grow.
+// so a long run never rebuilds the whole CSV - keeps writes fast as leads grow.
 const csvHeader = () => String.fromCharCode(0xfeff) + HEADERS.join(",") + "\r\n";
 const csvRow = (row) => HEADERS.map((h) => csvEsc(row[h])).join(",") + "\r\n";
 
@@ -233,11 +233,11 @@ function normalizeCookie(cookie) {
     ],
   });
 
-  // The Chrome flags above only disable GPU acceleration — Chrome then falls back
+  // The Chrome flags above only disable GPU acceleration - Chrome then falls back
   // to software rendering (SwiftShader) and the WebGL map still burns CPU drawing
   // every frame. So inside the page we make getContext("webgl"/"webgl2") return
   // null: Maps detects "no WebGL" and falls back to its cheap raster mode, whose
-  // tile images the routing below never lets through — net result, nothing paints.
+  // tile images the routing below never lets through - net result, nothing paints.
   // 2D canvas must stay alive: nulling it too makes Maps bail out before it ever
   // renders the results feed (verified: feed never appears, 0 leads).
   if (blockCanvas) {
@@ -268,7 +268,7 @@ function normalizeCookie(cookie) {
         return route.abort();
       }
       // Map tiles arrive as fetch/xhr in vector mode (not resourceType "image"),
-      // so also cut them at the network — no point downloading data for a canvas
+      // so also cut them at the network - no point downloading data for a canvas
       // that can't paint.
       if (blockCanvas && /\/maps\/vt[/?]/.test(req.url())) return route.abort();
       return route.continue();
@@ -320,7 +320,7 @@ function normalizeCookie(cookie) {
     const { written, reason } = await runNetworkCapture(page, outFile);
     // The RPC only fires when scrolling loads MORE results. Small result sets
     // (e.g. a thin region) ship entirely with the initial page, so the listener
-    // never sees a response and we'd report 0 — even with results on screen.
+    // never sees a response and we'd report 0 - even with results on screen.
     // In that case fall through to the DOM click path for the visible cards.
     const visibleCards = await page
       .locator('div[role="feed"] a[href*="/maps/place/"]')
@@ -329,7 +329,7 @@ function normalizeCookie(cookie) {
     let total = written;
     let finalReason = reason;
     if (written === 0 && visibleCards > 0) {
-      console.log(`\n  Network capture saw no RPC but ${visibleCards} result(s) are on screen — reading the visible cards.`);
+      console.log(`\n  Network capture saw no RPC but ${visibleCards} result(s) are on screen - reading the visible cards.`);
       let rows = await captureFeedCards(page);
       if (CONFIG.maxLeads) rows = rows.slice(0, CONFIG.maxLeads);
       if (rows.length) fs.appendFileSync(outFile, rows.map(csvRow).join(""), "utf8");
@@ -403,10 +403,10 @@ function normalizeCookie(cookie) {
 });
 
 // Last-resort extraction for tiny result sets: parse the visible feed cards
-// directly (no clicking — the 2026-06 Maps UI opens place panels collapsed, so
+// directly (no clicking - the 2026-06 Maps UI opens place panels collapsed, so
 // the click path can't read them). Cards carry name, rating(reviews),
 // "category · address", an hours line with the phone, and sometimes a website
-// action link — less complete than the RPC rows but far better than 0 leads.
+// action link - less complete than the RPC rows but far better than 0 leads.
 async function captureFeedCards(page) {
   return page
     .evaluate(() => {
@@ -459,7 +459,7 @@ async function captureFeedCards(page) {
 }
 
 // Read leads off the Maps search RPC. We listen for every "/search?tbm=map"
-// response, decode it, and stream new (deduped) rows to the CSV — then scroll the
+// response, decode it, and stream new (deduped) rows to the CSV - then scroll the
 // feed to make Google fetch the next batch. No per-card clicking, so throughput
 // stays flat instead of degrading as the result set grows.
 async function runNetworkCapture(page, outFile) {
@@ -494,7 +494,7 @@ async function runNetworkCapture(page, outFile) {
   });
 
   // Google's lazy-loader ignores programmatic scrolling (feed.scrollTop /
-  // scrollBy dispatch untrusted events it filters out) — which is why a run
+  // scrollBy dispatch untrusted events it filters out) - which is why a run
   // stalls until someone scrolls the list by hand. page.mouse.wheel() sends
   // trusted wheel input through CDP, indistinguishable from hand-scrolling,
   // so the next-batch fetch fires every time (headless included). The cursor
@@ -511,9 +511,9 @@ async function runNetworkCapture(page, outFile) {
   };
 
   // Jump straight to the bottom (instant positioning, no matter how tall the
-  // feed is), then fire a few trusted wheel ticks — the ticks are what arm the
+  // feed is), then fire a few trusted wheel ticks - the ticks are what arm the
   // next fetch. Leads come from the RPC, not the DOM, so before scrolling we
-  // prune all but the newest cards out of the feed — otherwise the DOM grows
+  // prune all but the newest cards out of the feed - otherwise the DOM grows
   // unbounded and every layout/scroll pass gets slower the longer the run.
   // Returns the cumulative card count (pruned + still rendered) so the caller
   // can tell whether the list is still actually growing (vs. a round where
@@ -603,7 +603,7 @@ async function runNetworkCapture(page, outFile) {
     await sleep(CONFIG.scrollDelay + 250);
 
     const added = flush();
-    // More cumulative cards means Google rendered more results — progress, even if
+    // More cumulative cards means Google rendered more results - progress, even if
     // this round's RPC places were all dedups. Only count a round as "dead" when
     // nothing was written AND the feed didn't grow.
     const grew = total > lastTotal;
@@ -617,7 +617,7 @@ async function runNetworkCapture(page, outFile) {
       noGrowthRounds = 0;
     } else {
       noGrowthRounds++;
-      // Stay pinned at the bottom and just wait — Google usually delivers the next
+      // Stay pinned at the bottom and just wait - Google usually delivers the next
       // batch after a short pause. Only re-arm with an up-jiggle once it's clearly
       // stalled (every 3rd dead round), so the feed doesn't thrash up and down.
       if (noGrowthRounds % 3 === 0) {
@@ -640,12 +640,12 @@ async function runNetworkCapture(page, outFile) {
   }
 
   // Response bodies can still be decoding when the loop breaks (the handler is
-  // async, and a loaded VPS decodes slowly) — give in-flight batches a moment to
+  // async, and a loaded VPS decodes slowly) - give in-flight batches a moment to
   // land before the final flush instead of silently dropping them.
   await sleep(2000);
   written += flush();
 
-  // Sweep the still-rendered feed cards for places the RPC never delivered —
+  // Sweep the still-rendered feed cards for places the RPC never delivered -
   // most often the initial batch that ships inline with the page HTML rather
   // than over the RPC. Card rows are less complete than RPC rows, but a partial
   // lead beats a missing one.

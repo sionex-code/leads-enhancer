@@ -34,7 +34,7 @@ function countryFromDisplay(display) {
 
 // The keyword half of "<what> in <where>". Used when a live search could not be
 // resolved to a place: we still know what was being looked for, even if we can't
-// honestly say where it landed, and the typed text beats the Service dropdown —
+// honestly say where it landed, and the typed text beats the Service dropdown -
 // which for a live search describes a different query altogether.
 function keywordFromQuery(text) {
   const parts = String(text || "").trim().split(/(?:^|\s)in\s/i);
@@ -76,7 +76,7 @@ function nameFromArea(area, keywordOverride) {
   const place = titleCase(area.shortName);
   const keyword = titleCase(keywordOverride || area.keyword);
   // Don't repeat the place when the keyword already contains it ("Gujrat
-  // Plumber" in Gujrat) — that would read "Gujrat Gujrat Plumber Leads".
+  // Plumber" in Gujrat) - that would read "Gujrat Gujrat Plumber Leads".
   const kw = place && keyword.toLowerCase().includes(place.toLowerCase()) ? "" : keyword;
   return `${place} ${kw} Leads`.replace(/\s+/g, " ").trim().slice(0, 80);
 }
@@ -194,7 +194,7 @@ export async function POST(request) {
   const { userId, response } = await requireUser();
   if (response) return response;
 
-  // Credit gate — one unified pool (1 credit per new lead). Free accounts may
+  // Credit gate - one unified pool (1 credit per new lead). Free accounts may
   // spend their free grant; only block when truly out of credits.
   const entitlement = await billing.getEntitlement(userId);
   const avail = entitlement.unlimited ? Infinity : (entitlement.credits || 0);
@@ -205,7 +205,7 @@ export async function POST(request) {
     );
   }
 
-  // Per-day limit gate (server-side, race-safe — can't be bypassed by replaying
+  // Per-day limit gate (server-side, race-safe - can't be bypassed by replaying
   // requests over the network). Read the snapshot first so we can reject a fully
   // exhausted day before spending a search, then atomically count this search.
   const daily = await billing.getDailyUsage(userId);
@@ -242,8 +242,8 @@ export async function POST(request) {
   // extension never ran.
   const source = body?.source === "live" ? "live" : "warehouse";
 
-  // The warehouse resolves a search entirely from the structured fields —
-  // `services.name`, city id, country — and never looks at `query`. So any typed
+  // The warehouse resolves a search entirely from the structured fields -
+  // `services.name`, city id, country - and never looks at `query`. So any typed
   // text that differs from those selections cannot be answered from stored leads:
   // "Gujrat Plumber" against a city dropdown set to Uppsala returns Uppsala
   // plumbers, which is both wrong and non-empty, so the live fallback never fires
@@ -273,7 +273,7 @@ export async function POST(request) {
 
   // Resolve typed text to a real place BEFORE naming the project. The client
   // can only name a search from the dropdowns it can see, so a typed search got
-  // labelled with whatever city happened to be selected — "Copenhagen, Denmark
+  // labelled with whatever city happened to be selected - "Copenhagen, Denmark
   // Leads" sitting on top of 109 Islamabad businesses. Only this side knows
   // where the search actually went, so it has to supply the name too.
   let area = null;
@@ -306,7 +306,7 @@ export async function POST(request) {
       };
     } else {
       // Only let the resolver treat the ENTIRE query as a place when it does
-      // not already look like a recognised service — the same signal that
+      // not already look like a recognised service - the same signal that
       // decided isUnknownKeyword above. "spa" is also a town in Belgium, and
       // without this, a bare service name a live search silently relocated
       // itself off the user's own map circle and onto whatever real place
@@ -315,7 +315,7 @@ export async function POST(request) {
     }
   }
 
-  // When the query was nothing but a place name, the keyword comes back empty —
+  // When the query was nothing but a place name, the keyword comes back empty -
   // fall back to the service the user already had selected.
   const areaKeyword = area ? (area.keyword || service || "").trim() : "";
 
@@ -325,7 +325,7 @@ export async function POST(request) {
   const dir = store.safeProjectDir(store.slugify(projectName), userId);
 
   // Short public id for support references (stable per project). Collision-
-  // checked against this tenant's other projects — see store.uniquePublicId.
+  // checked against this tenant's other projects - see store.uniquePublicId.
   const publicId = store.uniquePublicId(userId);
 
   // Reject if there is already a live runner for this project.
@@ -345,7 +345,7 @@ export async function POST(request) {
     //
     // A warehouse lookup searches *by* cityId/countryCode, so its dropdowns are
     // the truth by definition. A live scrape searches the query text, and the
-    // dropdowns are then just whatever the form happened to be showing — a
+    // dropdowns are then just whatever the form happened to be showing - a
     // different city, usually a different country. Falling back to them when
     // resolution failed is what produced project headers reading "Adelaide,
     // Australia" over Islamabad leads, and those labels flow on into the
@@ -372,13 +372,13 @@ export async function POST(request) {
     ...searchAreaMeta(area, { centerLat, centerLng, radiusKm }),
     // This flag makes the UI synthesise a label from cityName/countryName
     // instead of showing the real one. That is only appropriate when we could
-    // not work out what was searched — which is no longer the case here.
+    // not work out what was searched - which is no longer the case here.
     isUnknownKeyword: isUnknownKeyword && !area ? "1" : "",
   });
 
   // Explicit live search: don't touch the warehouse at all. The client drives the
   // extension and POSTs the rows to /ingest, which is what actually stores them
-  // and charges credits — so there is nothing to insert here.
+  // and charges credits - so there is nothing to insert here.
   if (mustGoLive) {
     store.writeState(dir, {
       running: false,
@@ -391,7 +391,7 @@ export async function POST(request) {
     // `area` was resolved above, before the project was named. Google answers
     // the *text* ("Gujrat Plumber" returns Pakistani plumbers however the
     // dropdowns are set), but the grid engine only keeps results inside the box
-    // it was handed — hand it the dropdown's box and every result is discarded
+    // it was handed - hand it the dropdown's box and every result is discarded
     // as out-of-area, scoring a full page of leads as zero.
     return Response.json({
       ok: true,
@@ -418,7 +418,7 @@ export async function POST(request) {
         // The warehouse path applies these in SQL. The live path has to carry
         // them to the client and apply them to what the extension returns,
         // otherwise picking a rating band silently does nothing for any search
-        // that goes live — which is every custom keyword.
+        // that goes live - which is every custom keyword.
         minRating,
         maxRating,
         // A resolved bbox wins; otherwise fall back to the dropdown's centre,
@@ -453,7 +453,7 @@ export async function POST(request) {
       limit: max,
     }));
   } catch (err) {
-    // The search failed through no fault of the user — give back the daily search
+    // The search failed through no fault of the user - give back the daily search
     // we just counted so it doesn't burn their allowance.
     await billing.releaseDailySearch(userId).catch(() => {});
     store.writeState(dir, {
@@ -473,7 +473,7 @@ export async function POST(request) {
   try {
     await backfillFromCaches(rows, countryCode);
   } catch {
-    // ignore — leads still load without the cached extras.
+    // ignore - leads still load without the cached extras.
   }
 
   // Write the raw CSV so loadStatus / the workspace UI can render leads instantly.
@@ -536,11 +536,11 @@ export async function POST(request) {
 
   // Publish the *shape* of this search to the public directory: city, service,
   // country and how many rows the warehouse holds. Deliberately not recorded
-  // for live/custom searches — those carry free-typed text belonging to the
+  // for live/custom searches - those carry free-typed text belonging to the
   // person who typed it, and their leads live in that user's project rather
   // than the shared warehouse, so there would be nothing public to show.
   if (rows.length > 0 && cityName && service) {
-    // Attribution is anonymised in the lib (first name + last initial) — these
+    // Attribution is anonymised in the lib (first name + last initial) - these
     // rows land on a public, indexed page.
     const searcher = (await publicSearches.labelForUser(userId)) || null;
     await publicSearches.record({

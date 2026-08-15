@@ -1,4 +1,4 @@
-// Email-enrichment module — REMOTE backend. Forwards work to a worker on another
+// Email-enrichment module - REMOTE backend. Forwards work to a worker on another
 // VPS (ENRICH_WORKER_URL). The leads DB is shared, so only files travel the wire.
 const path = require("path");
 const { postJSON } = require("../client.cjs");

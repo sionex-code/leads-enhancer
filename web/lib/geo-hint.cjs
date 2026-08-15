@@ -32,7 +32,7 @@ function countryFromAcceptLanguage(value) {
   return "";
 }
 
-// `headers` is anything with a .get(name) — a Next.js ReadonlyHeaders or a plain
+// `headers` is anything with a .get(name) - a Next.js ReadonlyHeaders or a plain
 // Request's headers both work.
 function countryFromHeaders(headers) {
   if (!headers || typeof headers.get !== "function") return "";
@@ -50,7 +50,7 @@ function countryFromHeaders(headers) {
 //
 // Cloudflare's "Add visitor location headers" managed transform adds cf-ipcity,
 // cf-iplatitude and cf-iplongitude alongside cf-ipcountry. It is available on
-// every plan including Free, but it is OFF by default — so this returns country
+// every plan including Free, but it is OFF by default - so this returns country
 // only until it is switched on in the Cloudflare dashboard
 // (Rules -> Settings -> Managed Transforms -> Add visitor location headers).
 // Everything downstream treats the city as optional for exactly that reason.
@@ -60,7 +60,7 @@ function countryFromHeaders(headers) {
 function locationFromHeaders(headers) {
   if (!headers || typeof headers.get !== "function") return { countryCode: "", city: "", lat: null, lng: null };
   const h = (name) => headers.get(name) || "";
-  // Number("") is 0, which is a real coordinate in the Atlantic — an absent
+  // Number("") is 0, which is a real coordinate in the Atlantic - an absent
   // header must read as absent, not as null island.
   const num = (v) => {
     if (v === "" || v == null) return null;
@@ -151,7 +151,7 @@ async function lookupIp(ip) {
       lng: Number.isFinite(Number(d.longitude)) ? Number(d.longitude) : null,
     };
   } catch {
-    // Aborted, offline, rate-limited, malformed — all the same answer here.
+    // Aborted, offline, rate-limited, malformed - all the same answer here.
     return null;
   } finally {
     clearTimeout(timer);

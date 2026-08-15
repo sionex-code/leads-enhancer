@@ -82,7 +82,7 @@ const COLUMNS = [
 ];
 
 // DB columns that are always included in the export regardless of column
-// visibility — they identify the row and its provenance.
+// visibility - they identify the row and its provenance.
 //
 // The owner-reply and website-health fields sit here too. Their table columns
 // were removed, so there is no longer a visibility toggle to carry them, but the
@@ -112,7 +112,7 @@ const DOMAIN_RATING_INFO = (
   </>
 );
 
-// Rendering rule: a rating only means something with reviews — but "we never
+// Rendering rule: a rating only means something with reviews - but "we never
 // got a count" is not the same claim as "this business has none".
 //
 // Google's search endpoint omits the review count on a sizeable minority of
@@ -121,7 +121,7 @@ const DOMAIN_RATING_INFO = (
 // hid their rating on top of it. Missing is null here; only a real number is a
 // number. See reviewLabel() for how that renders.
 function reviewCount(lead) {
-  // lead.reviews can arrive as a plain "1204" or a comma-formatted "1,204" —
+  // lead.reviews can arrive as a plain "1204" or a comma-formatted "1,204" -
   // Number() chokes on the comma and returns NaN, so strip non-digits first.
   const raw = String(lead.reviews ?? "").replace(/[^\d]/g, "");
   if (raw === "") return null;
@@ -130,7 +130,7 @@ function reviewCount(lead) {
 }
 function reviewLabel(lead) {
   const n = reviewCount(lead);
-  return n == null ? "—" : n.toLocaleString();
+  return n == null ? "-" : n.toLocaleString();
 }
 // A rating with no captured count is still a real rating, so it is worth
 // showing; a rating alongside a genuine 0 reviews is not, because it cannot be
@@ -216,7 +216,7 @@ function scoreClass(value) {
   return "bad";
 }
 
-// Ahrefs DR tone buckets — same 0-100 scale as the Lighthouse health scores, so
+// Ahrefs DR tone buckets - same 0-100 scale as the Lighthouse health scores, so
 // the column reads the same as Perf/SEO across the table.
 function drClass(value) {
   const n = Number(value);
@@ -410,7 +410,7 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot, on
     setError("");
     try {
       const data = await jsonFetch(`/api/leads/${lead.id}/report`, { method: "POST" });
-      // Report credits are charged up front — reflect the new balance immediately.
+      // Report credits are charged up front - reflect the new balance immediately.
       if (typeof data.credits === "number") onCharged?.(data.credits);
       setJob({ id: data.jobId, status: "running", log: [] });
       pollJob(data.jobId);
@@ -521,7 +521,7 @@ function LeadDrawer({ lead, onClose, onDeleted, onPatch, onStatus, onChatbot, on
                     radiusKm={1}
                     points={[{ lat: lead.lat, lng: lead.lng, name: lead.name || "Lead" }]}
                     interactive={false}
-                    /* Inside the drawer — wheel zoom here would eat the scroll
+                    /* Inside the drawer - wheel zoom here would eat the scroll
                        meant for the panel. Use the +/- buttons on this one. */
                     wheelZoom={false}
                     height={200}
@@ -655,7 +655,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
   const [httpStatus, setHttpStatus] = useState(""); // "" | "200" | "redirect" | "broken" | "unreachable"
   const [minScore, setMinScore] = useState(0);
   // The same questions the project workspace asks of a result set. All of these
-  // filter (and sort) in SQL, not over the page already loaded — sorting client
+  // filter (and sort) in SQL, not over the page already loaded - sorting client
   // side would only reorder the 120 rows in front of you and hide the real top
   // of the list.
   const [hasPhone, setHasPhone] = useState(""); // "" | "yes" | "no"
@@ -673,9 +673,9 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
   const [selected, setSelected] = useState(() => new Set());
   const [credits, setCredits] = useState(null);
   const [bulkBusy, setBulkBusy] = useState("");
-  // Desktop table column visibility — persisted to localStorage per browser.
+  // Desktop table column visibility - persisted to localStorage per browser.
   const { isVisible, toggle: toggleColumn, reset: resetColumns } = useColumnVisibility();
-  // Live progress for an in-flight bulk batch — reports OR audits. The card and
+  // Live progress for an in-flight bulk batch - reports OR audits. The card and
   // poller are shared; `kind` ("report" | "audit") just switches the labels.
   // { kind, total, done, failed, latest, finished, jobIds }.
   const [batch, setBatch] = useState(null);
@@ -723,7 +723,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
     // Apply the change immediately so the UI responds on click; the PATCH is a
     // ~half-second DB round-trip and waiting for it felt like nothing happened.
     //
-    // The overview tiles read `stats`, which only load() writes — and load()
+    // The overview tiles read `stats`, which only load() writes - and load()
     // reruns on a filter or page change, nothing else. So favouriting three
     // leads lit three badges while the Favorites tile sat at 0 until something
     // unrelated refreshed it. The optimistic update has to cover the counters
@@ -801,7 +801,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
     }
   }, [mergeLead, setBusyKey]);
 
-  // Single-row Ahrefs Domain Rating fetch (free of charge, no credits — but it
+  // Single-row Ahrefs Domain Rating fetch (free of charge, no credits - but it
   // does need AHREFS_API_KEY on the server; see web/lib/ahrefs.cjs).
   const checkDomainRatingOne = useCallback(async (lead) => {
     const key = `${lead.id}:dr`;
@@ -960,7 +960,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
     const cost = ids.length * unit;
     const have = credits ?? 0;
     if (cost > have) {
-      // The guard stays even when credits are hidden — the run would fail
+      // The guard stays even when credits are hidden - the run would fail
       // server-side anyway, and failing before it starts is the kinder version.
       alert(SHOW_CREDITS
         ? `Not enough credits. ${ids.length} ${noun}(s) need ${cost} credits and you have ${have}. Reduce your selection or top up in Billing.`
@@ -1013,7 +1013,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
       }
       const failed = data.failed || 0;
       const ok = data.succeeded || 0;
-      // A run where nothing succeeded is a broken integration, not a result —
+      // A run where nothing succeeded is a broken integration, not a result -
       // say what went wrong instead of flashing "0 ok" and moving on.
       if (!ok && data.reason) alert(`Domain rating failed: ${data.reason}`);
       else showToast(`Domain rating: ${ok} ok${failed ? `, ${failed} failed` : ""}`);
@@ -1286,7 +1286,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
   ) : null;
 
   // Export honors the active filters; if rows are selected, export just those.
-  // Column visibility is respected — only the DB columns mapped to visible table
+  // Column visibility is respected - only the DB columns mapped to visible table
   // columns (plus always-included identity fields) are included in the CSV.
   const exportParams = buildLeadParams();
   if (selected.size > 0) exportParams.set("ids", [...selected].join(","));
@@ -1362,7 +1362,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                 <option value="">All cities</option>
                 {cities.map((c) => <option key={c.name} value={c.name}>{c.name} ({c.count})</option>)}
               </Select>
-              {/* Pick a list and manage lists side by side — the two halves of
+              {/* Pick a list and manage lists side by side - the two halves of
                   the same job, which used to live on two different pages. */}
               <div className="flex w-full items-center gap-1 sm:w-auto">
                 <Select value={listFilter} onChange={(e) => setListFilter(e.target.value)} className="w-full sm:w-auto sm:min-w-[120px]" title="Filter by list" data-tour="leads-listfilter">
@@ -1891,7 +1891,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
         />
       )}
 
-      {/* CRM push progress. Counts are always shown, including skipped — a
+      {/* CRM push progress. Counts are always shown, including skipped - a
           silent "done" after 41 leads were skipped reads as a broken feature. */}
       {crmJob && (() => {
         const finished = ["done", "failed", "cancelled"].includes(crmJob.status);

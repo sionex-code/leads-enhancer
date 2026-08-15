@@ -4,7 +4,7 @@ import { requireUser } from "../../../../../../web/lib/session.js";
 
 export const dynamic = "force-dynamic";
 
-// The live list behind a "remote-select" config field — Smartlead and Instantly
+// The live list behind a "remote-select" config field - Smartlead and Instantly
 // campaigns. Fetched with the user's own credentials so the dropdown shows
 // their real campaigns instead of asking them to paste a UUID.
 //

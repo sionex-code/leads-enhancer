@@ -2,14 +2,14 @@
 
 // Create / rename / delete the user's saved lists, without leaving the leads
 // table. This used to be a page of its own (/lists) whose only other job was
-// linking back into this table filtered by list — two nav entries for one task,
+// linking back into this table filtered by list - two nav entries for one task,
 // where picking a list and managing lists lived on opposite sides of a
 // navigation. Now the filter dropdown sits next to a "Manage" button that opens
 // this, and /lists redirects here.
 //
 // Deleting a list never deletes leads: the list is a folder, the leads stay in
 // the database. Favorites is not shown, because it is the watchlist flag rather
-// than a real list — it can't be renamed or deleted.
+// than a real list - it can't be renamed or deleted.
 
 import { useState } from "react";
 import { Check, List, ListPlus, Loader2, Pencil, Trash2, X } from "lucide-react";
@@ -68,7 +68,7 @@ export default function ManageListsDialog({ lists = [], onClose, onChanged, acti
   };
 
   const remove = (list) => {
-    if (!confirm(`Delete the list "${list.name}"? The leads in it stay in your database — only the list is removed.`)) return;
+    if (!confirm(`Delete the list "${list.name}"? The leads in it stay in your database - only the list is removed.`)) return;
     return run(`del:${list.id}`, async () => {
       await jsonFetch(`/api/lists/${list.id}`, { method: "DELETE" });
       // The table is currently filtered to a list that no longer exists, so drop

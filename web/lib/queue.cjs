@@ -17,7 +17,7 @@ const TICK_MS = Number(process.env.QUEUE_TICK_MS || 2000);
 // before we treat the spawn as dead and free its slot. promoteOne sets the pid
 // within milliseconds of claiming, so anything older than this never spawned
 // (supervisor died mid-promote, spawn threw before pid write, etc.) and would
-// otherwise hold a concurrency slot forever — the cause of "waiting for a free
+// otherwise hold a concurrency slot forever - the cause of "waiting for a free
 // slot" with nothing actually running.
 const STALE_CLAIM_MS = Number(process.env.QUEUE_STALE_CLAIM_MS || 120000);
 // Hard ceiling on how long a single runner may hold a concurrency slot. A runner
@@ -74,7 +74,7 @@ async function runningCount() {
 
 // Once a job leaves the queue (finished, failed, or its slot reclaimed) the
 // project's web-state must stop advertising itself as "queued". The runner clears
-// running/activePid on exit but never resets the enqueue-time `queued` flag — which
+// running/activePid on exit but never resets the enqueue-time `queued` flag - which
 // is exactly what left finished projects stuck showing "waiting for a free slot".
 function clearQueuedFlag(slug, userId, extra = {}) {
   try {
@@ -94,7 +94,7 @@ async function reapFinished() {
     console.log("[queue] reap: running jobs", rows.map((r) => ({ id: r.id, pid: r.pid, alive: r.pid ? store.processAlive(r.pid) : null })));
   }
   for (const job of rows) {
-    // A job with no pid yet was just claimed (spawn in flight) — leave it for a
+    // A job with no pid yet was just claimed (spawn in flight) - leave it for a
     // short grace period, but if it's been pid-less longer than that the spawn
     // never completed and the slot would leak forever, so fail it to free the slot.
     if (job.pid === null || job.pid === undefined) {
@@ -114,7 +114,7 @@ async function reapFinished() {
       continue;
     }
     if (store.processAlive(job.pid)) {
-      // The pid is alive — but is it actually OUR runner? The runner records its
+      // The pid is alive - but is it actually OUR runner? The runner records its
       // own pid as the project's activePid in web-state.json. After a reboot the OS
       // can hand that pid to an unrelated process; without this check we'd treat the
       // stranger as a live job forever and never free the slot. A light state read
@@ -124,8 +124,8 @@ async function reapFinished() {
         const st = store.readState(store.safeProjectDir(job.project_slug, job.user_id));
         ours = st && st.activePid != null && Number(st.activePid) === Number(job.pid);
       } catch {}
-      // A job that started before the machine last booted cannot still be running —
-      // its runner died in the reboot — even if a recycled pid now looks alive and
+      // A job that started before the machine last booted cannot still be running -
+      // its runner died in the reboot - even if a recycled pid now looks alive and
       // the (never-cleared) activePid still matches. This is the real fix for slots
       // that stay pinned forever after a server restart.
       const bootMs = Date.now() - os.uptime() * 1000;
@@ -134,7 +134,7 @@ async function reapFinished() {
       // Genuinely ours and within the runtime ceiling → it's a healthy running job.
       if (ours && ageMs < MAX_RUN_MS) continue;
       // Ours but stuck past the ceiling → kill it so the slot can be reused. (If the
-      // pid isn't ours we must NOT kill it — just reclaim the row below.)
+      // pid isn't ours we must NOT kill it - just reclaim the row below.)
       if (ours && ageMs >= MAX_RUN_MS) {
         try { store.killTree(job.pid); } catch {}
         await pool().query(
@@ -149,7 +149,7 @@ async function reapFinished() {
         continue;
       }
       if (!ours) {
-        // pid belongs to someone else now (reused after reboot) — reclaim the slot
+        // pid belongs to someone else now (reused after reboot) - reclaim the slot
         // without touching that process, then fall through to settle done/failed.
       }
     }

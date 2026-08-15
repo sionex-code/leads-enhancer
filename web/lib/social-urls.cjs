@@ -4,8 +4,8 @@
 //
 // It used to live only in the crawler, and only rejected the obvious cases:
 // login pages, share dialogs, /profile.php with no id. That let through
-// "https://facebook.com/people" — Facebook's directory index, not anybody's
-// page — which then rendered as a Facebook icon on a lead and sent the user
+// "https://facebook.com/people" - Facebook's directory index, not anybody's
+// page - which then rendered as a Facebook icon on a lead and sent the user
 // nowhere. The other extraction path (site-report) validated nothing at all,
 // and the icon row rendered any non-empty string.
 //
@@ -58,7 +58,7 @@ const DEEP = {
 };
 
 // Site-builder and platform accounts a CMS drops into its own footer. These are
-// real profiles — just not the lead's.
+// real profiles - just not the lead's.
 const PLATFORM_ACCOUNT = /^(wix|wixcom|wordpress|wordpressdotcom|squarespace|godaddy|shopify|weebly|duda|webflow|app|home|null|undefined)$/i;
 
 function isValidSocialUrl(url, network) {

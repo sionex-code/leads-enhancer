@@ -1,5 +1,5 @@
 // Next.js startup hook. Runs once when the server process boots. We start the
-// job-queue supervisor here (Node runtime only — never on the edge), so a single
+// job-queue supervisor here (Node runtime only - never on the edge), so a single
 // loop promotes queued scrape/enrich jobs up to the global concurrency cap.
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;

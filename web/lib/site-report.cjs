@@ -1,6 +1,6 @@
 // Independent per-website report generator. For each website (max 5 per batch):
 //   1. Inspect the live site (title, meta, socials, emails, tech stack hints)
-//   2. Run the fast patchright audit (desktop + mobile) — speed, layout, mobile,
+//   2. Run the fast patchright audit (desktop + mobile) - speed, layout, mobile,
 //      SEO, security, accessibility, support-chat detection (no slow Lighthouse)
 //   3. Ask the reasoning model to summarize the issues + write an outreach angle
 //   4. Render a standalone dark HTML report (AI summary + the raw audit) under
@@ -415,7 +415,7 @@ function safeReportPath(name) {
 }
 
 // ---- main entry ------------------------------------------------------------------
-// sites: [{ name, website, ...leadFields }] — capped at 5. Returns a job id
+// sites: [{ name, website, ...leadFields }] - capped at 5. Returns a job id
 // immediately; the work continues in the background inside this server process.
 function startReportJob(sites, { devices = ["desktop", "mobile"], onLog } = {}) {
   ensureDirs();
@@ -507,7 +507,7 @@ function startReportJob(sites, { devices = ["desktop", "mobile"], onLog } = {}) 
 
 // ---- quick audit job -------------------------------------------------------------
 // Like startReportJob but cheaper: runs ONLY the real-Chrome audit (desktop +
-// mobile Lighthouse scores) — no inspect, no AI, no HTML. Each completed site's
+// mobile Lighthouse scores) - no inspect, no AI, no HTML. Each completed site's
 // scores are handed to onResult(site, scores) so the caller can persist them onto
 // the lead (Health column). Tracked in the same job registry, so the existing
 // /api/agent/jobs/<id> polling + progress UI work unchanged.

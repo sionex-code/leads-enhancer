@@ -1,5 +1,5 @@
 // Minimal .env loader (no dotenv dependency) for CLI/runner contexts where Next's
-// built-in env loading isn't available — drizzle-kit, web-runner.cjs, scripts.
+// built-in env loading isn't available - drizzle-kit, web-runner.cjs, scripts.
 // Next.js itself loads .env automatically; this only fills gaps for plain node.
 const fs = require("fs");
 const path = require("path");

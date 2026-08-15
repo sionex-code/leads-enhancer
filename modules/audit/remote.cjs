@@ -1,4 +1,4 @@
-// Website-audit module — REMOTE backend. Offloads the heavy real-Chrome work to a
+// Website-audit module - REMOTE backend. Offloads the heavy real-Chrome work to a
 // worker (AUDIT_WORKER_URL). The per-URL scan and the analyze batch cross the wire;
 // report.js HTML assembly stays local (it just reads the summaries we get back).
 const path = require("path");

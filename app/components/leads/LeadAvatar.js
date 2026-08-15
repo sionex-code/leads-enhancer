@@ -4,8 +4,8 @@
 // to the initials tile.
 //
 // Two sources, in order:
-//  1. `lead.favicon` — the real <link rel="icon"> captured during enrichment.
-//  2. Google's favicon service, keyed on the domain — so a lead shows its icon
+//  1. `lead.favicon` - the real <link rel="icon"> captured during enrichment.
+//  2. Google's favicon service, keyed on the domain - so a lead shows its icon
 //     the moment it is scraped, without waiting for an enrich pass.
 // If both fail to load (dead site, no icon, blocked request) it falls back to
 // initials rather than leaving a broken image in the row.

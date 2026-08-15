@@ -65,7 +65,7 @@ function placeKey(p) {
 // "0x8644b1518ae24e97:0x4fbbf19295f14748". The second half already carries its
 // own "0x", so prefixing another one built "0x0x…" and made BigInt throw. That
 // throw escaped extractRow into rowsFromBody, and scrape.cjs catches a decode
-// failure by dropping the WHOLE response batch — so one place without a ChIJ id
+// failure by dropping the WHOLE response batch - so one place without a ChIJ id
 // silently lost every lead alongside it. Never throw out of here.
 function cidUrl(raw) {
   const hex = String(raw || "").split(":")[1] || "";

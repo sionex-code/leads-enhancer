@@ -2,7 +2,7 @@
 // folders and shapes them like rows out of the `leads` table, so the leads table
 // UI can be worked on locally without a reachable Postgres.
 //
-// Only ever reached when DEV_AUTH_ENABLED is true (see web/lib/dev-auth.js) —
+// Only ever reached when DEV_AUTH_ENABLED is true (see web/lib/dev-auth.js) -
 // nothing here is imported into a production code path.
 const path = require("path");
 const store = require("./store.cjs");
@@ -124,7 +124,7 @@ function rowsForProject(project, startId) {
   });
 }
 
-// Every dev lead, newest project first. Rebuilt per call — the CSVs are small and
+// Every dev lead, newest project first. Rebuilt per call - the CSVs are small and
 // this keeps edits to them visible on reload without a restart.
 function allLeads() {
   let id = 1;

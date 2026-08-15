@@ -1,4 +1,4 @@
-// Website-audit / report module — LOCAL backend. Wraps web-audit.cjs (the heavy
+// Website-audit / report module - LOCAL backend. Wraps web-audit.cjs (the heavy
 // real-Chrome scan) and the project-aware audit + report batch stages that used to
 // live inline in web-runner.cjs.
 const fs = require("fs");
@@ -11,7 +11,7 @@ function audit(url, opts = {}) {
   return auditUrl(url, opts);
 }
 
-// Which devices a run targets — mirrors the former web-runner.requestedDevices.
+// Which devices a run targets - mirrors the former web-runner.requestedDevices.
 function devicesFor(ctx) {
   const raw = String(ctx.value("--device", "all")).toLowerCase();
   if (raw === "all" || raw === "both") return ["desktop", "mobile"];
@@ -39,7 +39,7 @@ async function runBatch(ctx) {
   }
 }
 
-// Project-aware REPORT stage (report.js). Always local — it just assembles the HTML
+// Project-aware REPORT stage (report.js). Always local - it just assembles the HTML
 // report from the (now-present) summary CSVs into the project dir.
 async function runReport(ctx) {
   const input = ctx.store.latestInputCsv(ctx.dir);

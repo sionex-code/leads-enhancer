@@ -1,4 +1,4 @@
-// merge.js — merge multiple scrape CSVs, dedupe by phone (fallback: name), write one CSV.
+// merge.js - merge multiple scrape CSVs, dedupe by phone (fallback: name), write one CSV.
 // Usage: node merge.js out.csv in1.csv in2.csv ...
 const fs = require("fs");
 

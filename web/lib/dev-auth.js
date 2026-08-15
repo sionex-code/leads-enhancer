@@ -2,10 +2,10 @@
 // annotated / styled) without Google OAuth and without a reachable database.
 //
 // This can never switch on in production. It requires BOTH of:
-//   1. NODE_ENV !== "production" — `next build` and `next start` both force
+//   1. NODE_ENV !== "production" - `next build` and `next start` both force
 //      NODE_ENV to "production", so a real deploy fails this check outright even
 //      if the env var below were somehow set on the server; and
-//   2. DEV_FAKE_AUTH === "1" — an explicit opt-in that lives only in .env.local,
+//   2. DEV_FAKE_AUTH === "1" - an explicit opt-in that lives only in .env.local,
 //      which .gitignore excludes (`.env*`), so it is never committed or shipped.
 // Either condition alone is enough to keep the stub off; there is no way to
 // enable it from the browser, a cookie, or a query string.

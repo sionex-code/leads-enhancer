@@ -1,4 +1,4 @@
-// filter-emails.js — keep only rows that have an email. Usage: node filter-emails.js in.csv out.csv
+// filter-emails.js - keep only rows that have an email. Usage: node filter-emails.js in.csv out.csv
 const fs = require("fs");
 function parseCsv(text) {
   if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);

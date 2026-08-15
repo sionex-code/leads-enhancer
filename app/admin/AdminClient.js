@@ -394,7 +394,7 @@ export default function AdminClient() {
               <TableBody>
                 {filtered.map((u) => {
                   const active = isActive(u);
-                  // Scale (p49) is the unlimited tier — its quota is stored as null.
+                  // Scale (p49) is the unlimited tier - its quota is stored as null.
                   const unlimited = active && (u.leads_quota === null || u.plan === "p49");
                   return (
                     <TableRow key={u.id}>

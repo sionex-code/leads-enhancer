@@ -1,13 +1,13 @@
 // Chat client with two OpenAI-compatible providers:
 //
-//   groq  https://api.groq.com/openai/v1 — used when GROQ_API_KEY is set.
+//   groq  https://api.groq.com/openai/v1 - used when GROQ_API_KEY is set.
 //         REASONING llama-3.3-70b-versatile, FAST llama-3.1-8b-instant.
 //         Groq supports native tool-calls, but the agent keeps its prompt-based
 //         JSON tool protocol so both providers behave identically.
-//         GROQ_API_KEY may hold MULTIPLE comma-separated keys — on a 429 we
+//         GROQ_API_KEY may hold MULTIPLE comma-separated keys - on a 429 we
 //         rotate to the next key before falling back to the Kiro proxy, so the
 //         free-tier 6000 TPM limit on one key doesn't stall a turn.
-//   kiro  http://144.91.104.65/v1 (plain HTTP — the HTTPS cert is self-signed).
+//   kiro  http://144.91.104.65/v1 (plain HTTP - the HTTPS cert is self-signed).
 //         REASONING gemma-4-31b-it, FAST gemma-4-26b-a4b-it.
 //         NOTE: the proxy strips the OpenAI `tools` parameter.
 //

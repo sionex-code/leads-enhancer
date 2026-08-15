@@ -36,7 +36,7 @@ async function waitForProject(project, { ctx = {}, stages = ["scrape"], label = 
     const msg = state.message || "";
     if (ctx.setStatus) ctx.setStatus(`${label} ${project}… ${rawCount} leads so far`);
     const anyFailed = stages.some((name) => stageStates[name]?.status === "failed");
-    // Wait for the runner PROCESS to actually exit — the runner syncs the leads
+    // Wait for the runner PROCESS to actually exit - the runner syncs the leads
     // into the global DB AFTER a stage flips to "done", so returning on the stage
     // flag alone races that sync and yields empty results. Process-exit (message
     // Done/Failed, or pid no longer alive after we saw it) means the sync ran.
@@ -550,7 +550,7 @@ function sendMessage({ sessionId, message, project, model }) {
   if (model) session.model = model;
   if (session.status === "thinking") throw new Error("Agent is still working on the previous message");
   push(session, { role: "user", content: String(message || "").slice(0, 8000) });
-  // fire and forget — the UI polls the session file
+  // fire and forget - the UI polls the session file
   processTurn(session.id).catch(() => {});
   return { sessionId: session.id };
 }

@@ -1,4 +1,4 @@
-// Email-enrichment module — LOCAL backend. Wraps the existing enrich.cjs engine
+// Email-enrichment module - LOCAL backend. Wraps the existing enrich.cjs engine
 // and the project-aware batch stage that used to live inline in web-runner.cjs.
 const fs = require("fs");
 const path = require("path");
@@ -12,7 +12,7 @@ function enrichSite(website) {
 }
 
 // ---- owner-reply detection (Phase 5) --------------------------------------------
-// Reuses the shared browser-pool (web/lib/browser-pool.cjs) — the same Chrome
+// Reuses the shared browser-pool (web/lib/browser-pool.cjs) - the same Chrome
 // instance used by the chatbot scan and single-lead enrich routes. We must NOT
 // close it (pool owns the lifecycle); just borrow via withBrowser().
 //
@@ -86,7 +86,7 @@ async function checkOwnerReply(placeUrl) {
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
           await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
-        } catch { /* nav timeout — keep reading what rendered */ }
+        } catch { /* nav timeout - keep reading what rendered */ }
         try {
           await page.waitForFunction(
             () =>
@@ -205,7 +205,7 @@ async function runOwnerReplyPass(ctx, enrichedCsvPath) {
   const orcIdx = headers.indexOf("owner_reply_count");
 
   if (mapsColIdx === -1) {
-    ctx.log("owner-reply pass: no mapsUrl column in enriched CSV — skipped");
+    ctx.log("owner-reply pass: no mapsUrl column in enriched CSV - skipped");
     return;
   }
   // Ensure output columns exist in headers; if not, add them
@@ -247,7 +247,7 @@ async function runOwnerReplyPass(ctx, enrichedCsvPath) {
       );
       result = await Promise.race([checkOwnerReply(mapsUrl), deadline]);
     } catch (err) {
-      ctx.log(`owner-reply: [skip] ${mapsUrl.slice(0, 60)} — ${err.message}`);
+      ctx.log(`owner-reply: [skip] ${mapsUrl.slice(0, 60)} - ${err.message}`);
     }
 
     if (result.owner_replied !== undefined) {
@@ -304,7 +304,7 @@ async function runBatch(ctx) {
     const args = [input, "--concurrency", concurrency, "--timeout", "15000"];
     // --noBrowser drops crawlee's PlaywrightCrawler second pass, leaving only the
     // plain-HTTP CheerioCrawler. It finds fewer emails on JavaScript-rendered
-    // sites, but it costs no browser at all — the trade the post-search
+    // sites, but it costs no browser at all - the trade the post-search
     // background pass wants, since it runs unattended after every live search.
     if (ctx.flags.has("--noBrowser")) args.push("--noBrowser");
     await runNodeStage(ctx, "enrich", "enrich-crawlee.js", path.join(ctx.dir, "enrich.log"), args);
@@ -316,7 +316,7 @@ async function runBatch(ctx) {
   // 15s timeout (plus the in-enricher retry) is forgiving of slow small-biz sites.
   const args = [input, "--concurrency", concurrency, "--maxPages", "4", "--timeout", "15000"];
   await runNodeStage(ctx, "enrich", "enrich.js", path.join(ctx.dir, "enrich.log"), args);
-  // Phase 5: owner-reply pass — open each lead's Maps page, count owner replies.
+  // Phase 5: owner-reply pass - open each lead's Maps page, count owner replies.
   // Gate: skip with --no-owner-reply flag or OWNER_REPLY=0 env var.
   await runOwnerReplyPass(ctx, ctx.store.latestEnrichedCsv(ctx.dir));
 }

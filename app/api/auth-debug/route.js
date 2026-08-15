@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 // Diagnostic for "the browser has a session cookie but /api/me says 401".
 //
 // Reports cookie NAMES and whether the presented token matches a sessions row.
-// Never returns a token, an email, or any value — a token is a bearer
+// Never returns a token, an email, or any value - a token is a bearer
 // credential, and echoing one back over a URL anybody can hit would be handing
 // out sessions.
 export async function GET() {

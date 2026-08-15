@@ -1,10 +1,10 @@
-// Chatbot detector — ported from the standalone ../chatbot-detector/detect.js
+// Chatbot detector - ported from the standalone ../chatbot-detector/detect.js
 // into a reusable module so the dashboard (and the Electron build) can run it
 // without a sibling project. Reuses the app's own `patchright` dependency.
 //
 //   Layer 0: Network request interception (catches obfuscated / shadow widgets)
 //   Layer 1: Pattern matching (scripts, iframes, globals, DOM, shadow DOM, aria)
-//   Layer 2: Ollama embedding fallback — OPTIONAL. Only runs if Layers 0+1 find
+//   Layer 2: Ollama embedding fallback - OPTIONAL. Only runs if Layers 0+1 find
 //            nothing AND a local Ollama server is reachable. If Ollama is not
 //            installed/running the layer is skipped silently and the verdict is
 //            based on Layers 0+1 alone.
@@ -146,7 +146,7 @@ const CHATBOT_PHRASES = [
 ];
 
 // Quick probe: is a local Ollama server reachable? Short timeout so a missing
-// Ollama never stalls a scan — on failure we just skip the embedding layer.
+// Ollama never stalls a scan - on failure we just skip the embedding layer.
 async function ollamaAvailable() {
   try {
     const ctrl = new AbortController();

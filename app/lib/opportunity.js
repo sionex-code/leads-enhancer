@@ -1,8 +1,8 @@
-// Opportunity score — how good a business is as a *prospect*, 0-100.
+// Opportunity score - how good a business is as a *prospect*, 0-100.
 //
 // The insight this encodes: for someone selling marketing/web services, a
 // business's weaknesses are the pitch. No website, no ad pixel, no reviews, a
-// weak rating — each is a concrete thing you can open a conversation with. So
+// weak rating - each is a concrete thing you can open a conversation with. So
 // gaps push the score UP.
 //
 // The part that makes the number mean something: it is scored only over the
@@ -15,7 +15,7 @@
 // leads scoring 70 with 30% and 90% coverage are different propositions, and the
 // UI says so instead of showing one flat number.
 //
-// Every signal that fires also produces a plain-English reason — the number
+// Every signal that fires also produces a plain-English reason - the number
 // alone tells you nothing you can say on a call.
 
 import trackingDetect from "../../web/lib/tracking-detect.cjs";
@@ -35,13 +35,13 @@ function reviewsOf(lead) {
   return Number.isFinite(n) ? n : null;
 }
 
-// Socials are only meaningful once the site has been crawled — before that,
+// Socials are only meaningful once the site has been crawled - before that,
 // empty columns mean "not looked yet", not "no Facebook page".
 //
 // Exported because the UI needs the same answer: coverage is NOT a proxy for
 // "has this been enriched". An enriched lead whose site was unreachable, or that
 // has no website at all, still scores low coverage because the tracking and
-// site-health signals stay unknown — so prompting on coverage told people to run
+// site-health signals stay unknown - so prompting on coverage told people to run
 // Enrich on leads that had already been enriched.
 export function isEnriched(lead) {
   return !!(lead?.enrichStatus || lead?.enrich_status || lead?.email || lead?.tech);
@@ -118,7 +118,7 @@ export function scoreLead(lead) {
 
   // Smooth toward "unknown" rather than toward "clean". Without this, a lead we
   // have barely checked scores near zero purely because most signals are
-  // unavailable — which reads as "not worth calling" when it actually means "not
+  // unavailable - which reads as "not worth calling" when it actually means "not
   // looked at yet", and made the whole column collapse into two clusters. Mixing
   // in a neutral prior weighted like one major signal pulls thin leads toward the
   // middle and lets well-covered leads reach the extremes they have earned.

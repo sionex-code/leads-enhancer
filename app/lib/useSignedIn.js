@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 // Who is looking at the marketing site?
 //
 // The session cookie is host-only to the app host, so `auth()` on the marketing
-// host always reports nobody — see the long note in app/api/public/me/route.js.
+// host always reports nobody - see the long note in app/api/public/me/route.js.
 // A credentialed cross-origin fetch to that route is the only way the landing
 // page can tell a signed-in customer from a stranger, so this hook is the one
 // place that asks, and the landing threads the answer down to whoever needs it.
@@ -13,7 +13,7 @@ import { useEffect, useState } from "react";
 // The answer arrives after paint, on purpose: the server render stays identical
 // for everyone, which keeps the page cacheable and keeps anything personalised
 // out of what a crawler indexes. Until it lands, `ready` is false and callers
-// should show the signed-out treatment — a stranger seeing "Get started" for a
+// should show the signed-out treatment - a stranger seeing "Get started" for a
 // moment is nothing, a customer seeing a flash of "Get started" is nothing
 // either, but a stranger seeing "Open dashboard" would be a broken link.
 
@@ -40,7 +40,7 @@ export default function useSignedIn() {
         });
       })
       .catch(() => {
-        // Offline, blocked, CORS — treat as signed out. Every CTA still works,
+        // Offline, blocked, CORS - treat as signed out. Every CTA still works,
         // it just asks them to sign in again.
         if (alive) setState({ ready: true, signedIn: false, label: "" });
       });

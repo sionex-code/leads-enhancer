@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 // Current user + plan entitlement + unread notification count, for the app shell.
 export async function GET() {
   // The app shell polls this on every page; answer it from the stub so the local
-  // session works without Postgres (dev only — see web/lib/dev-auth.js).
+  // session works without Postgres (dev only - see web/lib/dev-auth.js).
   if (DEV_AUTH_ENABLED) return Response.json(devMePayload());
   const session = await auth();
   const userId = session?.user?.id;

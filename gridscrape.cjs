@@ -44,7 +44,7 @@ const MAX_LEADS = parseInt(flagValues["--max"] || "0", 10) || 0;
 const PROJECT = flagValues["--project"] || "";
 const CONCURRENCY = parseInt(flagValues["--concurrency"] || "10", 10) || 10;
 const MAX_PAGES_PER_TILE = parseInt(flagValues["--maxPagesPerTile"] || "5", 10) || 5;
-const VIEW_DIST = 20000; // pb !1d viewport distance — proven value from the standalone project
+const VIEW_DIST = 20000; // pb !1d viewport distance - proven value from the standalone project
 
 // Same columns as scrape.cjs so enrich/audit/report/dashboard work unchanged.
 const HEADERS = [
@@ -64,7 +64,7 @@ function slugify(q) {
 // ---- query -> keyword + geocoded bbox -------------------------------------------
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Business-level dedup key — MUST mirror web/lib/db.cjs#dedupKey so the scraper's
+// Business-level dedup key - MUST mirror web/lib/db.cjs#dedupKey so the scraper's
 // unique count matches how the database dedupes leads. Chain listings that share a
 // website/phone (e.g. KeyMe's many kiosks all on key.me) collapse to one business.
 // This is what --max counts: N means N unique businesses, not N raw Maps results.
@@ -232,7 +232,7 @@ const FETCH_HEADERS = {
 (async () => {
   const parts = await resolveQuery(QUERY);
   if (!parts) {
-    console.error(`Could not find a location in "${QUERY}" — try "<service> in <city>". Falling back is up to the caller.`);
+    console.error(`Could not find a location in "${QUERY}" - try "<service> in <city>". Falling back is up to the caller.`);
     process.exit(3);
   }
   const geo = parts.geo;
@@ -255,7 +255,7 @@ const FETCH_HEADERS = {
   fs.writeFileSync(outFile, csvHeader(), "utf8"); // header up front: dashboard sees the file immediately
   console.log(`  Output: ${outFile}`);
 
-  // Optional realtime DB upserts (project runs only — standalone CLI use skips it).
+  // Optional realtime DB upserts (project runs only - standalone CLI use skips it).
   // Per-tenant: the owning user id is passed to the runner via GMAPS_USER_ID.
   const OWNER_ID = process.env.GMAPS_USER_ID || null;
   let db = null;
@@ -264,13 +264,13 @@ const FETCH_HEADERS = {
     try {
       db = require("./web/lib/db.cjs");
       // Optional: record the running new-vs-duplicate split into project state so the
-      // dashboard can show what was charged. Best-effort — never block scraping on it.
+      // dashboard can show what was charged. Best-effort - never block scraping on it.
       try { store = require("./web/lib/store.cjs"); } catch {}
     } catch (err) {
-      console.warn(`  DB unavailable (${err.message}) — CSV only`);
+      console.warn(`  DB unavailable (${err.message}) - CSV only`);
     }
   } else if (PROJECT && !OWNER_ID) {
-    console.warn("  DB skipped: no GMAPS_USER_ID owner set — CSV only");
+    console.warn("  DB skipped: no GMAPS_USER_ID owner set - CSV only");
   }
   let pendingDb = [];
   let dbInserted = 0; // cumulative leads new to the account (charged) this run
@@ -278,7 +278,7 @@ const FETCH_HEADERS = {
   // Flushes are serialized through a promise chain so a forced end-of-run flush
   // ALWAYS drains the final partial batch. The old `flushing` guard made a forced
   // flush a no-op when one was already in flight, so the last <20 leads were never
-  // saved live — the redundant post-scrape sync then "rediscovered" them as new and
+  // saved live - the redundant post-scrape sync then "rediscovered" them as new and
   // re-counted the live-saved ones as duplicates, misreporting brand-new leads as
   // "already in your leads". Draining here keeps the realtime totals authoritative.
   let flushChain = Promise.resolve();
@@ -307,8 +307,8 @@ const FETCH_HEADERS = {
   }
   const dbTimer = db ? setInterval(() => flushDb(true), 2500) : null;
 
-  const seen = new Set(); // placeIds — cheap per-listing dedup (one Maps result)
-  const seenKeys = new Set(); // business dedup keys — what --max counts (mirrors DB)
+  const seen = new Set(); // placeIds - cheap per-listing dedup (one Maps result)
+  const seenKeys = new Set(); // business dedup keys - what --max counts (mirrors DB)
   let requestsDone = 0;
   let blocked = 0;
   let tilesDone = 0;
@@ -361,7 +361,7 @@ const FETCH_HEADERS = {
     const url = buildUrl(parts.keyword, task.lat, task.lng, task.offset);
     for (let attempt = 0; attempt <= 2; attempt++) {
       try {
-        // New random proxy each attempt — a blocked/dead proxy just fails over.
+        // New random proxy each attempt - a blocked/dead proxy just fails over.
         const dispatcher = proxy.proxyDispatcher(proxy.pickRandom(proxyUrls));
         const res = await fetch(url, {
           headers: FETCH_HEADERS,
@@ -388,7 +388,7 @@ const FETCH_HEADERS = {
       // All-blocked early abort: template expired or Google is rate limiting.
       if (blocked >= 8 && seenKeys.size === 0) {
         stopped = true;
-        throw new Error("Every request is blocked — pb template likely expired (run: node bootstrap-pb.js)");
+        throw new Error("Every request is blocked - pb template likely expired (run: node bootstrap-pb.js)");
       }
       return;
     }
@@ -405,7 +405,7 @@ const FETCH_HEADERS = {
     }
   }
 
-  // Tiny worker pool — no crawlee dependency needed for plain GETs.
+  // Tiny worker pool - no crawlee dependency needed for plain GETs.
   let fatal = null;
   await new Promise((resolve) => {
     let active = 0;

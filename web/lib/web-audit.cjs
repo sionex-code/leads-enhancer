@@ -1,15 +1,15 @@
-// Fast website audit engine (patchright / stealth Chrome) — replaces Lighthouse.
+// Fast website audit engine (patchright / stealth Chrome) - replaces Lighthouse.
 //
 // One page load per audit (~5-20s vs Lighthouse's ~60s). Captures network +
 // console while loading, then runs in-page probes and returns a rich JSON report:
-//   scores      — 0-100 per category (performance/layout/mobile/seo/security/accessibility/chat) + overall
-//   performance — TTFB / FCP / DOMContentLoaded / load / page weight / heaviest assets
-//   layout      — horizontal overflow, off-screen elements, broken images, JS/console errors
-//   mobile      — viewport meta, tiny fonts, small tap targets
-//   chat        — detected live-support widgets (Intercom, Drift, Crisp, ...)
-//   seo         — title / description / h1 / canonical / og / favicon / lang
-//   security    — https, mixed content, security headers
-//   issues[]    — flat, severity-ranked list of everything wrong
+//   scores      - 0-100 per category (performance/layout/mobile/seo/security/accessibility/chat) + overall
+//   performance - TTFB / FCP / DOMContentLoaded / load / page weight / heaviest assets
+//   layout      - horizontal overflow, off-screen elements, broken images, JS/console errors
+//   mobile      - viewport meta, tiny fonts, small tap targets
+//   chat        - detected live-support widgets (Intercom, Drift, Crisp, ...)
+//   seo         - title / description / h1 / canonical / og / favicon / lang
+//   security    - https, mixed content, security headers
+//   issues[]    - flat, severity-ranked list of everything wrong
 //
 // `auditUrl(url, { browser })` reuses a shared browser when given one (so callers
 // can audit many sites concurrently); otherwise it launches and closes its own.

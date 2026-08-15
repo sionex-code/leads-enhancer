@@ -41,7 +41,7 @@ export async function POST(request) {
   const adapter = crm.get(body.provider);
   if (!adapter) return Response.json({ error: "Unknown integration type." }, { status: 400 });
 
-  // The quick-connect flow never asks for a name — most people have exactly one
+  // The quick-connect flow never asks for a name - most people have exactly one
   // Smartlead account and naming it is a question with no interesting answer.
   // Only fall back to the generated name when the user left the field alone.
   const typed = String(body.label || "").trim().slice(0, 80);
@@ -83,7 +83,7 @@ export async function POST(request) {
       provider: adapter.id, label, credentials, config, fieldMap: valid.map,
     });
   } catch (err) {
-    // The (user_id, lower(label)) unique index — a name collision, not a fault.
+    // The (user_id, lower(label)) unique index - a name collision, not a fault.
     if (String(err?.code) === "23505") {
       // A generated name colliding means two connects raced, not that the user
       // chose a name twice. Say nothing about it; just take the next one.
@@ -93,7 +93,7 @@ export async function POST(request) {
             provider: adapter.id, label: await autoLabel(userId, adapter.label), credentials, config, fieldMap: valid.map,
           });
         } catch {
-          return Response.json({ error: "Could not save that integration — try again." }, { status: 409 });
+          return Response.json({ error: "Could not save that integration - try again." }, { status: 409 });
         }
       } else {
         return Response.json({ error: `You already have an integration called "${label}".` }, { status: 409 });

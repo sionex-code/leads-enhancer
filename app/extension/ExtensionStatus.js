@@ -5,7 +5,7 @@ import { CheckCircle2, Loader2, AlertTriangle, ArrowUpCircle } from "lucide-reac
 // Live "is it connected yet?" badge. This page is the one place where that
 // answer matters, and the one place they're actively installing.
 //
-// Presentational only — InstallGuide owns the polling hook, because it also
+// Presentational only - InstallGuide owns the polling hook, because it also
 // needs the answer (to collapse the steps once the extension is in) and two
 // independent pollers would be two independent sources of truth.
 //
@@ -32,7 +32,7 @@ export default function ExtensionStatus({ checking, installed, version, outdated
           </p>
           <p className="mt-0.5 text-sm text-muted-foreground">
             {latestVersion ? `v${latestVersion} is out. ` : ""}Download it again and
-            load it over the same folder — no need to remove the old one first.
+            load it over the same folder - no need to remove the old one first.
           </p>
         </div>
       </div>

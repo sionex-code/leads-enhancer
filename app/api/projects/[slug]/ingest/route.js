@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 // Hard ceiling per ingest call, independent of what the client claims to have
 // scraped. The extension runs on the user's machine, so its output is
-// untrusted input — every limit that guards /api/projects/find has to be
+// untrusted input - every limit that guards /api/projects/find has to be
 // re-applied here or the extension path would be a way around them.
 const MAX_ROWS_PER_INGEST = 1000;
 
@@ -51,7 +51,7 @@ const numOrNull = (v) => {
   return Number.isFinite(n) ? n : null;
 };
 
-// Map one extension row onto the lead shape db.upsertLeads expects — the same
+// Map one extension row onto the lead shape db.upsertLeads expects - the same
 // shape warehouse.toLeadRow produces, so an extension-sourced lead is
 // indistinguishable downstream from a warehouse-sourced one.
 function toLeadRow(x, ctx) {
@@ -84,8 +84,8 @@ function toLeadRow(x, ctx) {
 
 // Hold the scrape to the area that was asked for.
 //
-// The warehouse path has always done this — a bounding-box query refined with
-// haversine — so a warehouse search respects the slider exactly. The live path
+// The warehouse path has always done this - a bounding-box query refined with
+// haversine - so a warehouse search respects the slider exactly. The live path
 // did not, and could not: the radius was sent to the extension and then
 // forgotten, never written to the project, so nothing downstream knew what it
 // had been.
@@ -144,7 +144,7 @@ export async function POST(request, { params }) {
   const incoming = Array.isArray(body?.rows) ? body.rows : null;
   if (!incoming) return Response.json({ error: "rows[] is required" }, { status: 400 });
 
-  // The project must already exist and belong to this user — safeProjectDir
+  // The project must already exist and belong to this user - safeProjectDir
   // scopes to the tenant, so a foreign slug can't be written into.
   const dir = store.safeProjectDir(slug, userId);
   if (!fs.existsSync(dir)) {
@@ -177,7 +177,7 @@ export async function POST(request, { params }) {
   const limit = Math.min(MAX_ROWS_PER_INGEST, avail, dailyLeadsLeft, Number(meta.max) || MAX_ROWS_PER_INGEST);
   const ctx = { project: meta.name || slug, query: meta.query || "" };
 
-  // Drop anything without a name — a row we can't identify is not a lead.
+  // Drop anything without a name - a row we can't identify is not a lead.
   const named = incoming.filter((r) => r && String(r.name || "").trim());
 
   // Then drop anything outside the search area, BEFORE the limit is applied, so
@@ -197,7 +197,7 @@ export async function POST(request, { params }) {
       // different answers, and only the second one tells the user what to
       // change.
       message: outOfArea
-        ? `No leads inside your search area. ${outOfArea} ${outOfArea === 1 ? "result was" : "results were"} outside it — try a wider radius.`
+        ? `No leads inside your search area. ${outOfArea} ${outOfArea === 1 ? "result was" : "results were"} outside it - try a wider radius.`
         : "No leads found for this search.",
       finishedAt: new Date().toISOString(),
       stages: { scrape: { status: "done" } },
@@ -239,11 +239,11 @@ export async function POST(request, { params }) {
   // Hand whatever the extension didn't finish to the server.
   //
   // The extension already tried to crawl every lead's website for emails and
-  // socials (15s/site, in the user's own browser) before this request landed —
+  // socials (15s/site, in the user's own browser) before this request landed -
   // see runJob's enrich phase in the extension's offscreen.js. `rows` here
   // already carries email/socials for whatever it got to in time. This queues
   // the VPS pass for exactly the leftovers (no website result yet), so the
-  // slow tail of a run — sites that stall or a tab that gets closed mid-crawl —
+  // slow tail of a run - sites that stall or a tab that gets closed mid-crawl -
   // still finishes here rather than being lost.
   const enrich = await queueEnrichment({ userId, dir, slug, meta: finalMeta, rows });
 
@@ -282,7 +282,7 @@ function modeOf(values) {
 // geocoder predicts, and when the geocoder comes back empty we have nothing.
 // The addresses on the scraped rows are evidence. A project labelled Adelaide
 // holding ten Islamabad addresses is a bug the user sees on the header, on every
-// export, and — via publishToDirectory — on the public site.
+// export, and - via publishToDirectory - on the public site.
 //
 // Only overwrite when the rows agree with each other (a clear majority) and
 // disagree with the label. A mixed bag of cities is not a correction.
@@ -357,13 +357,13 @@ async function publishToDirectory({ userId, meta, rows }) {
 }
 
 // Populate missing email/socials/WhatsApp status from the cross-tenant caches.
-// Returns how many rows it completed — those cost no crawl at all.
+// Returns how many rows it completed - those cost no crawl at all.
 async function applyEnrichmentCache(rows) {
   const before = rows.filter((r) => r.email).length;
   try {
     await db.fillLeadsFromCaches(rows);
   } catch {
-    // A cache read failure is never worth failing an ingest over — the
+    // A cache read failure is never worth failing an ingest over - the
     // background pass will find these the slow way.
     return 0;
   }
@@ -384,7 +384,7 @@ async function queueEnrichment({ userId, dir, slug, meta, rows }) {
   }
 
   try {
-    // Carry the existing meta through — enqueue writes `query`/`max` straight
+    // Carry the existing meta through - enqueue writes `query`/`max` straight
     // onto project.json, so passing blanks here would erase what /find recorded.
     await queue.enqueue(userId, {
       name: meta.name || slug,
@@ -396,7 +396,7 @@ async function queueEnrichment({ userId, dir, slug, meta, rows }) {
       enrichConcurrency: 30,
     });
     // enqueue leaves the project reading "waiting for a free slot", which is
-    // true of the crawl but wrong about the leads — they are already saved.
+    // true of the crawl but wrong about the leads - they are already saved.
     store.writeState(dir, { message: `Leads loaded, finding emails for ${pending} sites` });
     return { queued: true, pending };
   } catch (err) {

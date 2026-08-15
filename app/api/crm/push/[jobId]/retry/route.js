@@ -30,7 +30,7 @@ export async function POST(_request, { params }) {
   const job = await store.createJob(userId, {
     connectionId: connection.id,
     mode: "ids",
-    // A retry must send even when nothing changed — the point is that last time
+    // A retry must send even when nothing changed - the point is that last time
     // it didn't arrive.
     source: { retryOf: original.id, skipUnchanged: false },
     leadIds,

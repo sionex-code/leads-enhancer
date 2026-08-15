@@ -3,7 +3,7 @@ import { requireUser } from "../../../../web/lib/session.js";
 
 export const dynamic = "force-dynamic";
 
-// Check a credential and list what it can send to — without storing anything.
+// Check a credential and list what it can send to - without storing anything.
 //
 // This exists so the connect dialog can show a user their real campaigns before
 // asking them to commit. /test and /targets both read credentials back out of a
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 // the campaign picker: a wrong key left an orphan behind, and a connection
 // could be saved with no campaign at all and only fail on the first push.
 //
-// The outbound host is the adapter's own, never anything the caller supplies —
+// The outbound host is the adapter's own, never anything the caller supplies -
 // so there is no SSRF surface here. The webhook adapter is the one exception,
 // and it brings its own checkUrl() guard, the same one the create route uses.
 const WINDOW_MS = 60_000;
@@ -45,7 +45,7 @@ export async function POST(request) {
 
   if (!allowed(userId)) {
     return Response.json(
-      { ok: false, error: "Too many connection checks in a row — wait a minute and try again." },
+      { ok: false, error: "Too many connection checks in a row - wait a minute and try again." },
       { status: 429 }
     );
   }
@@ -57,7 +57,7 @@ export async function POST(request) {
   const credentials = body.credentials || {};
   for (const field of adapter.authFields || []) {
     if (field.required && !String(credentials[field.key] || "").trim()) {
-      // Not an error state to render in red — the user simply hasn't finished
+      // Not an error state to render in red - the user simply hasn't finished
       // typing. The dialog only probes once the field looks complete anyway.
       return Response.json({ ok: false, incomplete: true, error: `${field.label} is required.` });
     }
@@ -79,7 +79,7 @@ export async function POST(request) {
   }
   if (!result?.ok) return Response.json({ ok: false, error: result?.error || "The credentials were rejected." });
 
-  // The key works — now fill the picker in the same round trip, so the user
+  // The key works - now fill the picker in the same round trip, so the user
   // sees their campaigns the moment the key checks out.
   let targets = null;
   let targetsError = null;

@@ -74,7 +74,7 @@ export default function ExtensionsPageDiagram({ highlight }) {
 
       <line x1="1" y1="48" x2="479" y2="48" stroke={LINE} />
 
-      {/* Action buttons, top left — these only appear once Developer mode is on */}
+      {/* Action buttons, top left - these only appear once Developer mode is on */}
       <g opacity={loadOpacity}>
         <rect
           x="20"

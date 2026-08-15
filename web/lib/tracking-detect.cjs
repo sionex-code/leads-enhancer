@@ -1,4 +1,4 @@
-// Marketing-stack detector — reads a business's homepage HTML and reports which
+// Marketing-stack detector - reads a business's homepage HTML and reports which
 // ad pixels, analytics tags, site platform and marketing tools it runs.
 //
 // Why this matters for someone selling to these leads: the pixels a business has
@@ -7,12 +7,12 @@
 // is "you're paying for clicks you can never follow up with". Same for analytics.
 // So the detector reports both what's present and, via missing(), what isn't.
 //
-// Pattern matching over the raw HTML only — no browser, no extra requests. It
+// Pattern matching over the raw HTML only - no browser, no extra requests. It
 // runs on HTML enrich.cjs has already fetched, so it costs nothing extra. That
 // means tags injected client-side by a tag manager are not seen directly, but
 // the loader script for every one of them IS in the HTML, which is what we match.
 
-// [regex, display name] — grouped by what the signal tells you about the lead.
+// [regex, display name] - grouped by what the signal tells you about the lead.
 const AD_PIXELS = [
   [/connect\.facebook\.net|fbevents\.js|fbq\s*\(\s*['"]init|facebook\.com\/tr\?/i, "Meta Pixel"],
   [/googleadservices\.com|googlesyndication\.com|gtag\s*\(\s*['"]config['"]\s*,\s*['"]AW-|\/pagead\/conversion/i, "Google Ads"],
@@ -96,14 +96,14 @@ function detectTracking(html) {
   for (const [key] of GROUPS) out[key] = [];
   if (!html || typeof html !== "string") return out;
   // Cap the scan: homepages with a megabyte of inline JSON blow up the regex
-  // pass for no benefit — every loader tag lives near the top or in <head>.
+  // pass for no benefit - every loader tag lives near the top or in <head>.
   const text = html.length > 600000 ? html.slice(0, 600000) : html;
   for (const [key, patterns] of GROUPS) out[key] = matchGroup(text, patterns);
   return out;
 }
 
 // The gaps, phrased as the reason to call them. Only meaningful for a lead that
-// actually has a website — a business with no site at all is a different pitch.
+// actually has a website - a business with no site at all is a different pitch.
 function missing(tracking) {
   const t = tracking || {};
   const gaps = [];
@@ -121,11 +121,11 @@ function summarize(tracking) {
     .join(", ");
 }
 
-// Storage helpers — the lead row keeps this as one JSON text column.
+// Storage helpers - the lead row keeps this as one JSON text column.
 //
 // "" means UNKNOWN: we never got the site's HTML, so we cannot say anything about
 // its stack. A site we did fetch and found nothing on is a completely different
-// (and very sellable) fact — "runs no pixel at all" — so it must serialise to a
+// (and very sellable) fact - "runs no pixel at all" - so it must serialise to a
 // real JSON object with empty groups, not to "". Collapsing both to "" is what
 // used to make every scanned-but-clean lead read as "Not scanned yet" in the UI.
 //
@@ -162,7 +162,7 @@ function parse(value) {
   }
 }
 
-// True when the value came from a real scan — including a scan that found
+// True when the value came from a real scan - including a scan that found
 // nothing. Lets the UI tell "no pixel" apart from "not looked at yet".
 function isScanned(tracking) {
   return !!tracking && GROUPS.some(([k]) => Array.isArray(tracking[k]));

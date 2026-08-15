@@ -10,7 +10,7 @@
 // One CSV carries cities with their state and country denormalised in, so this
 // single asset produces both the country list and the per-country city lists.
 //
-// Output (git-ignored, built on deploy — 19MB of CSV has no business in the repo):
+// Output (git-ignored, built on deploy - 19MB of CSV has no business in the repo):
 //   data/geo/countries.json      [{ code, name, cityCount }]
 //   data/geo/cities/<CC>.json    [{ n: name, s: state, la: lat, ln: lng, p: population }]
 //
@@ -131,7 +131,7 @@ async function main() {
   const countries = [];
   for (const [code, { name, cities }] of byCountry) {
     // Biggest first, so the picker's default list (nothing typed yet) is the
-    // country's major cities rather than whatever sorts first alphabetically —
+    // country's major cities rather than whatever sorts first alphabetically -
     // and so equally-named matches rank by which one people mean.
     cities.sort((a, b) => b.p - a.p || a.n.localeCompare(b.n));
     fs.writeFileSync(path.join(CITY_DIR, `${code}.json`), JSON.stringify(cities));

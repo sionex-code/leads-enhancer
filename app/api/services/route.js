@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 // GET /api/services -> { services: ["Plumber", "Restaurant", ...] }
 //
 // Business categories for a LIVE search. The warehouse catalog only lists the
-// ~46 services we already hold leads for — the right list for a warehouse
+// ~46 services we already hold leads for - the right list for a warehouse
 // lookup, and far too narrow for a live scrape, which can search any business
 // type on the map.
 //

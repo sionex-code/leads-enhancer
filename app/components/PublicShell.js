@@ -1,7 +1,7 @@
 import Image from "next/image";
 
 // Chrome for the public directory pages. These live on the marketing host and
-// are meant to be indexed, so they are server-rendered with no client JS — a
+// are meant to be indexed, so they are server-rendered with no client JS - a
 // signed-out visitor and a crawler see exactly the same HTML.
 export default function PublicShell({ children }) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "/login";

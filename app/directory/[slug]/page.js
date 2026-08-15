@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 
 // How many businesses a visitor may see.
 const PUBLIC_ROWS = 30;
-// How many of those come with their real contact details, for everyone —
+// How many of those come with their real contact details, for everyone -
 // signed out included. The sample is the pitch: a visitor can call one of these
 // businesses today and see the data is real, which is worth more than thirty
 // rows of masked placeholders. The rest stay withheld server-side.
@@ -35,20 +35,20 @@ const SOCIAL_KEYS = ["facebook", "instagram", "linkedin"];
 const SOCIAL_LABEL = { facebook: "Facebook", instagram: "Instagram", linkedin: "LinkedIn" };
 
 // Role addresses. A visitor judging whether this data is worth paying for learns
-// far more from a named mailbox than from info@ — anyone can guess info@. So a
+// far more from a named mailbox than from info@ - anyone can guess info@. So a
 // generic address still counts as an email, it just loses the tie-break.
 const GENERIC_EMAIL =
   /^(info|support|contact|hello|hi|admin|office|sales|enquiry|enquiries|inquiry|inquiries|mail|email|team|help|service|customerservice|noreply|no-reply|donotreply)@/i;
 
 // Is this row good enough to give away, and how good? The free sample has to
 // answer "is this data any good" at a glance, so a row is only ever unlocked
-// with a website, a phone number AND a real email behind it — never with a gap
+// with a website, a phone number AND a real email behind it - never with a gap
 // where one of them should be.
 //
 // Two grades of qualifying row, because enrichment coverage varies by city and a
 // strict all-four rule leaves some listings with nothing to show:
-//   * complete — also has a social profile. The best proof, ranked first.
-//   * contactable — no social, but the email is a named mailbox rather than
+//   * complete - also has a social profile. The best proof, ranked first.
+//   * contactable - no social, but the email is a named mailbox rather than
 //     info@/support@. Anyone can guess info@, so a role address on its own
 //     proves little; a named one still proves the enrichment ran and found
 //     something real.
@@ -92,7 +92,7 @@ function toPublicRow(wh, cityName, cache, tier) {
     phone: tier === "full" ? (wh.phone || "") : pub.maskPhone(wh.phone),
     website: tier === "public" ? pub.maskWebsite(wh.website) : pub.hostOf(wh.website),
     // Social links ride along only on a row we are giving away in full. On a
-    // withheld row they are dropped entirely rather than masked — a profile URL
+    // withheld row they are dropped entirely rather than masked - a profile URL
     // cannot be usefully starred out, and it would hand over the lead anyway.
     socials: tier === "full" ? socialsOf(cache) : [],
   };
@@ -138,8 +138,8 @@ async function loadPage(slug, tier) {
     }
 
     // Which rows to give away. Not simply the first N: a sample is only
-    // persuasive if every row in it is complete — website, phone, a real email
-    // and at least one social — and a named mailbox beats info@. Rows that
+    // persuasive if every row in it is complete - website, phone, a real email
+    // and at least one social - and a named mailbox beats info@. Rows that
     // can't clear that bar are never unlocked, so a thin listing shows fewer
     // than FREE_ROWS rather than a free row with three dashes in it.
     const cacheOf = (r) => enrichment.get(hostOf(r.website || "")) || null;
@@ -157,7 +157,7 @@ async function loadPage(slug, tier) {
       return {
         ...toPublicRow(r, entry.cityName, cacheOf(r), unlocked ? "full" : tier),
         locked: !unlocked,
-        // Showcase rows lead the table — the proof belongs above the fold, not
+        // Showcase rows lead the table - the proof belongs above the fold, not
         // scattered down a list of blurred ones.
         showcase: free.has(i),
       };
@@ -489,7 +489,7 @@ export default async function DirectoryEntry({ params }) {
                         <span className="text-muted-foreground">n/a</span>
                       )}
                     </td>
-                    {/* Locked rows are blurred on top of already-masked values —
+                    {/* Locked rows are blurred on top of already-masked values -
                         the blur is a visual cue, never the thing doing the
                         hiding. What is behind it is "j•••@domain.com", not the
                         real address, because the real one was never sent. */}
@@ -500,7 +500,7 @@ export default async function DirectoryEntry({ params }) {
                       {r.email ? (
                         r.email
                       ) : !r.locked ? (
-                        // Nothing is being withheld on an unlocked row — a plan
+                        // Nothing is being withheld on an unlocked row - a plan
                         // holder's, or one of the free ones at the top: we simply
                         // hold no address for this business. A padlock here would
                         // promise data that does not exist.
@@ -522,7 +522,7 @@ export default async function DirectoryEntry({ params }) {
           </div>
 
           {/* The blur on the lower rows is decoration over values that were
-              already masked server-side — the withheld fields are not in the
+              already masked server-side - the withheld fields are not in the
               response at all. This states plainly what is missing and what
               reveals it. */}
           <div className="border-t border-border bg-muted/30 px-4 py-7 text-center">

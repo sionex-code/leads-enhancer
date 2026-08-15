@@ -7,7 +7,7 @@
 //
 // Chrome: the chatbot detector / website audit drive the user's installed Google
 // Chrome (patchright channel:"chrome"). If Chrome is missing those features warn
-// instead of crashing — the rest of the dashboard works regardless.
+// instead of crashing - the rest of the dashboard works regardless.
 
 const { app, BrowserWindow, shell, dialog, Menu, utilityProcess } = require("electron");
 const path = require("path");
@@ -67,7 +67,7 @@ async function startServer() {
   }
 
   // utilityProcess.fork (not child_process.fork + ELECTRON_RUN_AS_NODE) so the
-  // server runs with Electron's native-module ABI — the same ABI that
+  // server runs with Electron's native-module ABI - the same ABI that
   // @electron/rebuild compiles better-sqlite3 for. ELECTRON_RUN_AS_NODE would run
   // the bundled vanilla Node instead, whose ABI differs and fails to load it.
   serverProc = utilityProcess.fork(serverJs, [], {

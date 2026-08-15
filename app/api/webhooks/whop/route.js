@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 // Whop billing webhook. Grants/renews a membership on valid/payment events and
-// revokes on invalid/cancel — linked to a user by EMAIL match (Google identity).
+// revokes on invalid/cancel - linked to a user by EMAIL match (Google identity).
 // Public (no session) but HMAC-verified with WHOP_WEBHOOK_SECRET.
 //
 // The dispatch + extraction logic lives in web/lib/whop-events.cjs so this

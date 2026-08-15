@@ -1,8 +1,8 @@
-# Lead Ops — Desktop app (Electron)
+# Lead Ops - Desktop app (Electron)
 
 Wraps the Next.js dashboard in a standalone Windows app. The dashboard, leads
 SQLite DB, scraping/enrichment, website-status checks and the chatbot detector
-all run locally inside the app — no server, no login.
+all run locally inside the app - no server, no login.
 
 ## Build a distributable
 
@@ -36,7 +36,7 @@ encapsulate the workarounds:
   - prunes the over-traced `output/` data dir and `node_modules/electron` (~2GB),
   - copies `.next/static` into the standalone bundle,
   - builds `better-sqlite3` for **Electron's ABI** via a prebuilt (or a source
-    compile) — Electron overrides `NODE_MODULE_VERSION`, so it must match the
+    compile) - Electron overrides `NODE_MODULE_VERSION`, so it must match the
     Electron version, not the system Node,
   - materializes Next's `.next/node_modules` external-package symlinks (which
     point at absolute dev paths) into real copies.

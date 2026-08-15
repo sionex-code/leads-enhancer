@@ -20,7 +20,7 @@ async function jsonFetch(url, options = {}) {
 
 // Choose where the selected leads go.
 //
-// `target` is { mode, ids?, list?, filters? } — the same three ways of naming a
+// `target` is { mode, ids?, list?, filters? } - the same three ways of naming a
 // selection that CSV export uses, so "send what I'm looking at" and "export what
 // I'm looking at" can never disagree.
 export default function PushToCrmDialog({ target, count, onClose, onStarted }) {
@@ -86,13 +86,13 @@ export default function PushToCrmDialog({ target, count, onClose, onStarted }) {
             <Loader2 className="h-4 w-4 animate-spin" /> Loading your integrations…
           </p>
         ) : connections.length === 0 ? (
-          // Never hide the button when nothing is connected — this empty state
+          // Never hide the button when nothing is connected - this empty state
           // is how most people will discover the feature exists at all.
           <div className="rounded-xl border border-dashed border-border p-6 text-center">
             <Plug className="mx-auto mb-2 h-6 w-6 text-muted-foreground" />
             <p className="text-sm font-medium text-foreground">No CRM connected yet</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Connect HubSpot, Pipedrive, or any webhook — it takes about a minute.
+              Connect HubSpot, Pipedrive, or any webhook - it takes about a minute.
             </p>
             <Button asChild className="mt-3" size="sm">
               <Link href="/integrations">Set up an integration</Link>
@@ -148,7 +148,7 @@ export default function PushToCrmDialog({ target, count, onClose, onStarted }) {
                   ) : (
                     <>
                       <p className="mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">
-                        Example — {preview.sample?.name}
+                        Example - {preview.sample?.name}
                       </p>
                       <pre className="overflow-x-auto text-[11px] leading-relaxed text-foreground">
 {JSON.stringify(preview.mapped, null, 2)}

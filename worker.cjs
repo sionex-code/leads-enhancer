@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// LeadsFunda capability worker — run heavy modules (scraper / enrich / whatsapp /
+// LeadsFunda capability worker - run heavy modules (scraper / enrich / whatsapp /
 // audit) on a separate VPS to balance load off the main app. It exposes only the
 // modules you enable and guards every request with WORKER_SECRET. The leads DB is
 // shared (same DATABASE_URL), so scraped/enriched rows land centrally.
@@ -33,7 +33,7 @@ const ENABLED = parseModules();
 const SECRET = (process.env.WORKER_SECRET || "").trim();
 const PORT = Number(process.env.WORKER_PORT || 8787);
 
-// Local backends only — the worker IS the local end, so never go through the
+// Local backends only - the worker IS the local end, so never go through the
 // dispatching index (that could loop back out over HTTP).
 const backends = {
   scraper: () => require("./modules/scraper/local.cjs"),
@@ -75,7 +75,7 @@ function snapshotCsvs(dir) {
   for (const f of fs.readdirSync(dir)) if (f.toLowerCase().endsWith(".csv")) map[f] = csvSig(dir, f);
   return map;
 }
-// CSVs that are new or changed vs the pre-run snapshot — the stage's outputs.
+// CSVs that are new or changed vs the pre-run snapshot - the stage's outputs.
 function changedCsvs(dir, before) {
   const out = [];
   for (const f of fs.readdirSync(dir)) {
@@ -185,5 +185,5 @@ const server = http.createServer(async (req, res) => {
       console.warn("[worker] schema migrate skipped:", (err && err.message) || err);
     }
   }
-  server.listen(PORT, () => console.log(`[worker] listening on :${PORT} — modules: ${ENABLED.join(", ")}`));
+  server.listen(PORT, () => console.log(`[worker] listening on :${PORT} - modules: ${ENABLED.join(", ")}`));
 })();

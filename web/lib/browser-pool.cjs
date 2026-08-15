@@ -52,7 +52,7 @@ function releaseSlot() {
 }
 
 // Borrow the shared browser for the duration of fn. Concurrency-gated. The
-// browser is owned by the pool — do NOT close it inside fn.
+// browser is owned by the pool - do NOT close it inside fn.
 async function withBrowser(fn) {
   await acquireSlot();
   try {

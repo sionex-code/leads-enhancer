@@ -16,12 +16,12 @@ export const dynamic = "force-dynamic";
 // The world city list for LIVE searches. A live scrape can grid anywhere, so
 // restricting its pickers to the warehouse catalog (only places we already hold
 // leads for) was an artificial limit. Warehouse searches keep using
-// /api/catalog — that one is still the right answer for a warehouse lookup.
+// /api/catalog - that one is still the right answer for a warehouse lookup.
 //
 // Cities are queried rather than shipped: there are 152,970 of them, which is
 // ~10MB and far past what a <select> can hold without locking the browser up.
 //
-// Behind auth like /api/catalog — it is a form affordance for signed-in users.
+// Behind auth like /api/catalog - it is a form affordance for signed-in users.
 export async function GET(request) {
   const { response } = await requireUser();
   if (response) return response;
@@ -33,7 +33,7 @@ export async function GET(request) {
   const limit = Number(searchParams.get("limit")) || 25;
 
   // Never fatal. If the index was not built on this deploy the form falls back
-  // to the warehouse catalog, which is a smaller list but a working one — far
+  // to the warehouse catalog, which is a smaller list but a working one - far
   // better than a 500 on the page's main control.
   if (!geo.available()) {
     return Response.json({ countries: [], cities: [], unavailable: true });

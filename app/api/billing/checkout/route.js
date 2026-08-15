@@ -23,7 +23,7 @@ function appUrl(path) {
 
 // Static hosted-checkout URL (last-resort fallback). These do NOT carry metadata,
 // so a membership bought this way can only be linked by the buyer's email match /
-// pending-grant path — not the deterministic user_id link.
+// pending-grant path - not the deterministic user_id link.
 function staticCheckout(plan) {
   return process.env[CHECKOUT_ENV[plan]] || null;
 }

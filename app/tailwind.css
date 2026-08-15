@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* shadcn/ui design tokens — LIGHT theme keyed to the LeadsFunda orange
+/* shadcn/ui design tokens - LIGHT theme keyed to the LeadsFunda orange
    (#e05305) with a hot flare accent (#ff7a1a). Tokens live on :root so every
    (Tailwind) page renders light. The legacy dashboard CSS now lives only on the
    /agent route (app/agent/layout.js), so it can no longer bleed into the new
@@ -10,7 +10,7 @@
 
    The palette is deliberately two-temperature: one orange doing all the brand
    work, warmed greys around it, and nothing else allowed to be saturated. The
-   greys are warm (a hint of the same hue) rather than blue-grey — a neutral grey
+   greys are warm (a hint of the same hue) rather than blue-grey - a neutral grey
    next to a hot orange reads as dirty, and warming it is what makes the orange
    look deliberate rather than sprayed on.
 
@@ -50,7 +50,7 @@
   --flare: 25 100% 55%;
   --flare-soft: 28 100% 68%;
   --flare-tint: 30 100% 91%;
-  /* Label ink for text sitting on a flare tint — dark enough to read, still of
+  /* Label ink for text sitting on a flare tint - dark enough to read, still of
      the same family, where plain --foreground would look like a stray black. */
   --flare-ink: 21 88% 24%;
 }

@@ -1,4 +1,4 @@
-// WhatsApp-checker module — REMOTE backend. The OpenWA session is heavy and
+// WhatsApp-checker module - REMOTE backend. The OpenWA session is heavy and
 // stateful, so running it on a dedicated worker (WHATSAPP_WORKER_URL) is a natural
 // thing to offload. Only checkNumber + the batch stage cross the wire.
 const path = require("path");

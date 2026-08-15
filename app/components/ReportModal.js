@@ -72,7 +72,7 @@ export default function ReportModal({ lead, onClose, onCharged }) {
     setError("");
     try {
       const data = await jsonFetch(`/api/leads/${lead.id}/report`, { method: "POST" });
-      // Report credits are charged up front — tell the parent so the balance updates.
+      // Report credits are charged up front - tell the parent so the balance updates.
       if (typeof data.credits === "number") onCharged?.(data.credits);
       setJob({ id: data.jobId, status: "running", log: [] });
       pollJob(data.jobId);

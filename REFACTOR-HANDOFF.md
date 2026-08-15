@@ -1,7 +1,7 @@
-# LeadsFunda refactor — session handoff
+# LeadsFunda refactor - session handoff
 
 Branch: `saas-leadsfunda`. Big multi-feature change in progress. `.js` scraper files
-are ESM shims (`import "./X.cjs"`) — **edit the `.cjs` files**. All edited `.cjs`
+are ESM shims (`import "./X.cjs"`) - **edit the `.cjs` files**. All edited `.cjs`
 pass `node --check`. Track via the harness task list (#1–#8).
 
 ## Original request (5 asks)
@@ -12,7 +12,7 @@ pass `node --check`. Track via the harness task list (#1–#8).
    all users; if the same company/number reappears and is already enriched, show the
    cached enriched data.
 4. Each website report generation costs **10 credits**.
-5. Bulk report must warn "this will use N×10 credits — continue?" before running.
+5. Bulk report must warn "this will use N×10 credits - continue?" before running.
 
 ## Decisions from the user (clarifying Q&A)
 - **Credits model**: per-plan credit balance + user top-up (custom pricing later).
@@ -31,13 +31,13 @@ pass `node --check`. Track via the harness task list (#1–#8).
 - Monthly grant is **lazy** (`ensureCredits` on read, tracked by `credits_renewed_at`
   month). `consumeCredits` is atomic. Whop env: `WHOP_PLAN_19/35/49`, `WHOP_CHECKOUT_19/35/49`.
 
-## DONE — Tasks #1–#4
+## DONE - Tasks #1–#4
 
 ### #1 Schema + startup migrate ✅
 - `web/lib/schema.cjs`: memberships += `credits`,`credits_monthly`,`credits_renewed_at`;
   new tables `appSettings`, `proxies` (global), `enrichmentCache` (global, domain
   unique + phone idx); `gmailAccounts` marked deprecated (table kept); exports updated.
-- `web/lib/migrate.cjs` (NEW): idempotent `ensureSchema()` — ALTER/CREATE IF NOT
+- `web/lib/migrate.cjs` (NEW): idempotent `ensureSchema()` - ALTER/CREATE IF NOT
   EXISTS, default app_settings, one-time guarded plan-key rename (p49→p35, p99→p49,
   flag `migrated_plan_keys_v1`).
 - `instrumentation.js`: `await ensureSchema()` before `queue.start()`.
@@ -57,7 +57,7 @@ pass `node --check`. Track via the harness task list (#1–#8).
 - `web-runner.cjs`: removed import + cookie-rotation block in runScrape.
 - Deleted `app/api/accounts/`. `app/dashboard-home.js`: removed AccountsPanel,
   state, handlers, render, unused imports (KeyRound/Plus/Textarea).
-- (`scrape.cjs` still has a generic `--cookies` flag — harmless, left.)
+- (`scrape.cjs` still has a generic `--cookies` flag - harmless, left.)
 
 ### #4 Proxy pool ✅
 - `web/lib/db.cjs`: normalizeProxyUrl, listProxies, listEnabledProxyUrls,
@@ -71,7 +71,7 @@ pass `node --check`. Track via the harness task list (#1–#8).
 - `app/api/admin/proxies/route.js` (NEW): GET/POST/PATCH/DELETE (admin-gated).
 - `app/admin/AdminClient.js`: ProxyManager component + maskProxy + render + imports.
 
-## TODO — Tasks #5–#8
+## TODO - Tasks #5–#8
 
 ### #5 Shared enrichment cache (IN PROGRESS)
 Just read `app/api/leads/[id]/enrich/route.js` (uses `db` + `enrichLib.enrichSite`,
@@ -88,7 +88,7 @@ youtube, tiktok, pinterest, whatsapp, telegram, enrichStatus).
   domain/phone → if hit with email, apply via updateLeadFields and return (skip crawl);
   after fresh enrich, saveCachedEnrichment.
 - OPTIONAL: enrich.cjs batch pre-check to skip re-crawl (upsertLeads already covers
-  populate/consume, so this is just an optimization — skip if risky).
+  populate/consume, so this is just an optimization - skip if risky).
 
 ### #6 Reports cost 10 credits + bulk select
 - `app/api/leads/[id]/report/route.js` POST: import billing; before
@@ -98,7 +98,7 @@ youtube, tiktok, pinterest, whatsapp, telegram, enrichStatus).
   website; cost = REPORT_COST*count; consumeCredits; if insufficient 402; chunk into
   `siteReport.startReportJob` batches of `siteReport.MAX_SITES` (=5); refund via
   addCredits if a chunk throws. Return `{jobIds, charged}`.
-- `app/leads/LeadsClient.js` (LARGE — read fully first; ~2 table render spots near
+- `app/leads/LeadsClient.js` (LARGE - read fully first; ~2 table render spots near
   lines 883 & 959): row checkbox + select-all, selection state, bulk bar
   "Generate reports (N×10 = M credits)" → confirm dialog showing cost + balance
   (from `/api/me`) → POST bulk route. Handle insufficient credits.
@@ -122,7 +122,7 @@ youtube, tiktok, pinterest, whatsapp, telegram, enrichStatus).
 - `app/components/Landing.js` (lines ~38-43): PLANS → p19/p35/p49, prices, credits.
 - `app/components/AccountWidget.js`: PLAN_LABEL/PLAN_QUOTA → p19/p35/p49;
   `planKey==="p99"`→`"p49"`; offerable PLANS labels $19/$35/$49; **show credits balance**
-  (ent.credits) — overlaps #6.
+  (ent.credits) - overlaps #6.
 - `app/page.js` (lines 13-14): WHOP_CHECKOUT_49/99 → 35/49 (map keys p49/p99 → p35/p49).
   Read first.
 - `app/layout.js`: check for plan/price refs (matched the price grep).
@@ -132,6 +132,6 @@ youtube, tiktok, pinterest, whatsapp, telegram, enrichStatus).
 ## Remaining files still referencing OLD keys (p49/p99) to fix in #7/#8
 AccountWidget.js, BillingClient.js, Landing.js, AdminClient.js (PLAN_LABEL/OPTIONS +
 unlimited check), app/page.js, app/api/admin/users/route.js (validation+comment),
-app/dashboard-home.js (line ~283 `ent?.plan === "p99"` unlimited check — fix to p49).
+app/dashboard-home.js (line ~283 `ent?.plan === "p99"` unlimited check - fix to p49).
 
 Delete this file when the refactor is complete.

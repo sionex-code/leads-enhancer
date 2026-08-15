@@ -5,7 +5,7 @@ import { requireUser } from "../../../../../web/lib/session.js";
 
 export const dynamic = "force-dynamic";
 
-// Kick off a quick audit (real-Chrome desktop + mobile Lighthouse scores only —
+// Kick off a quick audit (real-Chrome desktop + mobile Lighthouse scores only -
 // no AI, no HTML report) for this lead's website. Costs AUDIT_COST credits,
 // charged up front (refunded if the job fails to start). The scores are written
 // back onto the lead (Health column) as the job completes. Returns a jobId the
@@ -33,7 +33,7 @@ export async function POST(_request, context) {
     });
     return Response.json({ jobId, charged: cost, credits: charge.credits });
   } catch (err) {
-    const credits = await billing.addCredits(userId, cost, { reason: "refund", count: 1, project: lead.project }); // refund — job never started
+    const credits = await billing.addCredits(userId, cost, { reason: "refund", count: 1, project: lead.project }); // refund - job never started
     return Response.json({ error: String(err.message || err), credits }, { status: 500 });
   }
 }

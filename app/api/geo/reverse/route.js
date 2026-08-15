@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 //
 // Backs "Use my location" on the find form. The browser gives coordinates; the
 // search box needs a name. Resolving against the warehouse city list instead
-// would only ever return somewhere we already hold leads — Pakistan has three
+// would only ever return somewhere we already hold leads - Pakistan has three
 // such cities, so a user in Islamabad would be told they are in Gujrat
 // District. A real place name lets the live search go wherever they are.
 //

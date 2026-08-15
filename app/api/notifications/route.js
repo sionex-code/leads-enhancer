@@ -14,7 +14,7 @@ export async function GET(request) {
   return Response.json({ notifications: items, unread });
 }
 
-// Mark notifications read. Body: { ids?: number[] } — omit ids to mark all.
+// Mark notifications read. Body: { ids?: number[] } - omit ids to mark all.
 export async function PATCH(request) {
   const { userId, response } = await requireUser();
   if (response) return response;

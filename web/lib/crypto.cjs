@@ -1,14 +1,14 @@
 // Sealed storage for third-party credentials.
 //
 // Every other secret in this app is a global env var, which is fine when the
-// secret is ours. A CRM token is not ours — it can write to a customer's system
-// of record — so it is stored per-user, and it is stored encrypted. This is the
+// secret is ours. A CRM token is not ours - it can write to a customer's system
+// of record - so it is stored per-user, and it is stored encrypted. This is the
 // only encrypted column in the database (crm_connections.secret_enc).
 //
 // AES-256-GCM: the tag makes tampering detectable, which matters because the
 // plaintext is a token we are about to authenticate with. Key is
 // CRM_SECRET_KEY, 32 bytes base64 (`openssl rand -base64 32`), set in
-// .env.local on the VPS — the deploy does not ship .env.local (see CLAUDE.md),
+// .env.local on the VPS - the deploy does not ship .env.local (see CLAUDE.md),
 // so it has to be put there by hand before this feature can be used.
 //
 // Nothing here throws. Callers get a result object, the same shape ahrefs.cjs
@@ -53,7 +53,7 @@ function seal(value) {
 
 // { ok: true, value, stale } | { ok: false, error, reason }
 //
-// `stale: true` means it opened with CRM_SECRET_KEY_OLD — the caller should
+// `stale: true` means it opened with CRM_SECRET_KEY_OLD - the caller should
 // re-seal and save, so a rotation drains itself as connections get used rather
 // than needing a migration script.
 function open(blob) {
@@ -83,7 +83,7 @@ function open(blob) {
   }
   return {
     ok: false,
-    error: "Stored credentials could not be decrypted — the encryption key has changed. Reconnect this integration.",
+    error: "Stored credentials could not be decrypted - the encryption key has changed. Reconnect this integration.",
     reason: "bad_key",
   };
 }

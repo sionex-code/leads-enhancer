@@ -8,7 +8,7 @@ import { requireUser } from "../../../../web/lib/session.js";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// Hard ceiling on one push. Not a billing limit — just a bound on how much work
+// Hard ceiling on one push. Not a billing limit - just a bound on how much work
 // a single click can queue.
 const MAX_PUSH = 2000;
 
@@ -100,7 +100,7 @@ export async function POST(request) {
     leadIds = await db.queryLeadIds(userId, filtersFrom(body.filters || {}), MAX_PUSH);
   }
 
-  if (!leadIds.length) return Response.json({ error: "No leads matched — nothing to send." }, { status: 400 });
+  if (!leadIds.length) return Response.json({ error: "No leads matched - nothing to send." }, { status: 400 });
 
   const job = await store.createJob(userId, {
     connectionId: connection.id,
@@ -109,7 +109,7 @@ export async function POST(request) {
     leadIds,
   });
 
-  // Not awaited — the push outlives this request.
+  // Not awaited - the push outlives this request.
   runner.kick(job.id);
 
   return Response.json(

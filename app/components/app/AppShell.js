@@ -35,19 +35,19 @@ const DEFAULT_TOUR = [
 ];
 
 // "New search" (the find-leads start page) sits above a grouped "Projects" section
-// — Projects opens the workspace (?view=projects), with Leads + Lists under the same
+// - Projects opens the workspace (?view=projects), with Leads + Lists under the same
 // umbrella. Billing lives in the account menu now (not the sidebar).
 const NEW_SEARCH = { key: "new", label: "New search", href: "/dashboard", icon: Search };
 // One entry, not two. "Leads" and "Lists" were the same job split in half, so
 // Lists is now the single door: the cards overview at /lists (create, rename,
 // delete, plus Favorites and All leads), and opening a card lands in the leads
 // table filtered to it, where the actual work happens. /leads keeps working and
-// highlights this entry — it just isn't a separate destination any more.
+// highlights this entry - it just isn't a separate destination any more.
 const PROJECT_NAV = [
   { key: "dashboard", label: "Projects", href: "/dashboard?view=projects", icon: LayoutGrid },
   { key: "lists", label: "Lists", href: "/lists", icon: List },
 ];
-// Standalone utilities that aren't part of the Maps scrape workflow — their own
+// Standalone utilities that aren't part of the Maps scrape workflow - their own
 // section rather than folded into Projects, so they don't read as another kind
 // of project.
 const MISC_NAV = [
@@ -56,7 +56,7 @@ const MISC_NAV = [
 ];
 
 // Live search runs in the extension, so "is it installed?" is a standing piece
-// of account state — it needs a permanent home. That home is now the account
+// of account state - it needs a permanent home. That home is now the account
 // menu at the bottom of the sidebar (see app/components/AccountWidget.js), which
 // keeps it reachable from every page without spending a top-level nav slot.
 
@@ -73,7 +73,7 @@ function Brand({ collapsed, onClick }) {
 }
 
 // Every app route is force-dynamic, so a click on a slow connection paints
-// nothing at all until the server answers — the sidebar does not even highlight,
+// nothing at all until the server answers - the sidebar does not even highlight,
 // and it reads as a click that did not register. useLinkStatus reports the
 // pending navigation, but only from inside the Link, so the icon lives in its
 // own component. It swaps the item's own icon for a spinner rather than adding
@@ -299,7 +299,7 @@ export default function AppShell({ active, title, subtitle, actions, sidebarExtr
 
       {/* Main column */}
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* h-16, matching the sidebar's brand row exactly — the two bottom
+        {/* h-16, matching the sidebar's brand row exactly - the two bottom
             borders have to land on the same line or the whole top of the app
             looks off. Fixed height rather than min-h because a title and its
             subtitle together still fit inside 64px. */}

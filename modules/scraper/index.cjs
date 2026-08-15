@@ -1,4 +1,4 @@
-// Map-scraper module — public entry point. web-runner imports THIS file for the
+// Map-scraper module - public entry point. web-runner imports THIS file for the
 // scrape stage; with SCRAPER_WORKER_URL set the whole scrape runs on another VPS.
 const { isRemote } = require("../registry.cjs");
 const local = require("./local.cjs");

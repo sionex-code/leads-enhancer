@@ -1,6 +1,6 @@
 name: Deploy LeadsFunda SaaS → app.leadsfunda.com
 
-# Deploys the LeadsFunda SaaS app (NOT the legacy /leads dashboard — that has its
+# Deploys the LeadsFunda SaaS app (NOT the legacy /leads dashboard - that has its
 # own deploy.yml). Pushing this branch ships the working tree to the EXISTING prod
 # install and rebuilds it in place.
 #
@@ -13,20 +13,20 @@ name: Deploy LeadsFunda SaaS → app.leadsfunda.com
 #
 # Hard-won invariants (see vps-deploy memory). Changing any of these breaks prod:
 #   • We connect as ROOT to /www/wwwroot/leadsfunda.com. The old adminsafe@
-#     /home/adminsafe/leadsfunda target in this file was never real — neither that
+#     /home/adminsafe/leadsfunda target in this file was never real - neither that
 #     user nor that directory exists on the box, so every run of this workflow
 #     failed. The SSH key in secrets.VPS_SSH_KEY authorises root (despite its
 #     "adminsafe" filename) and pm2 also runs as root (/root/.pm2).
-#   • App dir is /www/wwwroot/leadsfunda.com — it already holds the prod `.env.local`
+#   • App dir is /www/wwwroot/leadsfunda.com - it already holds the prod `.env.local`
 #     (DATABASE_URL → local PG, WAREHOUSE_DATABASE_URL, Whop, Google auth, OWA
 #     WhatsApp, NEXTAUTH_URL=https://app.leadsfunda.com, NEXT_PUBLIC_APP_URL,
 #     NEXT_PUBLIC_MARKETING_URL). We NEVER ship `.env.local` (the tar excludes it; a
-#     clean CI checkout wouldn't have it anyway) and NEVER inject those secrets here —
+#     clean CI checkout wouldn't have it anyway) and NEVER inject those secrets here -
 #     the VPS owns them.
 #   • pm2 app is `leadsfunda-ui` on PORT 3001. We restart the existing process; we do
 #     NOT create a second one (a 2nd process on 3001 → EADDRINUSE crash-loop).
 #   • Build happens ON the VPS. Next 16 / Turbopack externalizes `pg` as a content-
-#     hashed virtual module, so a locally-built `.next` is NOT runnable here — the tar
+#     hashed virtual module, so a locally-built `.next` is NOT runnable here - the tar
 #     excludes `.next` and we run `npm run build` remotely.
 #   • Root build (no basePath); both hosts serve at /.
 
@@ -100,12 +100,12 @@ jobs:
             # never in the tarball). The VPS already holds one and tar never
             # deletes it, so this only fires on a fresh install. Non-fatal: it
             # pulls a 19MB asset over the network and a deploy must not hinge on
-            # that — a missing index degrades live-search city lookup, nothing else.
+            # that - a missing index degrades live-search city lookup, nothing else.
             if [ ! -f data/geo/countries.json ]; then
               node scripts/build-geo-index.cjs || echo 'WARN: geo index build failed; live-search city lookup will be limited'
             fi
 
-            # Root build (no basePath). Bump heap — the VPS needs ~4G for next build.
+            # Root build (no basePath). Bump heap - the VPS needs ~4G for next build.
             NEXT_PUBLIC_BASE_PATH= NODE_OPTIONS=--max-old-space-size=4096 npm run build
 
             # Restart the EXISTING process on its port. start:web honours \$PORT now

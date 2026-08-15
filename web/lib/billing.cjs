@@ -30,7 +30,7 @@ const CHATBOT_COST = 5; // credits per website chatbot/live-chat scan
 // admin-configured timezone (daily_reset_tz, default UTC).
 const PLAN_DAILY_SEARCHES = { p19: 20, p35: 100, p49: 1000 };
 const PLAN_DAILY_LEADS = { p19: 400, p35: 1500, p49: 5000 };
-// Accounts with no active paid plan (free tier) — also admin-tunable.
+// Accounts with no active paid plan (free tier) - also admin-tunable.
 const FREE_DAILY_SEARCHES = 5;
 const FREE_DAILY_LEADS = 100;
 
@@ -173,7 +173,7 @@ async function recordCreditTxn(userId, { delta, reason, count = null, project = 
 }
 
 // Atomically spend `n` credits. Returns { ok, credits }. ok=false (without
-// charging) when the balance is insufficient — the conditional UPDATE makes this
+// charging) when the balance is insufficient - the conditional UPDATE makes this
 // race-safe across concurrent report requests. `meta` ({ reason, count, project })
 // is recorded to the credit-spend ledger on success.
 async function consumeCredits(userId, n, meta = {}) {
@@ -340,7 +340,7 @@ async function getDailyUsage(userId) {
 // Atomically count one search against the daily cap. Resets the per-day counters
 // when the day rolled over (in the configured tz). Returns { ok, used, limit,
 // remaining, unlimited, resetAt, resetInSeconds }. ok=false (without counting) when
-// the cap is already hit — the conditional UPDATE makes this race-safe across
+// the cap is already hit - the conditional UPDATE makes this race-safe across
 // concurrent requests so it can't be bypassed by firing many at once.
 async function consumeDailySearch(userId) {
   const m = await ensureCredits(userId);
@@ -385,7 +385,7 @@ async function releaseDailySearch(userId) {
 }
 
 // Count delivered leads against the daily cap (best-effort, called after a find
-// returns). Resets on day change. Does NOT enforce — the caller caps the request
+// returns). Resets on day change. Does NOT enforce - the caller caps the request
 // by the remaining daily allowance first.
 async function addDailyLeads(userId, n) {
   n = Math.max(0, Math.floor(n || 0));
@@ -441,7 +441,7 @@ async function consumeLeads(userId, n, meta = {}) {
 }
 
 // Look up a leadsfunda user by their stable Whop account id. The Whop user_id
-// is stamped on the FIRST successful grant — after that, every renewal hits
+// is stamped on the FIRST successful grant - after that, every renewal hits
 // this index instead of falling back to a fuzzy email match.
 async function findUserByWhopUserId(whopUserId) {
   if (!whopUserId) return null;

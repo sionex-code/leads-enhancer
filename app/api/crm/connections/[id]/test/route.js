@@ -5,7 +5,7 @@ import { requireUser } from "../../../../../../web/lib/session.js";
 export const dynamic = "force-dynamic";
 
 // Answers 200 whether or not the credentials work. A rejected token is not an
-// API error — it is the answer to the question the user asked — and the UI
+// API error - it is the answer to the question the user asked - and the UI
 // renders `error` as a sentence either way.
 export async function POST(_request, { params }) {
   const { userId, response } = await requireUser();
@@ -24,8 +24,8 @@ export async function POST(_request, { params }) {
 
   const result = await adapter.testConnection(opened.credentials, opened.connection.config || {});
 
-  // A provider may learn things during the test that later calls need — the
-  // HubSpot portal id, the Pipedrive account subdomain — so it can hand back a
+  // A provider may learn things during the test that later calls need - the
+  // HubSpot portal id, the Pipedrive account subdomain - so it can hand back a
   // config patch to merge.
   const patch = {
     status: result.ok ? "ok" : "error",

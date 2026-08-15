@@ -1,4 +1,4 @@
-// settings.cjs — simple key/value admin settings backed by the app_settings
+// settings.cjs - simple key/value admin settings backed by the app_settings
 // Postgres table (created in migration 0002 / 0004). Uses the same pool()
 // accessor as db.cjs and pg.cjs.
 "use strict";

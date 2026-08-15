@@ -33,7 +33,7 @@ export async function requireUser() {
 
 // Admins are listed in the ADMIN_EMAILS env (comma-separated). Only used to show
 // the convenience "Admin panel" link in the account menu (via /api/me). The
-// authoritative /admin gate is a separate username/password cookie — see
+// authoritative /admin gate is a separate username/password cookie - see
 // web/lib/admin-auth.js.
 export function isAdminEmail(email) {
   if (!email) return false;

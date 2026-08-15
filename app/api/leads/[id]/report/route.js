@@ -30,7 +30,7 @@ export async function POST(_request, context) {
     const jobId = siteReport.startReportJob([lead]);
     return Response.json({ jobId, charged: cost, credits: charge.credits });
   } catch (err) {
-    // Refund — we took the credits but the job never started.
+    // Refund - we took the credits but the job never started.
     const credits = await billing.addCredits(userId, cost, { reason: "refund", count: 1, project: lead.project });
     return Response.json({ error: String(err.message || err), credits }, { status: 500 });
   }

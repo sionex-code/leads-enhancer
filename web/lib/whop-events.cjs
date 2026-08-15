@@ -1,4 +1,4 @@
-// Shared Whop event dispatch logic — used by both:
+// Shared Whop event dispatch logic - used by both:
 //   - app/api/webhooks/whop/route.js       (direct Whop → LeadsFunda, HMAC-verified)
 //   - app/api/webhooks/whop-relay/route.js (webmarkaz → LeadsFunda, secret-verified)
 //
@@ -21,7 +21,7 @@ function extractEmail(data) {
   ).toLowerCase();
 }
 
-// Whop account id ("user_XXXX") — the STABLE identifier for a Whop account.
+// Whop account id ("user_XXXX") - the STABLE identifier for a Whop account.
 // Whop puts it at data.user.id on both membership.* and payment.* events.
 // We prefer this over email for linking because it's permanent; the buyer can
 // change their Whop email or their Google email and the link still holds.
@@ -100,12 +100,12 @@ async function handleWhopEvent(event) {
     const email = extractEmail(data);
 
     // Link priority (most -> least specific):
-    //   1. metadata.user_id — stamped at checkout by the in-app LeadsFunda
+    //   1. metadata.user_id - stamped at checkout by the in-app LeadsFunda
     //      /api/billing/checkout flow. Only set when the buyer is signed in.
-    //   2. whop_user_id — stable Whop account id, stamped on the users row
+    //   2. whop_user_id - stable Whop account id, stamped on the users row
     //      on the FIRST successful grant. After that, every renewal hits
     //      this index (immune to email changes).
-    //   3. buyer email — fuzzy match against users.email. Final fallback.
+    //   3. buyer email - fuzzy match against users.email. Final fallback.
     let userId = null;
     let matchedBy = null;
 

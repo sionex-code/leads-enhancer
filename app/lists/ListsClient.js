@@ -95,7 +95,7 @@ export default function ListsClient() {
         </Card>
 
         {/* /leads has no sidebar entry of its own any more, so the whole table
-            has to be reachable from here — otherwise the only way into it is
+            has to be reachable from here - otherwise the only way into it is
             through a list, and there'd be no route to leads in no list. */}
         <Link href="/leads" className="block">
           <Card className="transition-colors hover:border-primary/50">

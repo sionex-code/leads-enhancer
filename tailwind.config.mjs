@@ -51,7 +51,7 @@ export default {
         },
         // The hot orange accent, in the three strengths the design uses.
         // Registered as a colour (not just a CSS var) so fill-, stroke- and
-        // from-/via-/to- utilities generate for it — the underline flourish and
+        // from-/via-/to- utilities generate for it - the underline flourish and
         // the hero wash both need those, and Tailwind won't emit them for a
         // bare var.
         flare: {

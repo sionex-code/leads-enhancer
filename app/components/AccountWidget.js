@@ -20,7 +20,7 @@ import { SHOW_CREDITS } from "../../web/lib/credits-ui.cjs";
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 // Sign-out returns to the marketing landing (on its own host in prod).
 const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || "";
-// Canonical plan keys — must match billing.cjs (p19 Starter · p35 Growth · p49
+// Canonical plan keys - must match billing.cjs (p19 Starter · p35 Growth · p49
 // Scale). The old p49/p99 mapping linked checkout to ?plan=p99, which the server
 // rejects as "Unknown plan", so upgrades silently failed.
 const PLAN_LABEL = { p19: "Starter", p35: "Growth", p49: "Scale" };
@@ -42,7 +42,7 @@ export function useMe(pollMs = 10000) {
           if (!alive) return;
           // A 401 is an answer, not silence. Swallowing it left `me` null
           // forever, so the sidebar sat on "Loading…" for anyone whose session
-          // had expired — indistinguishable from a hung request, and with no
+          // had expired - indistinguishable from a hung request, and with no
           // way back to sign-in.
           if (r.status === 401 || r.status === 403) return setMe(SIGNED_OUT);
           if (!r.ok) return;
@@ -213,7 +213,7 @@ export default function AccountWidget({ collapsed = false }) {
         </DropdownMenu>
 
         {/* Balance + usage bar only when credits are shown at all (see
-            web/lib/credits-ui.cjs). The "Choose a plan" CTA stays either way —
+            web/lib/credits-ui.cjs). The "Choose a plan" CTA stays either way -
             it sells the plan, not the meter. */}
         <div className="mt-3 space-y-1.5">
           {SHOW_CREDITS && (

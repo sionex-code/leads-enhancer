@@ -1,4 +1,4 @@
-// Auth.js (NextAuth v5) configuration — Google sign-in backed by Postgres via the
+// Auth.js (NextAuth v5) configuration - Google sign-in backed by Postgres via the
 // Drizzle adapter. Identity is Google; paid access is granted separately by the
 // Whop webhook (see app/api/webhooks/whop). Database session strategy so sessions
 // live in the `sessions` table and survive restarts.
@@ -93,7 +93,7 @@ const nextAuth = NextAuth({
     // Apply any Whop grant that arrived before this email had an account
     // (paid first, signed in later). Also backfills users.whop_user_id from
     // the matched grant, so every subsequent Whop webhook links by the
-    // stable Whop account id (not email) — immune to the buyer later
+    // stable Whop account id (not email) - immune to the buyer later
     // changing their Whop email or their Google email. Best-effort; never
     // blocks sign-in.
     async signIn({ user }) {
@@ -112,14 +112,14 @@ const nextAuth = NextAuth({
 export const { handlers, signIn, signOut } = nextAuth;
 
 // Single choke point for the local fake session (see web/lib/dev-auth.js): every
-// caller — /api/me, requireUser, the server components — imports `auth` from
+// caller - /api/me, requireUser, the server components - imports `auth` from
 // here, so stubbing it here covers all of them and never reaches the database.
 // Outside dev-fake-auth mode this is Auth.js's real `auth`, untouched.
 export const auth = DEV_AUTH_ENABLED ? async () => devSession() : nextAuth.auth;
 
 if (DEV_AUTH_ENABLED) {
   console.warn(
-    "[dev-auth] DEV_FAKE_AUTH=1 — every request is treated as signed in as " +
+    "[dev-auth] DEV_FAKE_AUTH=1 - every request is treated as signed in as " +
       "dev@localhost. Local development only."
   );
 }

@@ -37,7 +37,7 @@ Output goes to `./output/<slug>-<timestamp>.csv`. The file is **written incremen
 | Mode | Speed | Notes |
 |------|-------|-------|
 | DOM (default) | ~1.7 s/lead, slows as the list grows | Clicks each result card and reads the side panel. Most resilient; captures `plusCode`. |
-| `--network` | ~20 places per scroll, stays flat | Decodes the `/search?tbm=map` responses — name, category, rating, reviews, website, phone (E.164), full address, hours, photos, mapsUrl. Much faster on large runs. Misses `plusCode` (not in the response). `--dom` forces the legacy path. |
+| `--network` | ~20 places per scroll, stays flat | Decodes the `/search?tbm=map` responses - name, category, rating, reviews, website, phone (E.164), full address, hours, photos, mapsUrl. Much faster on large runs. Misses `plusCode` (not in the response). `--dom` forces the legacy path. |
 
 ### Options
 
@@ -54,7 +54,7 @@ Output goes to `./output/<slug>-<timestamp>.csv`. The file is **written incremen
 
 ## Contact enricher (emails + socials)
 
-`enrich.js` visits each lead's **website** (plain HTTP, no browser — fast), crawls the homepage plus up to 3 contact/about pages, and extracts **emails, contact page URL, Facebook / Instagram / LinkedIn / Twitter**. Appends columns: `email, allEmails, contactPage, facebook, instagram, linkedin, twitter, enrichStatus`.
+`enrich.js` visits each lead's **website** (plain HTTP, no browser - fast), crawls the homepage plus up to 3 contact/about pages, and extracts **emails, contact page URL, Facebook / Instagram / LinkedIn / Twitter**. Appends columns: `email, allEmails, contactPage, facebook, instagram, linkedin, twitter, enrichStatus`.
 
 ```bash
 # Enrich the latest CSV in ./output
@@ -72,7 +72,7 @@ node enrich.js --concurrency 12 --maxPages 5 --timeout 8000
 
 Output: `<input>-enriched.csv` (same row order as the input).
 
-**Resume:** every crawled site is saved to `<input>.enrich-state.jsonl` immediately. Stop anytime (Ctrl+C) and re-run the same command — already-done sites are skipped. Use `--force` to re-crawl everything. Duplicate domains are only crawled once.
+**Resume:** every crawled site is saved to `<input>.enrich-state.jsonl` immediately. Stop anytime (Ctrl+C) and re-run the same command - already-done sites are skipped. Use `--force` to re-crawl everything. Duplicate domains are only crawled once.
 
 | Flag | Default | Meaning |
 |------|---------|---------|
@@ -208,5 +208,5 @@ On Linux, the web runner uses `xvfb-run` for the scraper when available. Browser
 ## Notes
 
 - Keep the browser window focused-ish; don't manually navigate while it runs.
-- First run may show a Google consent/login page — accept it once; the persistent profile remembers it.
+- First run may show a Google consent/login page - accept it once; the persistent profile remembers it.
 - To stop early: close the terminal (Ctrl+C). The CSV already on disk holds everything captured so far.

@@ -1,7 +1,7 @@
 // Executes a CRM push.
 //
 // Runs in the web process, like queue.cjs's supervisor, but without a child
-// process — a push is HTTP calls, not a scraper. The durability comes from the
+// process - a push is HTTP calls, not a scraper. The durability comes from the
 // job row: `cursor` is checkpointed after every chunk, so a restart mid-push
 // resumes where it stopped instead of re-sending everything.
 //
@@ -22,7 +22,7 @@ const MAX_ATTEMPTS = 3;
 const AUTH_FAILURE_LIMIT = 3;  // consecutive 401/403 before we stop burning requests
 
 // The chunk is also the most an adapter can be handed at once, so a fixed 25
-// silently capped Smartlead's 400-lead batch at 25 — 80 requests for a 2000-lead
+// silently capped Smartlead's 400-lead batch at 25 - 80 requests for a 2000-lead
 // push where 5 would do. Batch adapters get their own size; the one-at-a-time
 // ones stay at 25, where a crash costs at most 25 leads of progress.
 function chunkFor(adapter, config) {
@@ -89,7 +89,7 @@ async function run(jobId) {
       const prev = prevById.get(lead.id) || null;
 
       if (!Object.keys(mapped).length) {
-        results.push({ leadId: lead.id, status: "skipped", counted: "skipped", action: "skipped", error: "Nothing to send — every mapped field is empty for this lead.", payloadHash: hash });
+        results.push({ leadId: lead.id, status: "skipped", counted: "skipped", action: "skipped", error: "Nothing to send - every mapped field is empty for this lead.", payloadHash: hash });
         continue;
       }
       if (job.source?.skipUnchanged !== false && prev?.status === "ok" && prev.payload_hash === hash) {
@@ -202,7 +202,7 @@ async function withRetries(fn, batch) {
 // Pairing is by leadId wherever the adapter reports it, NOT by position: a
 // batch adapter may reorder (Smartlead answers its skipped leads first), and
 // pairing by index would staple one lead's payload hash onto another's ledger
-// row — which then breaks dedupe silently on the next push.
+// row - which then breaks dedupe silently on the next push.
 function normalize(res, items) {
   const arr = Array.isArray(res) ? res : [res];
   const byLeadId = new Map();
@@ -225,8 +225,8 @@ function normalize(res, items) {
     return {
       leadId, status: "ok", action: r.action || "delivered",
       // An adapter can report a lead as landed-but-not-newly-sent (Instantly's
-      // own dedupe turning one away). The ledger keeps 'ok' — it *is* in the
-      // CRM — while the job summary counts it as skipped, the same split the
+      // own dedupe turning one away). The ledger keeps 'ok' - it *is* in the
+      // CRM - while the job summary counts it as skipped, the same split the
       // runner's own skip-unchanged path makes above.
       ...(r.counted ? { counted: r.counted } : {}),
       remoteId: r.remoteId ?? null, remoteOrgId: r.remoteOrgId ?? null, remoteUrl: r.remoteUrl ?? null,

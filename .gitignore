@@ -19,5 +19,5 @@ video/
 # Local MCP server config
 .mcp.json
 
-# World city index — built on deploy by scripts/build-geo-index.cjs (10MB)
+# World city index - built on deploy by scripts/build-geo-index.cjs (10MB)
 data/geo/

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Info } from "lucide-react";
 import { cn } from "../../lib/utils";
 
-// A tiny (i) button that toggles a popover with explanatory content. No Radix —
+// A tiny (i) button that toggles a popover with explanatory content. No Radix -
 // click to open, click outside or Esc to close. Used in table headers (website
 // health, owner reply) so the explanation lives behind an icon instead of taking
 // up a full row of legend text.

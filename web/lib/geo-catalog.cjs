@@ -2,7 +2,7 @@
 //
 // Deliberately separate from web/lib/warehouse.cjs. That catalog answers "where
 // do we already hold leads?", which is the right question for a warehouse lookup
-// and the wrong one for a live scrape — the extension can grid anywhere, so it
+// and the wrong one for a live scrape - the extension can grid anywhere, so it
 // gets the full world list from data/geo (see scripts/build-geo-index.cjs).
 //
 // Nothing here touches the warehouse tables. Mixing the two would put 153k
@@ -52,7 +52,7 @@ function countries() {
 // The source data lists administrative areas alongside the settlements inside
 // them, and it is ordered by population, so PK offers "Rawalpindi District"
 // (3,363,911) above "Rawalpindi" (3,357,612). Two entries for one place reads as
-// a bug, and picking the district centres the search on the district centroid —
+// a bug, and picking the district centres the search on the district centroid -
 // which is how a Rawalpindi search came back with Chakwal and Kalar Kahar.
 //
 // Nobody prospecting means the district. Where both exist in the same state,
@@ -136,7 +136,7 @@ function searchCities(code, q = "", limit = 25) {
 
 // Every city in one country, in population order. The client fetches this once
 // when a country is picked and filters in memory from then on, so typing costs
-// nothing — see LiveAreaPicker. Worst case (US, 16,731) is ~285KB gzipped.
+// nothing - see LiveAreaPicker. Worst case (US, 16,731) is ~285KB gzipped.
 function allCities(code) {
   return loadCities(code);
 }
@@ -144,7 +144,7 @@ function allCities(code) {
 // The city a coordinate falls in, or nearest to it. Used to turn the latitude
 // and longitude Cloudflare derives from the visitor's IP into a city we can
 // actually preselect. `maxKm` keeps a wildly-off fix from silently selecting a
-// city hundreds of km away — better to preselect nothing than the wrong place.
+// city hundreds of km away - better to preselect nothing than the wrong place.
 function nearestCity(code, lat, lng, maxKm = 120) {
   const a = Number(lat);
   const b = Number(lng);

@@ -1,6 +1,6 @@
 "use client";
 
-// A strip pinned to the bottom-centre of the viewport — the selection toolbar
+// A strip pinned to the bottom-centre of the viewport - the selection toolbar
 // both lead tables use, so a selection is actionable from wherever you are in a
 // long table instead of only near the top of it.
 //
@@ -8,7 +8,7 @@
 // wrapper whose animation uses `both` fill mode, so its transform sticks around
 // after it finishes. A transformed ancestor becomes the containing block for any
 // `position: fixed` descendant, which would anchor the dock to the (very tall)
-// page instead of the screen — thousands of pixels down the document. Rendering
+// page instead of the screen - thousands of pixels down the document. Rendering
 // into <body> steps outside that subtree. (ui/sheet.js and ui/dialog.js portal
 // for the same reason.)
 

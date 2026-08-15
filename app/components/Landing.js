@@ -90,7 +90,7 @@ const STATS = [
 const STEPS = [
   { n: "01", icon: Search, title: "Pick a niche & city", body: "Choose a service and location, or paste your own search query, then set how many leads you want." },
   { n: "02", icon: Zap, title: "We scrape & enrich", body: "We pull every business, then crawl their sites for emails, socials and WhatsApp, automatically." },
-  { n: "03", icon: ListChecks, title: "Send them where you sell", body: "Filter, audit websites, mark outreach status, then push straight into Smartlead, Instantly, HubSpot or Pipedrive — or export a clean CSV." },
+  { n: "03", icon: ListChecks, title: "Send them where you sell", body: "Filter, audit websites, mark outreach status, then push straight into Smartlead, Instantly, HubSpot or Pipedrive - or export a clean CSV." },
 ];
 
 const FACES = [
@@ -172,7 +172,7 @@ function Reveal({ children, className = "", delay = 0 }) {
 //
 // Signed out it is the Google button, which hands off to the app host's /login.
 // Signed in it is a plain link to wherever that button would have landed you
-// anyway — because asking a customer who is already signed in to "Continue with
+// anyway - because asking a customer who is already signed in to "Continue with
 // Google" sends them through a whole OAuth round-trip to arrive exactly where a
 // link would have put them.
 //
@@ -229,8 +229,8 @@ function Stars({ className = "h-3.5 w-3.5" }) {
 // Hand-drawn underline under the last word of the headline.
 //
 // Drawn rather than a straight border because a ruled line under a display
-// heading reads as a text link. The stroke tapers — two curves filled, not one
-// stroked path — so it keeps the marker-pen quality at any width.
+// heading reads as a text link. The stroke tapers - two curves filled, not one
+// stroked path - so it keeps the marker-pen quality at any width.
 function Swoosh({ className = "" }) {
   return (
     <svg
@@ -250,7 +250,7 @@ function Swoosh({ className = "" }) {
 // The soft geometry behind the hero: a warm wash top-right, faint concentric
 // rings bleeding off the left edge, two dot grids and one flare tile.
 //
-// All of it is pointer-events-none and aria-hidden — it is texture, and it must
+// All of it is pointer-events-none and aria-hidden - it is texture, and it must
 // never intercept a click meant for the search box sitting on top of it.
 function HeroDecor() {
   return (
@@ -330,7 +330,7 @@ function Logo({ height = 28, className = "", asLink = true }) {
     />
   );
   // The hero renders a picture of the app, and the wordmark inside that picture
-  // is part of the illustration — clicking it should do nothing.
+  // is part of the illustration - clicking it should do nothing.
   if (!asLink) return img;
   return (
     <a href="/" onClick={toTop} aria-label="LeadsFunda home" className="inline-flex items-center">
@@ -678,7 +678,7 @@ function DiscoverCards() {
     };
 
     // will-change promotes each card to its own GPU layer, and a promoted layer
-    // is rasterised once and then re-used by the compositor — so rotated text
+    // is rasterised once and then re-used by the compositor - so rotated text
     // gets resampled instead of redrawn, permanently. Promote only while a
     // scroll is actually in flight, then hand the cards back to the renderer so
     // they are drawn sharp at rest, which is when they are being read.
@@ -732,7 +732,7 @@ export default function Landing({ recent = [], total = 0 }) {
   const [step, setStep] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState(null);
-  // Asked once, here, and threaded down — every CTA on the page needs the same
+  // Asked once, here, and threaded down - every CTA on the page needs the same
   // answer and three components polling /api/public/me would be three requests
   // for one fact.
   const { signedIn, label: me } = useSignedIn();
@@ -943,7 +943,7 @@ export default function Landing({ recent = [], total = 0 }) {
           </BentoCell></Reveal>
         </div>
 
-        {/* The exit — where a finished list actually goes. Deliberately outside
+        {/* The exit - where a finished list actually goes. Deliberately outside
             the grid above: auto-rows-fr would stretch a lone full-width cell to
             match the tallest row and leave half of it empty. */}
         <div className="mt-5">

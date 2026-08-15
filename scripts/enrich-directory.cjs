@@ -2,7 +2,7 @@
 // Fill the shared enrichment cache for a public directory page.
 //
 // Why this exists: directory pages show real contact details for their best
-// rows, but they can only show what enrichment has already found — the cache is
+// rows, but they can only show what enrichment has already found - the cache is
 // populated as a side effect of users enriching their own leads, so a city
 // nobody has worked has nothing to show. On the Stockholm painters page that
 // meant 2 of 30 rows had an email and 0 had a social profile, and the page had
@@ -78,9 +78,9 @@ if (!slug) {
       });
       const socials = ["facebook", "instagram", "linkedin"].filter((k) => r[k]).length;
       if (r.email) found++;
-      console.log(`  [${i + 1}/${todo.length}] ${host} — ${r.email || "no email"}${socials ? `, ${socials} social` : ""}`);
+      console.log(`  [${i + 1}/${todo.length}] ${host} - ${r.email || "no email"}${socials ? `, ${socials} social` : ""}`);
     } catch (err) {
-      console.log(`  [${i + 1}/${todo.length}] ${host} — failed: ${String(err.message || err).slice(0, 80)}`);
+      console.log(`  [${i + 1}/${todo.length}] ${host} - failed: ${String(err.message || err).slice(0, 80)}`);
     }
   }
 

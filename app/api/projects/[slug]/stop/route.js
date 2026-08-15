@@ -11,7 +11,7 @@ export async function POST(_request, context) {
   const dir = store.safeProjectDir(slug, userId);
   const state = store.readState(dir);
   if (state.activePid) store.killTree(state.activePid);
-  // Cancel any queued/running jobs row for this project too — otherwise a job that
+  // Cancel any queued/running jobs row for this project too - otherwise a job that
   // was still QUEUED would later be promoted and silently re-launch the project the
   // user just stopped, and a running row would keep holding its concurrency slot.
   try { await queue.cancelByProject(userId, store.slugify(slug)); } catch {}

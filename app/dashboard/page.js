@@ -35,7 +35,7 @@ export default async function Page({ searchParams }) {
   const where = await resolveLocation(await headers());
   // The country's display name travels separately from the city, because the
   // city depends on headers that may not be switched on while the country does
-  // not — and the live picker needs a name, not a code, to describe a search.
+  // not - and the live picker needs a name, not a code, to describe a search.
   const countryHintName = where.countryCode && geo.available()
     ? (geo.countries().find((c) => c.code === where.countryCode) || {}).name || ""
     : "";

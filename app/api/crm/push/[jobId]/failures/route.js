@@ -3,7 +3,7 @@ import { requireUser } from "../../../../../../web/lib/session.js";
 
 export const dynamic = "force-dynamic";
 
-// Which leads didn't land, and why — one row each, so a data problem on three
+// Which leads didn't land, and why - one row each, so a data problem on three
 // leads reads differently from a token problem on all of them.
 export async function GET(request, { params }) {
   const { userId, response } = await requireUser();

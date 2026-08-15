@@ -70,12 +70,12 @@ import trackingDetect from "../web/lib/tracking-detect.cjs";
 
 const LeadsMap = dynamic(() => import("./components/LeadsMap"), { ssr: false });
 
-// Guided tour for the "Find leads" page — walks through the search controls in
+// Guided tour for the "Find leads" page - walks through the search controls in
 // order. Targets are data-tour attributes on the form (works on mobile since they
 // are all on-screen). Passed to AppShell as tourKey="find".
 const FIND_TOUR = [
-  { key: "find-query", title: "Type what you're after", body: "Search in plain English — \"plumber in Austin\" or just \"plumber\" to search wherever the map below is centered. The dropdowns underneath do the same job if you'd rather click than type; edit either one and the other follows." },
-  { key: "find-source", title: "Readymade data or Google", body: "\"Readymade data\" answers instantly from leads we already hold, already enriched. \"Find from Google\" scrapes Google Maps in your browser right now — automatic for anything we don't already have." },
+  { key: "find-query", title: "Type what you're after", body: "Search in plain English - \"plumber in Austin\" or just \"plumber\" to search wherever the map below is centered. The dropdowns underneath do the same job if you'd rather click than type; edit either one and the other follows." },
+  { key: "find-source", title: "Readymade data or Google", body: "\"Readymade data\" answers instantly from leads we already hold, already enriched. \"Find from Google\" scrapes Google Maps in your browser right now - automatic for anything we don't already have." },
   { key: "find-service", title: "Pick a service", body: "Choose the type of business you want to reach, such as plumbers, dentists, real estate agencies, and so on." },
   { key: "find-country", title: "Choose a country", body: "Pick the country to search in. The city list below updates to match." },
   { key: "find-city", title: "Pick a city", body: "Select a city, or choose \"All cities\" to search the whole country at once." },
@@ -84,7 +84,7 @@ const FIND_TOUR = [
     ? "Set how many leads to pull (up to 10,000). You're only charged 1 credit per brand-new lead."
     : "Set how many leads to pull (up to 10,000). Leads you already own are merged rather than pulled again." },
   { key: "find-radius", title: "Search radius", body: "Widen or tighten the search area around the center." },
-  { key: "find-map", title: "Set the search area", body: "Drag the circle to move it, or drag its edge to resize — the radius above follows along. Everything found outside it is left out, so this is the real boundary of your search, not just a preview." },
+  { key: "find-map", title: "Set the search area", body: "Drag the circle to move it, or drag its edge to resize - the radius above follows along. Everything found outside it is left out, so this is the real boundary of your search, not just a preview." },
   { key: "find-submit", title: "Find leads", body: "Hit Find leads and we'll pull matching businesses straight into your project." },
 ];
 
@@ -97,7 +97,7 @@ const WORKSPACE_TOUR = [
   { key: "ws-enrich", title: "Enrich", body: "Grab each lead's email address and social profiles automatically by crawling their website. This button does it for every captured lead at once." },
   { key: "ws-whatsapp", title: "Check WhatsApp", body: "See which leads' phone numbers are active on WhatsApp, so you know who you can message directly." },
   { key: "ws-leads", title: "Per-lead actions", body: "Every row has quick actions: grab email & socials, check WhatsApp, run a website page-speed audit (desktop + mobile Performance / SEO scores), and generate a full website report. Tick the checkboxes to act on many leads at once." },
-  { key: "nav-lists", title: "Leads & Lists", body: "Every lead you capture across projects lands here — see them all, or group them into Lists to organize outreach campaigns." },
+  { key: "nav-lists", title: "Leads & Lists", body: "Every lead you capture across projects lands here - see them all, or group them into Lists to organize outreach campaigns." },
 ];
 
 const blankForm = {
@@ -119,7 +119,7 @@ const REPORT_COST = 10; // credits per website report (mirrors billing.REPORT_CO
 const WORKSPACE_PAGE_SIZE = 50; // captured-leads table page size
 
 // Mirror of the server-side slugify so we can match the typed project name to a
-// project in the list (and know if THAT project — not the selected one — is busy).
+// project in the list (and know if THAT project - not the selected one - is busy).
 function slugify(value) {
   return (
     String(value || "")
@@ -139,7 +139,7 @@ function titleCase(s) {
 // Shared rating/reviews rule (matches the Leads page): show the review count
 // (0 when empty), and only show a star rating when there is at least one review.
 function reviewCount(lead) {
-  // lead.reviews can arrive as a plain "1204" or a comma-formatted "1,204" —
+  // lead.reviews can arrive as a plain "1204" or a comma-formatted "1,204" -
   // Number() chokes on the comma and returns NaN, so strip non-digits first.
   const n = parseInt(String(lead.reviews ?? "").replace(/[^\d]/g, ""), 10);
   return Number.isFinite(n) ? n : 0;
@@ -297,7 +297,7 @@ function FindResultAlert({ result, onClose }) {
   if (!result) return null;
   const { inserted = 0, updated = 0 } = result;
   // What the user actually pulled into this project (deduped), NOT the warehouse's
-  // full match count — that can be far larger than the requested max (e.g. 8,763
+  // full match count - that can be far larger than the requested max (e.g. 8,763
   // available but you only grabbed your 900).
   const grabbed = inserted + updated;
   return (
@@ -342,7 +342,7 @@ function EnrichProgress({ progress, stage }) {
   if (status === "idle" && !progress.processedSites) return null;
   // Finished work is not progress. Once the stage reports done with nothing left
   // to process, this card is just a stale "done / 0 remaining" panel sitting on
-  // top of the results the user actually came back for — so it retires itself.
+  // top of the results the user actually came back for - so it retires itself.
   // Errors stay put: a failed run is exactly when you need the numbers.
   if (status === "done" && !progress.remaining) return null;
   const eta = status === "running" ? formatDuration(progress.etaSeconds) : progress.remaining ? "not running" : "done";
@@ -372,8 +372,8 @@ function EnrichProgress({ progress, stage }) {
 
 // A live search can only filter by rating *after* the engine returns, so asking
 // for exactly `max` businesses and then discarding most of them is how "below
-// 4.0" comes back empty. Maps results skew high — in the warehouse's Adelaide
-// data only ~8% of general contractors sit under 4.0 — so 30 scraped can easily
+// 4.0" comes back empty. Maps results skew high - in the warehouse's Adelaide
+// data only ~8% of general contractors sit under 4.0 - so 30 scraped can easily
 // contain none at all. Over-fetch, then trim to what was actually asked for.
 //
 // The engine caps `max` at 1000 and stops on its own wall clock, so a large
@@ -385,7 +385,7 @@ const RATING_OVERFETCH_CAP = 500;
 //
 // The warehouse does this in SQL; the extension knows nothing about it and
 // returns whatever Maps showed. Without this, choosing "4.5 and up" or "below
-// 4.0" does nothing at all on any search that goes live — which is every custom
+// 4.0" does nothing at all on any search that goes live - which is every custom
 // keyword.
 //
 // Deliberately mirrors the SQL, including its edges: `>= min`, `< max`, and a
@@ -407,7 +407,7 @@ function filterByRating(rows, minRating, maxRating) {
   });
 }
 
-// Great-circle distance in km. Plenty for "which city is closest" — the error
+// Great-circle distance in km. Plenty for "which city is closest" - the error
 // against a proper geodesic is far smaller than a city is wide.
 function haversineKm(a, b) {
   const R = 6371;
@@ -423,7 +423,7 @@ function haversineKm(a, b) {
 // Nearest city *in the catalog*, not the nearest city on earth. The country and
 // city dropdowns can only ever hold catalog entries, so resolving a location to
 // anything outside it would leave the form displaying one place while searching
-// another — the exact mismatch that makes a live search come back empty.
+// another - the exact mismatch that makes a live search come back empty.
 // Administrative units that carry a settlement's name without being one.
 // Nominatim ranks the boundary "Bhalwal Tehsil" above the town "Bhalwal", so
 // names like this got recorded as the city of a search and are now real entries
@@ -477,7 +477,7 @@ function projectNameFromQuery(query) {
 // picking it from the dropdowns forced a live scrape.
 //
 // These two functions read the same catalog the selects are built from, so typed
-// text can be resolved to a real service + city — which is both what powers the
+// text can be resolved to a real service + city - which is both what powers the
 // suggestions under the box and what decides warehouse vs live.
 
 const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
@@ -516,8 +516,8 @@ function buildCatalogIndex(catalog) {
   return { services, cities };
 }
 
-// Resolve free text to catalog entries. Splits on " in " when present — the same
-// shape the geocoder and buildQuery use — and otherwise tries the whole string as
+// Resolve free text to catalog entries. Splits on " in " when present - the same
+// shape the geocoder and buildQuery use - and otherwise tries the whole string as
 // a service and as a place. Returns ranked candidates; [] means we hold nothing
 // matching, which is precisely the case that has to go live.
 function matchCatalog(text, index, { limit = 6, preferCityId = null } = {}) {
@@ -612,13 +612,13 @@ function buildFallbackCatalog() {
 
 // Where this search gets its leads. Live search runs in the user's browser, so
 // whether the extension is connected decides whether that option can work at
-// all — the status sits right beside the control rather than being discovered
+// all - the status sits right beside the control rather than being discovered
 // after a search fails.
 //
 // This was two big description cards stacked above the rest of the form: a
 // third of the first screen spent explaining a binary the user changes maybe
 // once. A select does the same job in one row. The chip next to it shows the
-// *effective* source, which is not a duplicate of the select — a typed query is
+// *effective* source, which is not a duplicate of the select - a typed query is
 // always searched live whatever the preference says, and this is the only place
 // that difference is visible before the search runs.
 function SourcePicker({ source, setSource, ext, lockedLive }) {
@@ -686,7 +686,7 @@ function SourcePicker({ source, setSource, ext, lockedLive }) {
               Install the extension
             </Link>
             {/* Pointless when the typed query is what forced live in the first
-                place — switching the preference would not change the route. */}
+                place - switching the preference would not change the route. */}
             {!lockedLive && (
               <button
                 type="button"
@@ -708,7 +708,7 @@ function SourcePicker({ source, setSource, ext, lockedLive }) {
 //
 // The warehouse catalog only knows places we already hold leads for. That is the
 // right list for a warehouse lookup and the wrong one for a live scrape, which
-// can grid anywhere — so live mode used to hide these controls entirely rather
+// can grid anywhere - so live mode used to hide these controls entirely rather
 // than show a list that did not apply.
 //
 // The city control is a typed search, not a <select>: 152,970 options is ~10MB
@@ -716,13 +716,13 @@ function SourcePicker({ source, setSource, ext, lockedLive }) {
 //
 // Picking a country loads that country's cities in ONE request; every keystroke
 // after that filters the array in memory. Nothing waits on the network while
-// typing. Worst case is the US at 16,731 cities — ~285KB gzipped, once — and
+// typing. Worst case is the US at 16,731 cities - ~285KB gzipped, once - and
 // most countries are under 70KB. The lists are cached for the session, so
 // switching back to a country already visited is instant.
 const LIVE_CITY_CACHE = new Map(); // country code -> city[]
 
 // Administrative areas sit in these lists beside the settlements that share
-// their name — both "Rawalpindi District" and "Rawalpindi" — and offering both
+// their name - both "Rawalpindi District" and "Rawalpindi" - and offering both
 // reads as a duplicate. The world index is cleaned in web/lib/geo-catalog.cjs
 // as it is read; this covers the warehouse catalog, whose city list is built
 // from the places we hold leads for and so can pick up a district name from an
@@ -769,7 +769,7 @@ function filterCities(all, text, cap = 50) {
 
 // Business-type picker for a LIVE search. ~3,968 Google Business Profile
 // categories plus whatever the warehouse stocks (see /api/services), which is
-// ~23KB gzipped — small enough to fetch once and filter in the browser.
+// ~23KB gzipped - small enough to fetch once and filter in the browser.
 //
 // Free text is deliberately still accepted. A live scrape can search anything on
 // the map, so the list is an aid, not a constraint: whatever is typed is what
@@ -819,7 +819,7 @@ function LiveServicePicker({ value, onPick }) {
         autoComplete="off"
         onFocus={() => { setText(""); setOpen(true); }}
         onBlur={() => setTimeout(() => setOpen(false), 120)}
-        // Typing alone already changes the search — the list is a shortcut, not
+        // Typing alone already changes the search - the list is a shortcut, not
         // a gate, so a category we don't list still works.
         onChange={(e) => { setText(e.target.value); onPick(e.target.value); setOpen(true); }}
         onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
@@ -861,7 +861,7 @@ function LiveAreaPicker({ countryCode, onCountry, city, onCity, onCountryCities 
     return () => { alive = false; };
   }, []);
 
-  // One fetch per country, on selection — not per keystroke.
+  // One fetch per country, on selection - not per keystroke.
   useEffect(() => {
     if (!countryCode) return undefined;
     const cached = LIVE_CITY_CACHE.get(countryCode);
@@ -883,7 +883,7 @@ function LiveAreaPicker({ countryCode, onCountry, city, onCity, onCountryCities 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [countryCode]);
 
-  // Recomputed as they type, straight off the loaded array — no network, no
+  // Recomputed as they type, straight off the loaded array - no network, no
   // debounce, no waiting.
   const results = useMemo(() => filterCities(cities, text), [cities, text]);
   const label = city ? `${city.n}${city.s ? `, ${city.s}` : ""}` : "";
@@ -904,7 +904,7 @@ function LiveAreaPicker({ countryCode, onCountry, city, onCity, onCountryCities 
           }}
         >
           {/* Typing a fresh query clears this back to "" (see the query box's
-              onChange) — an explicit placeholder option so the select actually
+              onChange) - an explicit placeholder option so the select actually
               renders blank instead of silently falling back to the first
               country in the list, which read as a still-active selection. */}
           <option value="">Select a country</option>
@@ -938,7 +938,7 @@ function LiveAreaPicker({ countryCode, onCountry, city, onCity, onCountryCities 
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => {
-                    // Hand the country's name up too — the parent only holds the
+                    // Hand the country's name up too - the parent only holds the
                     // code, and the query text needs the name.
                     onCity(c, countries.find((x) => x.code === countryCode)?.name || "");
                     setOpen(false);
@@ -1031,7 +1031,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
 
   // Last session's country/city/service. Read in an effect rather than in the
   // initial state so the server-rendered markup and the first client render
-  // agree — localStorage does not exist on the server.
+  // agree - localStorage does not exist on the server.
   const prefs = useRef(null);
   useEffect(() => {
     try {
@@ -1062,7 +1062,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
   // Mapped to the API's minRating/maxRating on submit so the backend is unchanged.
   const [rating, setRating] = useState("");
   const [allCities, setAllCities] = useState(false);
-  // "Use my location" — GPS result, plus whatever we need to tell the user
+  // "Use my location" - GPS result, plus whatever we need to tell the user
   // about it. `geoNote` is {tone: "ok"|"warn", text}.
   const [geoBusy, setGeoBusy] = useState(false);
   const [geoNote, setGeoNote] = useState(null);
@@ -1101,9 +1101,9 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     sourceTouched.current = true;
     setSource(next);
   }
-  // center for the area picker map — kept in sync with selected city
+  // center for the area picker map - kept in sync with selected city
   const [center, setCenter] = useState(() => {
-    // The visitor's own city first — the map is the clearest statement the form
+    // The visitor's own city first - the map is the clearest statement the form
     // makes about where it is going to search.
     if (cityHint?.la != null && cityHint?.ln != null) return { lat: cityHint.la, lng: cityHint.ln };
     if (cityObj?.lat != null && cityObj?.lng != null) return { lat: cityObj.lat, lng: cityObj.lng };
@@ -1134,7 +1134,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
   );
 
   // Recomputed as the user types. The warehouse resolves a search purely from the
-  // dropdowns — service name, city id, country — and never reads this text. So
+  // dropdowns - service name, city id, country - and never reads this text. So
   // "Gujrat Plumber" with the city dropdown on Uppsala returns Uppsala plumbers:
   // a non-empty, confidently wrong answer. Typed text therefore cannot be handed
   // to the warehouse as-is; it has to be *resolved* to a real service + city
@@ -1176,7 +1176,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
   // Two rules it did not used to follow:
   //
   // 1. Where. The catalog is ordered by coverage, and its first entry happened to
-  //    be Adelaide, Australia — so every user on earth opened the form pointed at
+  //    be Adelaide, Australia - so every user on earth opened the form pointed at
   //    Adelaide. Their own last search wins, then the country their request came
   //    from, and only then our coverage.
   // 2. When. It fired on catalog arrival with no regard for what the user had
@@ -1198,11 +1198,11 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     const cities = nextCountry.cities || [];
     // A saved city only counts inside the country it was saved for. An IP hint
     // tells us the country and nothing more, so rather than guess a city we take
-    // the one we hold the most leads for *within that country* — which is at
+    // the one we hold the most leads for *within that country* - which is at
     // least somewhere they could plausibly mean.
     const savedCity = saved?.cityName ? cities.find((c) => c.name === saved.cityName) : null;
     // Then the city the request came from, if we hold leads there. Only when the
-    // country matches — a hint for Rawalpindi says nothing about Australia.
+    // country matches - a hint for Rawalpindi says nothing about Australia.
     const sameCountry = cityHint && nextCountry.code === (cityHint.countryCode || countryHint);
     const hintedCity = sameCountry
       ? cities.find((c) => (c.name || "").toLowerCase() === cityHint.n.toLowerCase())
@@ -1254,7 +1254,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     if (nextCity?.lat != null) setCenter({ lat: nextCity.lat, lng: nextCity.lng });
     // Changing country moves the search; it does not decide what is being
     // searched for. Reusing `service` here is what turned a typed "chezious"
-    // into "general contractor in Pakistan" — the country select silently
+    // into "general contractor in Pakistan" - the country select silently
     // replacing the user's own keyword with the catalog's most common one.
     setQuery(buildQuery(splitQuery().keyword || service, allCities ? null : nextCity, nextCountry));
   }
@@ -1279,10 +1279,10 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
   //
   // Only the *place* changes. Someone who typed "24 hour emergency plumber" and
   // then picked Adelaide is moving that search, not asking to have their keyword
-  // replaced by whatever the Service select happens to hold — so the keyword is
+  // replaced by whatever the Service select happens to hold - so the keyword is
   // taken from what they typed, and only falls back to the select when the box
   // has no keyword of its own.
-  // The search box is the single source of truth for a live search — the
+  // The search box is the single source of truth for a live search - the
   // extension geocodes exactly this text. The live pickers therefore edit one
   // half of it each and leave the other alone, rather than each rebuilding the
   // whole string from their own state and clobbering the other's choice.
@@ -1307,7 +1307,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
   // read "... in Adelaide, SA, Australia" (or the old country) and the map stayed
   // where it was, so the form disagreed with itself until a city was picked.
   // The country is a place choice, so it edits the place half of the query
-  // immediately — same contract as pickLiveCity.
+  // immediately - same contract as pickLiveCity.
   function pickLiveCountry(code, countryName) {
     liveCountryPicked.current = true;
     touched.current.country = true;
@@ -1321,10 +1321,10 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
   }
 
   // Move the map onto the new country as soon as its city list lands, using its
-  // largest city as the stand-in centre. Only while no city is chosen — once the
+  // largest city as the stand-in centre. Only while no city is chosen - once the
   // user picks one, pickLiveCity owns the centre.
   function centerOnCountry(list) {
-    // Only after an explicit country change — the picker also reports its list on
+    // Only after an explicit country change - the picker also reports its list on
     // mount, and hijacking the map just for showing the panel would be wrong.
     if (!liveCountryPicked.current) return;
     if (liveCity || !Array.isArray(list) || !list.length) return;
@@ -1338,7 +1338,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     touched.current.city = true;
     touched.current.query = true;
     setLiveCity(c);
-    // Compact wire keys (n/s/la/ln) — see /api/geo/places.
+    // Compact wire keys (n/s/la/ln) - see /api/geo/places.
     if (Number.isFinite(c?.la) && Number.isFinite(c?.ln)) {
       setCenter({ lat: c.la, lng: c.ln });
     }
@@ -1351,7 +1351,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
 
   // Take a suggestion. This sets the three selects rather than only rewriting the
   // search box, because the selects are what the warehouse lookup actually reads
-  // — rewriting the text alone would show the right thing and search the old one.
+  // - rewriting the text alone would show the right thing and search the old one.
   // With them set, the query matches `autoQuery`, so the search stops counting as
   // custom and routes to the database on its own.
   function applyMatch(m) {
@@ -1377,7 +1377,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
   //
   // The name comes from a reverse geocode, not from the city dropdown. Matching
   // to the nearest warehouse city would only ever name somewhere we already
-  // hold leads — Pakistan has three such cities, so standing in Islamabad would
+  // hold leads - Pakistan has three such cities, so standing in Islamabad would
   // fill in "Gujrat District", 135km away. A real name is both correct and
   // searchable, because a place we don't cover simply routes to live search.
   //
@@ -1425,7 +1425,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
           const d = r.ok ? await r.json() : null;
           if (d?.resolved && d.place) named = d;
         } catch {
-          // Offline or Nominatim down — fall through to the catalog match.
+          // Offline or Nominatim down - fall through to the catalog match.
         }
 
         setGeoBusy(false);
@@ -1514,7 +1514,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
         });
       },
       // "Near me" is a claim about a neighbourhood, and the coarse fix can be
-      // kilometres out — which is how a search from Rawalpindi came back
+      // kilometres out - which is how a search from Rawalpindi came back
       // centred on Islamabad sectors. Ask for the precise fix, and allow the
       // longer wait that needs; a five-minute-old cached position is still fine.
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 300000 }
@@ -1536,7 +1536,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
 
   // Same question the server asks before trusting a whole-string geocode: does
   // the typed text already name one of our own services? "spa" is also a real,
-  // prominent town in Belgium — geocoding it silently moved a live search's
+  // prominent town in Belgium - geocoding it silently moved a live search's
   // circle off the user's own location and onto Belgium, for no reason beyond
   // sharing a name. An explicit "in <place>"/"near <place>" still resolves
   // normally either way; this only gates the case where nothing marks a place
@@ -1634,7 +1634,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     e.preventDefault();
     // A disabled button explains nothing; this does. Realistically the pickers
     // already describe *something* the moment the catalog and location hint
-    // have loaded, so this only fires in the actual gap the user reported —
+    // have loaded, so this only fires in the actual gap the user reported -
     // right after landing, or once nothing is left for either the box or the
     // pickers to say.
     if (!query.trim() && !queryFromPickers()) {
@@ -1644,7 +1644,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     }
     // A typed query we can serve is run against the matched service + city, not
     // against whatever the selects happen to show. Sending the selects would
-    // answer confidently for the wrong place — the exact failure that made every
+    // answer confidently for the wrong place - the exact failure that made every
     // typed search go live in the first place.
     const useMatch = queryIsCustom && bestMatch && source !== "live" ? bestMatch : null;
     const matchService = useMatch ? useMatch.service : service;
@@ -1691,7 +1691,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
       isCustomQuery: isCustom,
       minRating: rating.startsWith("gte:") ? Number(rating.slice(4)) : undefined,
       maxRating: rating.startsWith("lt:") ? Number(rating.slice(3)) : undefined,
-      // A live scrape grids a bounding box, so it always needs a centre — "All
+      // A live scrape grids a bounding box, so it always needs a centre - "All
       // cities" would otherwise hand the extension undefined coords and produce
       // nothing. The warehouse path keeps its country-wide behaviour.
       centerLat: allCities && effectiveSource !== "live" ? undefined : center.lat,
@@ -1702,7 +1702,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
       // and grids the geocoder's own bounding box, which ignores the radius
       // entirely: a 5 km search of "restaurants in London" would quietly cover
       // all of Greater London.
-      // Only meaningful for a live scrape — a warehouse lookup is already
+      // Only meaningful for a live scrape - a warehouse lookup is already
       // pinned to the matched city id, and handing it a geocoder result would
       // just be a second, weaker opinion about where to search.
       // Sent for every live run, not only a custom-text one: the server needs it
@@ -1737,7 +1737,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     <div className="animate-page-in motion-reduce:animate-none mx-auto w-full max-w-4xl px-4 pb-8 pt-4 sm:px-6 lg:px-8">
       {/* The projects link lives in the topbar on desktop (see `findActions`
           below). The topbar has no room for it on a phone, so it rides here
-          instead — and only there, because on desktop this row would push the
+          instead - and only there, because on desktop this row would push the
           heading off the sidebar's baseline. */}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 md:hidden">
         <div className="flex flex-wrap items-center gap-2" />
@@ -1782,12 +1782,12 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
             value={query}
             onChange={(e) => {
               // From here on the box belongs to the user, and nothing that
-              // arrives later — the catalog, a settle pass — may rewrite it.
+              // arrives later - the catalog, a settle pass - may rewrite it.
               touched.current.query = true;
               setQuery(e.target.value);
               setSuggestOpen(true);
               // Editing the query by hand invalidates whatever business type,
-              // country and city the live pickers happened to be showing —
+              // country and city the live pickers happened to be showing -
               // those no longer describe what's actually being searched (the
               // typed text does), so reset them to their placeholder state
               // rather than let a stale selection look still-active.
@@ -2014,7 +2014,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
       </div>
 
       {/* Area picker map. On a wide screen it sits beside the controls instead of
-          under them — the page is full-width now, and stacking a short form on top
+          under them - the page is full-width now, and stacking a short form on top
           of a short map left most of the screen empty. */}
       <div className="mt-3" data-tour="find-map">
         {/* What a typed search resolved to. Without this the map silently
@@ -2080,7 +2080,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
             {geoNote.text}
           </p>
         )}
-        {/* Taller beside the controls than it was stacked under them — in the
+        {/* Taller beside the controls than it was stacked under them - in the
             side-by-side layout it has the height to spare, and the radius circle
             is easier to judge at this size. */}
         <LeadsMap
@@ -2110,7 +2110,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
 // bordered row and the cells are divided by a hairline.
 //
 // The number leads, the label sits under it, and the third line is context for
-// the number rather than a second metric — coverage as a percentage, or the
+// the number rather than a second metric - coverage as a percentage, or the
 // band behind a score. Anything more and the strip starts competing with the
 // table for attention.
 function Kpi({ value, text, label, icon: Icon, hint, tone = "" }) {
@@ -2133,7 +2133,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
 
   // A label built from the dropdowns is only trustworthy when the search itself
   // came from the dropdowns. For a typed query it described somewhere the
-  // search never went — a project of Islamabad businesses titled "Copenhagen,
+  // search never went - a project of Islamabad businesses titled "Copenhagen,
   // Denmark Leads". Prefer the stored name, which the server now derives from
   // the place it actually resolved and searched.
   const getProjectDisplayName = (p) => {
@@ -2159,7 +2159,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
   // back to the query when a project has no structured place on it (typed
   // searches, older projects).
   // The most common value of a field across the loaded leads. The crumbs used to
-  // read leads[0], which is row one of the *current filter and sort* — so sorting
+  // read leads[0], which is row one of the *current filter and sort* - so sorting
   // by opportunity silently relabelled the whole project after whichever business
   // happened to float to the top. What the rows mostly are is a description of
   // the project; what the first row is, is not.
@@ -2210,7 +2210,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
   const scrapeAbortRef = useRef(null);
 
   // Clear the toast once a scrape finishes cleanly. Errors stay up until
-  // dismissed — a failed browser-side scrape leaves no server job to go and read.
+  // dismissed - a failed browser-side scrape leaves no server job to go and read.
   useEffect(() => {
     if (scrapeProgress?.status !== "done") return;
     const t = setTimeout(() => setScrapeProgress(null), 6000);
@@ -2266,7 +2266,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
   // Captured lead currently open in the shared "Add to list" dialog (saved to the
   // DB first so it has an id). Mirrors the Leads manager for a consistent flow.
   const [listsLead, setListsLead] = useState(null);
-  // Bulk selection on the captured-leads table — keyed by the stable leadKey
+  // Bulk selection on the captured-leads table - keyed by the stable leadKey
   // (captured rows have no DB id yet), so a click tracks the same lead across the
   // 1.5s status polls. Mirrors the Leads manager: row-click toggles, header all.
   const [selectedLeads, setSelectedLeads] = useState(() => new Set());
@@ -2282,10 +2282,10 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
   const contactLocked = entitlement != null && !entitlement.active;
   // Per-day usage ({ searches, leads, resetAt, tz }) to pre-check the daily caps.
   const [daily, setDaily] = useState(null);
-  // Captured rows being added to a list in bulk — saved to the DB first so they
+  // Captured rows being added to a list in bulk - saved to the DB first so they
   // have ids; { ids, keys } drives the shared dialog + the "listed" overlay.
   const [listsBulk, setListsBulk] = useState(null);
-  // Live progress for an in-flight bulk batch (reports OR audits — shared card).
+  // Live progress for an in-flight bulk batch (reports OR audits - shared card).
   const [batch, setBatch] = useState(null);
   const batchPollRef = useRef(null);
   // id→leadKey map for the running batch so audit scores can be overlaid back onto
@@ -2332,14 +2332,14 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
     if (!selected && list[0]) setSelected(list[0].slug);
   }
 
-  // syncForm is only true when the user switches projects — NOT during the 1.5s
+  // syncForm is only true when the user switches projects - NOT during the 1.5s
   // status poll. Otherwise each poll would overwrite whatever you're typing into
   // the name/query/leads boxes and "restore" the previous text mid-keystroke.
   async function loadStatus(slug = selected, syncForm = false) {
     if (!slug) return;
     try {
       const data = await jsonFetch(`/api/projects/${encodeURIComponent(slug)}/status`);
-      if (slug !== selectedRef.current) return; // switched away mid-flight — drop it
+      if (slug !== selectedRef.current) return; // switched away mid-flight - drop it
       setStatus(data);
       if (syncForm) {
         setForm((old) => ({ ...old, name: data.name || old.name, query: data.query || old.query, max: data.max || old.max }));
@@ -2352,7 +2352,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
   // The sidebar carries the project list and its count on *every* screen, so the
   // list has to load on the find page too. It used to bail out here whenever
   // simpleMode was on, which is the find page, so the badge read 0 and the
-  // nested list was empty for anyone who had not opened the workspace yet —
+  // nested list was empty for anyone who had not opened the workspace yet -
   // "you have 0 projects" to someone with 128 of them.
   //
   // Only the fetch moves. The 1.5s status poll below stays in the workspace,
@@ -2383,7 +2383,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
 
     // Self-scheduling poll: the next tick is only queued AFTER the current one
     // settles, so a slow server (e.g. audits running) can never stack up dozens of
-    // overlapping requests — which was the cause of the lag/glitching.
+    // overlapping requests - which was the cause of the lag/glitching.
     const tick = async () => {
       if (cancelled) return;
       await Promise.allSettled([loadProjects(), loadStatus(selected, false)]);
@@ -2486,7 +2486,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
 
   async function startQuickScrape(nextForm) {
     setForm(nextForm);
-    // Only drop into the workspace once a project actually started — on a billing
+    // Only drop into the workspace once a project actually started - on a billing
     // error we stay on the find-leads home so the plan prompt is right there.
     const ok = await run(["scrape"], nextForm);
     if (ok) {
@@ -2543,7 +2543,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
           // website (15s/site timeout) for email/socials right in the user's
           // browser before anything is saved. Whatever it doesn't get to in
           // time (or fails on) still lands with no email, and /ingest queues
-          // the VPS enrichment pass for exactly those leftovers — local first,
+          // the VPS enrichment pass for exactly those leftovers - local first,
           // VPS fallback for the remainder, never both for the same lead.
         },
         {
@@ -2566,7 +2566,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
               scanned: scanned || 0,
               scanTotal: scanTotal || 0,
               startedAt,
-              // Businesses arrive in bursts of ~20 — one map tile resolving —
+              // Businesses arrive in bursts of ~20 - one map tile resolving -
               // so only the newest burst is handed over, tagged with a counter.
               // The overlay owns the queue and the pacing, which is what lets it
               // reveal them one at a time instead of flashing twenty at once.
@@ -2611,7 +2611,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
       const stored = saved.stored ?? rows.length;
       setScrapeProgress({
         // A clean run that found nothing is not a success to flash for 6
-        // seconds — it's the case the user most needs to read, so it stays up
+        // seconds - it's the case the user most needs to read, so it stays up
         // and says what to change.
         status: stored ? "done" : "empty",
         phase: "save",
@@ -2647,7 +2647,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
         updated: saved.updated ?? 0,
       };
     } catch (err) {
-      // Leave the overlay up on failure — this is the only place the user finds
+      // Leave the overlay up on failure - this is the only place the user finds
       // out a browser-side scrape died, since there's no server job to inspect.
       setScrapeProgress((prev) => ({
         ...(prev || {}),
@@ -2662,7 +2662,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
   }
 
   // Ask the extension to stop. The run still resolves normally, with whatever it
-  // had found — a stopped search keeps its leads, it doesn't discard them.
+  // had found - a stopped search keeps its leads, it doesn't discard them.
   function stopExtensionScrape() {
     scrapeAbortRef.current?.abort();
     setScrapeProgress((prev) =>
@@ -2714,7 +2714,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
       setHideSyncBanner(false);
 
       // The warehouse had nothing for this area, so the leads have to be
-      // scraped live — which happens in the user's browser via the extension,
+      // scraped live - which happens in the user's browser via the extension,
       // not on our server.
       let result = { total: data.total ?? 0, inserted: data.inserted ?? 0, updated: data.updated ?? 0 };
       const wentLive = !!data.needsLive;
@@ -2777,7 +2777,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
     }
   }
 
-  // Stop every running project at once — kills their runner trees plus any
+  // Stop every running project at once - kills their runner trees plus any
   // Lighthouse/Chrome/scrape processes still churning in the background.
   async function stopAllProjects() {
     setBusy("stop all");
@@ -2830,7 +2830,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
         : "";
     if (notes === null) return;
     // Captured rows have no saved favorite/list state, so light the icon up via the
-    // row overlay immediately and confirm with a toast — the POST is a slow round-trip
+    // row overlay immediately and confirm with a toast - the POST is a slow round-trip
     // and waiting for it felt like nothing happened. Revert the flag if the save fails.
     const key = leadKey(lead);
     const flag = target === "watchlist" ? "__favorited" : "__listed";
@@ -2881,8 +2881,8 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
   // Stable identity for a row, used to key per-row state, the selection set and
   // the open drawer.
   //
-  // This used to return on the first non-empty field — domain, else phone, else
-  // name — mirroring the DB's dedupe rule. That rule is right for deduping and
+  // This used to return on the first non-empty field - domain, else phone, else
+  // name - mirroring the DB's dedupe rule. That rule is right for deduping and
   // wrong for identity: every branch of a chain shares one website, so ten
   // Cheezious rows collapsed to "d:cheezious.com". Clicking the fourth opened
   // the first, because the drawer resolves its row with `leads.find(...)` and
@@ -2980,7 +2980,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
     }
   }
 
-  // Save the captured row, then open the shared "Add to list" dialog for it — the
+  // Save the captured row, then open the shared "Add to list" dialog for it - the
   // same flow the Leads manager uses (replaces the old prompt()).
   async function openListsForCaptured(lead) {
     const key = leadKey(lead);
@@ -2997,7 +2997,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
   }
 
   // Download what's on screen as CSV. Exports the selection when there is one,
-  // otherwise the current filtered view — so "Export" always means "the leads I
+  // otherwise the current filtered view - so "Export" always means "the leads I
   // am looking at". The opportunity score and its top reason ride along, since
   // that ordering is the reason to pull the list in the first place.
   function exportLeadsCsv() {
@@ -3038,7 +3038,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
     showToast(`Exported ${rows.length.toLocaleString()} lead${rows.length === 1 ? "" : "s"}`);
   }
 
-  // Remove from this captured list only (local hide) — it stays in the global
+  // Remove from this captured list only (local hide) - it stays in the global
   // leads database, matching the rule that the overall view owns deletion.
   function hideCaptured(lead) {
     const key = leadKey(lead);
@@ -3159,7 +3159,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
     } else if (leadSort === "rating") {
       rows = [...rows].sort((a, b) => (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0));
     }
-    // "found" (default scrape order) needs no sort — that's the incoming order.
+    // "found" (default scrape order) needs no sort - that's the incoming order.
     return rows;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status?.leads, rowOverlay, leadFilters, leadSearch, leadSort]);
@@ -3167,7 +3167,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
   const filtersActive =
     !!leadSearch.trim() || Object.values(leadFilters).some((v) => v !== "all");
 
-  // Paginate at 50/page — enough to scan, small enough that the drawer and the
+  // Paginate at 50/page - enough to scan, small enough that the drawer and the
   // row actions stay responsive on a 300-lead find.
   const tablePageCount = Math.max(1, Math.ceil(leads.length / WORKSPACE_PAGE_SIZE));
   const safeTablePage = Math.min(tablePage, tablePageCount - 1);
@@ -3176,7 +3176,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
   // Prefer the live row (so an enrich mid-drawer updates in place), but fall back
   // to the snapshot taken on click. `leads` is re-derived by filtering, paging,
   // polling and live-search ticks, so the clicked row can vanish from it while the
-  // drawer is still open — which used to leave the panel rendering nothing at all.
+  // drawer is still open - which used to leave the panel rendering nothing at all.
   // The snapshot is the row that was actually clicked, so it decides identity;
   // the live row only supplies fresher fields on top of it. Letting `find` win
   // outright meant any key collision opened somebody else's business.
@@ -3194,14 +3194,14 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
   // A project is genuinely waiting in the queue only when it's flagged queued, isn't
   // running, and hasn't already produced a result. A stale `queued:true` left on a
   // finished/failed/stopped project (the runner doesn't always reset it) must NOT
-  // keep showing "waiting for a free slot" — especially for instant warehouse finds.
+  // keep showing "waiting for a free slot" - especially for instant warehouse finds.
   const isQueued =
     !!status?.state?.queued &&
     !running &&
     !status?.state?.finishedAt &&
     status?.state?.stages?.scrape?.status !== "done" &&
     !/^(Done|Failed|Stopped|Leads loaded)/i.test(status?.state?.message || "");
-  // How many captured leads have a website — drives the project toolbar
+  // How many captured leads have a website - drives the project toolbar
   // Audit/Report buttons (which now run the same bulk flow as the leads page).
   const leadsWithSite = leads.filter((l) => l.website).length;
   // Live "Queued for Ns" timer: while a project sits queued nothing rewrites its
@@ -3227,7 +3227,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
   // Ensure every selected captured lead exists in the DB; returns [{ key, id }].
   // Used by bulk audit / report / add-to-list (the bulk endpoints work off ids).
   // Saves the whole selection in ONE request (ids come back aligned to input
-  // order) instead of a slow POST per lead — selecting 30 rows used to take 30+s.
+  // order) instead of a slow POST per lead - selecting 30 rows used to take 30+s.
   async function ensureSelectedIds(leadObjs) {
     if (!leadObjs.length) return [];
     const payload = leadObjs.map((lead) => ({
@@ -3251,7 +3251,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
   }
 
   // Poll every job in a bulk batch and roll the per-job progress into one
-  // done/total figure. On completion, refresh credits and — for audits — overlay
+  // done/total figure. On completion, refresh credits and - for audits - overlay
   // the fresh scores back onto the captured rows. Mirrors the Leads manager.
   function pollBatch(jobIds, total, kind) {
     clearTimeout(batchPollRef.current);
@@ -3339,14 +3339,14 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
   }
 
   // Realtime (queue-free) batch enrich / WhatsApp over the captured leads. Reuses
-  // the same per-lead realtime endpoints as the single-row buttons — nothing is
+  // the same per-lead realtime endpoints as the single-row buttons - nothing is
   // added to the job queue and no browser runner is spawned. Enrichment results
   // persist to the shared cache, so a business enriched once is reused for every
   // user and every future find.
   async function runRealtimeBatch(kind) {
     // Skip leads that are already done: enriched ones (have email/socials or a
     // recorded enrich status) for Enrich, and already WhatsApp-checked numbers
-    // (a yes/no result) for WhatsApp — so a re-run only works the leftovers.
+    // (a yes/no result) for WhatsApp - so a re-run only works the leftovers.
     const isEnriched = (l) => !!(l.email || l.enrichStatus || l.enrich_status);
     const isWaChecked = (l) => { const s = waState(l); return s === "yes" || s === "no"; };
     const hasCandidate = (l) => (kind === "enrich" ? !!l.website : !!l.phone);
@@ -3398,7 +3398,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
     }
   }
 
-  // Remove the selection from this captured view only (local hide) — the leads
+  // Remove the selection from this captured view only (local hide) - the leads
   // stay in the database, matching the per-row remove + the Leads-manager rule.
   function bulkRemove() {
     if (!selectedLeadObjs.length) return;
@@ -3468,7 +3468,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
       ))}
       {!projects.length && <div className="px-2 py-1 text-xs text-muted-foreground">No projects yet</div>}
       {/* "105 more" read as a count of something missing and had to be clicked
-          over and over, ten at a time. One click now shows the lot — the list
+          over and over, ten at a time. One click now shows the lot - the list
           scrolls inside its own pane, so a long one costs nothing. */}
       {projects.length > projectLimit && (
         <button
@@ -3491,7 +3491,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
       }, 300);
     };
     // "Where are my projects?" is account state, not part of the search, so it
-    // belongs in the topbar — not in a strip above the heading, where it pushed
+    // belongs in the topbar - not in a strip above the heading, where it pushed
     // the heading and the entire form down a row before the user had read a
     // word of it.
     const findActions = (
@@ -3525,7 +3525,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
   }
 
   // Leads that can actually be plotted. Computed here rather than inside the map
-  // panel because the Map tab has to know whether it is worth offering at all —
+  // panel because the Map tab has to know whether it is worth offering at all -
   // a project of leads without coordinates should not grow a dead tab.
   const geoLeads = leads.filter((l) => Number.isFinite(parseFloat(l.lat)) && Number.isFinite(parseFloat(l.lng)));
   const mapCenter = geoLeads.length
@@ -3609,7 +3609,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
           </div>
         )}
 
-        {/* KPI strip — one bordered row, four numbers, roughly half the height
+        {/* KPI strip - one bordered row, four numbers, roughly half the height
             the four cards used to take. What each number counts is the whole
             project, not the filtered view: these are the project's vitals, and
             they should not move every time somebody types in the search box.
@@ -3639,7 +3639,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
           );
         })()}
 
-        {/* Project-level controls. Only rendered when it has something to say —
+        {/* Project-level controls. Only rendered when it has something to say -
             after Enrich/WhatsApp moved into the table toolbar this card was an
             empty white band on a project that is simply sitting idle. The mobile
             favorite/delete pair keeps it alive on small screens. */}
@@ -3684,7 +3684,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
 
             {formRunning && (
               <div className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-600">
-                A project named "{form.name}" is already running. This name will add to it — rename this one to run it alongside as a separate search.
+                A project named "{form.name}" is already running. This name will add to it - rename this one to run it alongside as a separate search.
               </div>
             )}
 
@@ -3725,14 +3725,14 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
         <EnrichProgress progress={status?.enrichProgress} stage={stages.enrich} />
 
         {/* The workspace: tabs, filters, search, the rows, the pager. One
-            bordered surface instead of five stacked cards — the map, the
+            bordered surface instead of five stacked cards - the map, the
             filters, the toolbar and the table were all describing the same list,
             and each border around them was another thing to look at before
             reaching a lead. The table is the point of the page, so everything
             above it is a control bar attached to it rather than a card of its
             own. */}
         <section className="overflow-hidden rounded-lg border border-border bg-card">
-          {/* Row 1 — where you are, what just happened, and what you can do to
+          {/* Row 1 - where you are, what just happened, and what you can do to
               the selection. */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-3 py-2">
             {(() => {
@@ -3830,7 +3830,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
             </div>
           </div>
 
-          {/* Row 2 — search and qualification filters on one line. These narrow
+          {/* Row 2 - search and qualification filters on one line. These narrow
               the same list the table, the counts and the bulk actions all read
               from, so what you filter to is exactly what you act on. */}
           {allLeads.length > 0 && (
@@ -3898,7 +3898,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
             </div>
           )}
 
-          {/* Row 3 — the filters that matter once the obvious ones are set.
+          {/* Row 3 - the filters that matter once the obvious ones are set.
               Hidden by default so the bar stays a single line. */}
           {allLeads.length > 0 && moreFilters && (
             <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/20 px-3 pb-2">
@@ -3943,7 +3943,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
             </div>
           )}
 
-          {/* Map view — mounted only while its tab is open, so Leaflet and its
+          {/* Map view - mounted only while its tab is open, so Leaflet and its
               tiles still cost nothing until somebody asks for them. */}
           {workspaceTab === "map" && geoLeads.length > 0 && (
             <LeadsMap
@@ -4067,7 +4067,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
                           <input type="checkbox" aria-label={`Select ${lead.name || "lead"}`} checked={selectedLeads.has(key)} onChange={() => toggleLead(key)} className="accent-[hsl(var(--primary))]" />
                         </TableCell>
 
-                        {/* Lead — the strongest text on the row, with the category
+                        {/* Lead - the strongest text on the row, with the category
                             muted underneath it. */}
                         <TableCell className="max-w-[260px] py-0">
                           <div className="flex items-center gap-2.5">
@@ -4079,7 +4079,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
                           </div>
                         </TableCell>
 
-                        {/* Contact — the phone is what gets dialled, so it is the
+                        {/* Contact - the phone is what gets dialled, so it is the
                             scannable line; the email sits under it. */}
                         <TableCell className="py-0">
                           <div className="flex items-center gap-1.5 text-[13px] font-medium tabular-nums leading-tight">
@@ -4096,7 +4096,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
                           }
                         </TableCell>
 
-                        {/* Presence — what they actually run. A row of greyed-out
+                        {/* Presence - what they actually run. A row of greyed-out
                             icons for every network they don't have was mostly
                             filler; the one absence that sells a service is the
                             website, so that one is spelled out in words and the
@@ -4114,7 +4114,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
                           </div>
                         </TableCell>
 
-                        {/* Reviews — social proof, so the count leads and the
+                        {/* Reviews - social proof, so the count leads and the
                             rating qualifies it. */}
                         <TableCell className="py-0">
                           {reviews > 0 ? (
@@ -4138,7 +4138,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
                           }
                         </TableCell>
 
-                        {/* Opportunity — a qualification signal, not a coloured
+                        {/* Opportunity - a qualification signal, not a coloured
                             cell: a dot in the band's colour, the word, then the
                             score. The tint stays on the chip. */}
                         <TableCell className="py-0">
@@ -4156,7 +4156,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
                           </div>
                         </TableCell>
 
-                        {/* Actions — save and list stay on the row because they
+                        {/* Actions - save and list stay on the row because they
                             are the two things done constantly; everything else
                             moved behind the menu so eight rows don't add up to a
                             wall of small icons. */}
@@ -4178,7 +4178,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
         </div>
           )}
 
-        {/* Pager — the section's footer rather than a floating strip below it,
+        {/* Pager - the section's footer rather than a floating strip below it,
             with the range spelled out on the left the way a results footer
             normally reads. */}
         {workspaceTab === "leads" && leads.length > 0 && (
@@ -4227,7 +4227,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
         </section>
       </div>
       {/* Bulk selection dock. The checkboxes, the selection state and every bulk
-          handler already existed, but nothing ever rendered them — BottomDock was
+          handler already existed, but nothing ever rendered them - BottomDock was
           added and left unwired, so ticking rows did nothing visible. It portals
           to <body> (see BottomDock) to escape the page-in transform. */}
       {selectedCount > 0 && (
@@ -4259,7 +4259,7 @@ export default function Dashboard({ view = "", countryHint = "", countryHintName
         </BottomDock>
       )}
 
-      {/* Lead detail drawer — opens on a row click. Rendered as a slide-over so
+      {/* Lead detail drawer - opens on a row click. Rendered as a slide-over so
           the table keeps its full width; on desktop it docks to the right edge. */}
       <Sheet open={!!detailLead} onOpenChange={(o) => !o && closeLeadDetail()}>
         <SheetContent side="right" showClose={false} className="max-w-sm p-0">

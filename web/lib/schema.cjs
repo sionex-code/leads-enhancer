@@ -139,7 +139,7 @@ const proxies = pgTable("proxies", {
 // ---- Shared enrichment cache (global, cross-tenant) -------------------------
 // Once a business website/phone is enriched (emails + socials) by ANY user, the
 // result is cached here keyed by domain (and phone) so the same business never
-// has to be re-crawled — every user immediately sees the enriched data.
+// has to be re-crawled - every user immediately sees the enriched data.
 const enrichmentCache = pgTable(
   "enrichment_cache",
   {
@@ -172,7 +172,7 @@ const enrichmentCache = pgTable(
 
 // Global, cross-tenant WhatsApp-status cache. A phone number checked once by ANY
 // user is reused by everyone (and by future finds) instead of re-running the
-// WhatsApp lookup — keyed by the normalized international number (digits only).
+// WhatsApp lookup - keyed by the normalized international number (digits only).
 const whatsappCache = pgTable("whatsapp_cache", {
   id: serial("id").primaryKey(),
   phone: text("phone").notNull().unique(),
@@ -187,7 +187,7 @@ const whatsappCache = pgTable("whatsapp_cache", {
 // email signs in with Google (auth.js events.signIn). The whop_user_id is also
 // stored so the user's leadsfunda row can be backfilled with the stable Whop
 // account id on reconciliation (subsequent webhooks then link by whop_user_id,
-// not email — immune to buyer email changes).
+// not email - immune to buyer email changes).
 const pendingGrants = pgTable(
   "pending_grants",
   {
@@ -206,7 +206,7 @@ const pendingGrants = pgTable(
   ]
 );
 
-// ---- Gmail cookie accounts — DEPRECATED ------------------------------------
+// ---- Gmail cookie accounts - DEPRECATED ------------------------------------
 // The Gmail cookie-rotation feature was removed in favour of the proxy pool
 // (see `proxies`). The table is kept so existing databases don't need a
 // destructive drop; nothing in the app reads or writes it any more.
@@ -333,7 +333,7 @@ const leads = pgTable(
     httpStatus: integer("http_status"),
     httpStatusText: text("http_status_text"),
     httpCheckedAt: text("http_checked_at"),
-    // Marketing stack found on the site during enrichment — JSON produced by
+    // Marketing stack found on the site during enrichment - JSON produced by
     // web/lib/tracking-detect.cjs ({ adPixels, analytics, platform, ... }).
     tech: text("tech"),
     techCheckedAt: text("tech_checked_at"),

@@ -77,7 +77,7 @@ const EXTRA_HEADERS = [
   // Both of these were computed per site and then thrown away: the CSV only
   // carries the columns listed here, so `tech` (the detected marketing stack)
   // and `favicon` never reached the file, never reached ingest, and never
-  // reached the leads table — which is why the drawer showed "Not scanned yet"
+  // reached the leads table - which is why the drawer showed "Not scanned yet"
   // for every batch-enriched lead. db.cjs already maps both.
   "tech",
   "favicon",
@@ -226,8 +226,8 @@ const SOCIAL = {
   telegram: /https?:\/\/(?:www\.)?t\.me\/[A-Za-z0-9_]+/i,
 };
 // Links the page actually renders, in document order. Matching the raw HTML
-// instead meant the first occurrence anywhere won — including inside a script
-// blob or a meta tag — so a directory URL buried in analytics config beat the
+// instead meant the first occurrence anywhere won - including inside a script
+// blob or a meta tag - so a directory URL buried in analytics config beat the
 // real profile link in the footer.
 function hrefsFrom(html) {
   const out = [];
@@ -370,7 +370,7 @@ async function fetchHtml(url) {
   try {
     return await fetchOnce(url, TIMEOUT);
   } catch (err) {
-    // A slow site shouldn't be written off on the first timeout — retry the
+    // A slow site shouldn't be written off on the first timeout - retry the
     // homepage once with a longer budget. Many small-business sites are just
     // slow on a cold cache and answer fine on the second try.
     if (err.name === "AbortError") {
@@ -392,7 +392,7 @@ let _browserPages = 0;
 async function getBrowserContext() {
   // Reuse the live context, but self-heal if the browser died (crash/OOM). Without
   // this, a dead browser leaves _ctxPromise cached forever and every later enrich
-  // fails — the long-running-server failure mode behind "enrichment has an issue".
+  // fails - the long-running-server failure mode behind "enrichment has an issue".
   if (_ctxPromise && _browser && _browser.isConnected()) return _ctxPromise;
   if (_browser && !_browser.isConnected()) {
     _browser = null;
@@ -415,7 +415,7 @@ async function getBrowserContext() {
       _ctxPromise = null;
     });
     const ctx = await _browser.newContext({ userAgent: UA });
-    // Block images/media/fonts — we only need the HTML/text, and this keeps tabs light.
+    // Block images/media/fonts - we only need the HTML/text, and this keeps tabs light.
     await ctx.route("**/*", (route) => {
       const t = route.request().resourceType();
       if (t === "image" || t === "media" || t === "font") return route.abort();
@@ -423,7 +423,7 @@ async function getBrowserContext() {
     });
     return ctx;
   })().catch((err) => {
-    // Failed launch must not poison the cache — clear so a retry can relaunch.
+    // Failed launch must not poison the cache - clear so a retry can relaunch.
     _browser = null;
     _ctxPromise = null;
     throw err;
@@ -602,7 +602,7 @@ async function enrichSite(website) {
     }
   }
 
-  // Fallback: plain HTTP found nothing usable — render the site in headless Chrome.
+  // Fallback: plain HTTP found nothing usable - render the site in headless Chrome.
   // This is what captures emails on JS-built sites and ones that block plain fetch.
   let viaBrowser = false;
   if (!emails.size && USE_BROWSER) {
@@ -630,7 +630,7 @@ async function enrichSite(website) {
   result.allEmails = list.join(" | ");
   // A timeout, a blocked request, an unreachable host (ENOTFOUND/ECONNREFUSED), or
   // simply a site with no address on it all reduce to the same user-facing
-  // outcome: no email. Never surface raw network codes — they read as scary
+  // outcome: no email. Never surface raw network codes - they read as scary
   // "errors" to non-engineers. firstError is kept for the debug log only.
   if (firstError && !list.length) console.log(`  enrich: ${siteHost || website} -> no email (${firstError})`);
   result.enrichStatus = list.length
@@ -639,7 +639,7 @@ async function enrichSite(website) {
   // One JSON text column on the lead; "" when the crawl saw nothing at all, so a
   // site we failed to fetch is never recorded as "runs no pixels".
   // mergeTracking only runs after a page actually came back, so a non-null
-  // result.tracking IS the "we scanned it" signal — pass it through so a site
+  // result.tracking IS the "we scanned it" signal - pass it through so a site
   // that genuinely runs no pixel serialises as such instead of as unknown.
   result.tech = trackingDetect.serialize(result.tracking, { scanned: !!result.tracking });
   return result;
@@ -764,7 +764,7 @@ if (require.main === module)
 
   // Pre-fill from the shared, cross-tenant enrichment cache: any site already
   // enriched by ANY user (here or in an earlier run) is taken straight from the
-  // DB and never crawled again. Best-effort — if there's no DB / DATABASE_URL
+  // DB and never crawled again. Best-effort - if there's no DB / DATABASE_URL
   // (standalone CLI, desktop build) this silently no-ops and we crawl as before.
   async function prefillFromCache() {
     if (!process.env.DATABASE_URL) return 0;
@@ -785,8 +785,8 @@ if (require.main === module)
         const prev = state.get(key);
         if (prev?.email || prev?._cached) continue; // resume/cache state already has it
         const cached = map.get(db.hostOf(w));
-        // Reuse any business already enriched with an email OR socials/WhatsApp —
-        // not just ones with an email — so socials-only sites aren't re-crawled.
+        // Reuse any business already enriched with an email OR socials/WhatsApp -
+        // not just ones with an email - so socials-only sites aren't re-crawled.
         if (!cached || !db.hasUsefulCache(cached)) continue;
         const result = {
           email: cached.email || "",
@@ -814,7 +814,7 @@ if (require.main === module)
       }
       if (filled) {
         flushCsv();
-        console.log(`  Cache: ${filled} site${filled > 1 ? "s" : ""} already enriched — reused, not re-crawled.`);
+        console.log(`  Cache: ${filled} site${filled > 1 ? "s" : ""} already enriched - reused, not re-crawled.`);
       }
       return filled;
     } catch (err) {
@@ -836,7 +836,7 @@ if (require.main === module)
       const prev = state.get(key);
       // Keep sites we already captured an email for; RE-ATTEMPT everything else
       // (timeouts / "no email found"). This is why clicking Enrich again now
-      // retries the failures — with the headless-browser fallback this time —
+      // retries the failures - with the headless-browser fallback this time -
       // instead of immediately reporting "done". `queued` stops re-loops within
       // a single run, so it only re-tries on a fresh invocation.
       if (prev && (prev.email || prev._cached)) continue;
@@ -860,7 +860,7 @@ if (require.main === module)
         result = await withTimeout(enrichSite(job.website), SITE_TIMEOUT, "site timeout");
       } catch (err) {
         // Don't leak raw error text (timeouts, ENOTFOUND, …) into the lead's
-        // status — to the user it's simply: no email found.
+        // status - to the user it's simply: no email found.
         result = { ...EXTRA_HEADERS.reduce((o, h) => ((o[h] = ""), o), {}), enrichStatus: "no email found" };
       }
       state.set(job.key, result);
@@ -890,7 +890,7 @@ if (require.main === module)
     let idleChecks = 0;
     process.on("SIGINT", () => {
       stopWatch = true;
-      console.log("\n  Stopping (state saved — re-run to resume).");
+      console.log("\n  Stopping (state saved - re-run to resume).");
     });
     while (!stopWatch && idleChecks < 12) {
       await runQueue();

@@ -5,12 +5,12 @@ import { useEffect, useState } from "react";
 // Three facts decide whether the install steps below are accurate or actively
 // misleading:
 //
-//   1. Which browser — the extensions page lives at a different internal URL in
+//   1. Which browser - the extensions page lives at a different internal URL in
 //      each one, and showing all four at once made the reader pick.
-//   2. Whether it's Chromium at all — Firefox and Safari use a different
+//   2. Whether it's Chromium at all - Firefox and Safari use a different
 //      extension format entirely, so the steps can't work there and saying so
 //      up front beats letting someone follow five steps into a dead end.
-//   3. Which OS — unzipping is the one step that genuinely differs.
+//   3. Which OS - unzipping is the one step that genuinely differs.
 
 const BROWSERS = {
   chrome: { name: "Chrome", url: "chrome://extensions" },
@@ -24,7 +24,7 @@ const BROWSERS = {
 };
 
 // Only these two are known not to work. Anything we can't identify falls
-// through to the Chrome instructions rather than being blocked — an unknown
+// through to the Chrome instructions rather than being blocked - an unknown
 // user-agent is far more often a Chromium fork than it is Safari.
 const UNSUPPORTED = new Set(["firefox", "safari"]);
 

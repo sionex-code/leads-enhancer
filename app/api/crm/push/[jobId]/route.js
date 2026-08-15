@@ -3,7 +3,7 @@ import { requireUser } from "../../../../../web/lib/session.js";
 
 export const dynamic = "force-dynamic";
 
-// Polled every 2.5s while a push runs. Scoped to the signed-in user — unlike
+// Polled every 2.5s while a push runs. Scoped to the signed-in user - unlike
 // /api/agent/jobs/[id], which this deliberately does not copy.
 export async function GET(_request, { params }) {
   const { userId, response } = await requireUser();

@@ -1,6 +1,6 @@
 // All SQL for the three CRM tables. Same conventions as db.cjs: raw
 // parameterized queries through the shared pool, `userId` first on every
-// function, `WHERE user_id = $1` on every statement — including the ones that
+// function, `WHERE user_id = $1` on every statement - including the ones that
 // look up by primary key, so a guessed id from another tenant reads as "not
 // found" rather than leaking a row.
 const { pool } = require("../pg.cjs");
@@ -73,7 +73,7 @@ async function createConnection(userId, { provider, label, credentials, config =
   return { ok: true, connection: rows[0] };
 }
 
-// `credentials` omitted leaves the stored secret untouched — that is what lets
+// `credentials` omitted leaves the stored secret untouched - that is what lets
 // the UI save a field-map change without making the user paste their token again.
 async function updateConnection(userId, id, patch = {}) {
   const sets = [];
@@ -287,7 +287,7 @@ async function listFailures(userId, jobId, limit = 200) {
   return rows;
 }
 
-// Leads of this job that failed — the work list for a retry.
+// Leads of this job that failed - the work list for a retry.
 async function failedLeadIds(userId, jobId) {
   const rows = await listFailures(userId, jobId, 1000);
   return (rows || []).map((r) => r.lead_id);

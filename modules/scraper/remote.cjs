@@ -1,4 +1,4 @@
-// Map-scraper module — REMOTE backend. Runs the scrape on a worker VPS
+// Map-scraper module - REMOTE backend. Runs the scrape on a worker VPS
 // (SCRAPER_WORKER_URL). Because the leads DB is shared, the worker upserts rows in
 // realtime (they appear in /leads live); the HTTP response carries the raw CSV back
 // so the local downstream stages (enrich/whatsapp/audit) still have a file to read.
@@ -7,7 +7,7 @@ const path = require("path");
 const { postJSON } = require("../client.cjs");
 const { secretFor, workerUrlFor } = require("../registry.cjs");
 
-// Scrapes are slow — allow a long single request by default (override via env).
+// Scrapes are slow - allow a long single request by default (override via env).
 const SCRAPE_TIMEOUT = Number(process.env.SCRAPER_HTTP_TIMEOUT_MS || 3600000); // 1h
 
 async function runBatch(ctx) {

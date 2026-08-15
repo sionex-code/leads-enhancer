@@ -1,7 +1,7 @@
 // Minimal JSON-over-HTTP client used by every module's remote backend to reach a
 // worker. Dependency-free (global fetch). The shared secret travels in the
 // `x-worker-secret` header; worker.cjs rejects any request that doesn't match.
-const DEFAULT_TIMEOUT = Number(process.env.WORKER_HTTP_TIMEOUT_MS || 600000); // 10 min — batch scrapes are slow
+const DEFAULT_TIMEOUT = Number(process.env.WORKER_HTTP_TIMEOUT_MS || 600000); // 10 min - batch scrapes are slow
 
 async function postJSON(workerUrl, route, body, { secret, timeout = DEFAULT_TIMEOUT } = {}) {
   const url = `${String(workerUrl).replace(/\/+$/, "")}${route}`;

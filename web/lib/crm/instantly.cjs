@@ -1,4 +1,4 @@
-// Instantly — cold email campaigns (API v2).
+// Instantly - cold email campaigns (API v2).
 //
 // Like Smartlead, a push means "add these businesses to a campaign". v2 keys
 // are Bearer tokens and are NOT the same as v1 keys; v2 access needs Growth or
@@ -94,7 +94,7 @@ module.exports = {
     if (!campaignId) {
       return items.map((it) => ({
         leadId: it.lead.id, ok: false, retryable: false,
-        error: "No Instantly campaign chosen for this integration — pick one in Integrations.",
+        error: "No Instantly campaign chosen for this integration - pick one in Integrations.",
       }));
     }
 
@@ -128,7 +128,7 @@ module.exports = {
     }
 
     // `created_leads[].index` indexes into the array we just sent, so every
-    // lead Instantly actually created can be paired back exactly — no guessing
+    // lead Instantly actually created can be paired back exactly - no guessing
     // from order, which is what made the Smartlead path lossy.
     const created = new Map();
     for (const c of res.data?.created_leads || []) {
@@ -145,11 +145,11 @@ module.exports = {
         out.push({ leadId: it.lead.id, ok: true, action: "delivered", remoteId: c.id ? String(c.id) : null });
         return;
       }
-      // Not created, but the batch was accepted — Instantly's own dedupe turned
+      // Not created, but the batch was accepted - Instantly's own dedupe turned
       // it away, which means the lead is already there. Recorded as ok so the
       // ledger keeps saying "this one landed"; the runner still tallies it as
       // skipped for the job summary. A lead rejected for an unparseable email
-      // lands here too — Instantly doesn't say which is which, so the counts
+      // lands here too - Instantly doesn't say which is which, so the counts
       // below carry that detail instead.
       out.push({ leadId: it.lead.id, ok: true, action: "duplicate", counted: "skipped" });
     });

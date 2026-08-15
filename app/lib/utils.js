@@ -37,13 +37,13 @@ export function mapsLink(lead) {
 }
 
 // True when the link above is the real captured listing rather than a search we
-// synthesised — lets the UI label it honestly.
+// synthesised - lets the UI label it honestly.
 export function hasDirectMapsLink(lead) {
   return !!String(lead?.mapsUrl || lead?.maps_url || "").trim();
 }
 
 // Human-friendly enrichment status for display. Hides raw network/error codes
-// (e.g. "error: ENOTFOUND") that may still linger in older cached results — to
+// (e.g. "error: ENOTFOUND") that may still linger in older cached results - to
 // the user, a site we couldn't read simply means no email was found. Returns ""
 // for a lead that was never enriched.
 export function prettyEnrichStatus(status) {
@@ -51,7 +51,7 @@ export function prettyEnrichStatus(status) {
   if (!s) return "";
   // "no website" is accurate about *why* enrichment couldn't run, but this
   // status renders under a lead's contact/email info, where "no website"
-  // reads as a non sequitur — say what's actually missing there: an email.
+  // reads as a non sequitur - say what's actually missing there: an email.
   if (/^no website$/i.test(s)) return "no email found";
   if (/^error\b/i.test(s) || /ENOTFOUND|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|getaddrinfo|certificate|socket hang up|timeout/i.test(s)) {
     return "no email found";

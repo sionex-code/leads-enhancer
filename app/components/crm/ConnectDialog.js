@@ -34,7 +34,7 @@ function QuickConnect({ provider, onClose, onSaved }) {
   const authFields = p.authFields || [];
   const configFields = p.configFields || [];
 
-  // A remote-select is the one setting worth interrupting for — you cannot send
+  // A remote-select is the one setting worth interrupting for - you cannot send
   // to Smartlead without naming a campaign. Everything else has a working
   // default and belongs behind "Advanced".
   //
@@ -56,7 +56,7 @@ function QuickConnect({ provider, onClose, onSaved }) {
 
   const complete = authFields.every((f) => !f.required || String(credentials[f.key] || "").trim());
 
-  // Only the newest probe is allowed to write state — a slow first attempt must
+  // Only the newest probe is allowed to write state - a slow first attempt must
   // not overwrite the result of the key the user has since corrected.
   const probeSeq = useRef(0);
   // Read, never depended on: picking a campaign changes config, and that must
@@ -88,7 +88,7 @@ function QuickConnect({ provider, onClose, onSaved }) {
 
   // Typing a key is a paste, so checking as soon as it settles feels instant.
   // A URL is typed character by character, though, and probing a webhook means
-  // POSTing to it — so those wait for blur instead of firing at every prefix.
+  // POSTing to it - so those wait for blur instead of firing at every prefix.
   const autoProbe = !authFields.some((f) => f.type === "url");
   useEffect(() => {
     if (!autoProbe || !complete) return undefined;
@@ -105,7 +105,7 @@ function QuickConnect({ provider, onClose, onSaved }) {
     setError("");
     try {
       // The probe already proved these credentials, and the campaign is chosen,
-      // so this row lands complete and usable — no follow-up test, and no 409
+      // so this row lands complete and usable - no follow-up test, and no 409
       // on the first push.
       const saved = await jsonFetch("/api/crm/connections", {
         method: "POST",
@@ -166,14 +166,14 @@ function QuickConnect({ provider, onClose, onSaved }) {
               {probe.targets?.length ? (
                 <Select id={`ct-${f.key}`} value={config[f.key] ?? ""}
                         onChange={(e) => setConfig((c) => ({ ...c, [f.key]: e.target.value }))}>
-                  <option value="">— choose a {f.label.toLowerCase()} —</option>
+                  <option value="">Choose a {f.label.toLowerCase()}</option>
                   {probe.targets.map((t) => (
                     <option key={t.value} value={t.value}>{t.label}{t.hint ? ` · ${t.hint}` : ""}</option>
                   ))}
                 </Select>
               ) : (
                 <p className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-                  {probe.targetsError || `No ${f.label.toLowerCase()}s in that account yet — create one in ${p.label} first, then reopen this.`}
+                  {probe.targetsError || `No ${f.label.toLowerCase()}s in that account yet - create one in ${p.label} first, then reopen this.`}
                 </p>
               )}
             </div>
@@ -309,7 +309,7 @@ function EditConnection({ provider, connection, sources = [], transforms = [], o
       const d = await jsonFetch(`/api/crm/connections/${connectionId}/targets`);
       if (!d.ok) { setTargets([]); setTargetsError(d.error || "Could not load campaigns."); return; }
       setTargets(d.targets || []);
-      if (!d.targets?.length) setTargetsError("No campaigns found in that account yet — create one first.");
+      if (!d.targets?.length) setTargetsError("No campaigns found in that account yet - create one first.");
     } catch (e) {
       setTargets([]);
       setTargetsError(e.message);
@@ -333,7 +333,7 @@ function EditConnection({ provider, connection, sources = [], transforms = [], o
       const next = prev.filter((e) => e.target !== target);
       const current = prev.find((e) => e.target === target) || { target, source: "", transform: "none" };
       const merged = { ...current, ...patch };
-      // An empty source means "don't send this field" — drop the row entirely
+      // An empty source means "don't send this field" - drop the row entirely
       // rather than storing a mapping that maps to nothing.
       if (!merged.source) return next;
       return [...next, merged];
@@ -409,7 +409,7 @@ function EditConnection({ provider, connection, sources = [], transforms = [], o
               <label className="block space-y-1">
                 <span className="text-xs font-medium text-muted-foreground">Name</span>
                 <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={p.label} />
-                <span className="text-xs text-muted-foreground">Yours to recognise it by — you can connect more than one.</span>
+                <span className="text-xs text-muted-foreground">Yours to recognise it by - you can connect more than one.</span>
               </label>
 
               {(p.authFields || []).map((f) => (
@@ -421,7 +421,7 @@ function EditConnection({ provider, connection, sources = [], transforms = [], o
                     type={f.type === "password" ? "password" : "text"}
                     placeholder={
                       connection?.config?.tokenHint && f.type === "password"
-                        ? `Saved ${connection.config.tokenHint} — leave blank to keep it`
+                        ? `Saved ${connection.config.tokenHint} - leave blank to keep it`
                         : f.placeholder || ""
                     }
                     value={credentials[f.key] ?? ""}
@@ -448,7 +448,7 @@ function EditConnection({ provider, connection, sources = [], transforms = [], o
                       </p>
                     ) : (
                       <Select value={config[f.key] ?? ""} onChange={(e) => setConfig((c) => ({ ...c, [f.key]: e.target.value }))}>
-                        <option value="">— choose a campaign —</option>
+                        <option value="">Choose a campaign</option>
                         {targets.map((t) => (
                           <option key={t.value} value={t.value}>{t.label}{t.hint ? ` · ${t.hint}` : ""}</option>
                         ))}
@@ -482,7 +482,7 @@ function EditConnection({ provider, connection, sources = [], transforms = [], o
                         {f.required ? <span className="text-destructive"> *</span> : null}
                       </span>
                       <Select value={entry?.source || ""} onChange={(e) => setMapping(f.key, { source: e.target.value })} className="h-9">
-                        <option value="">— not sent —</option>
+                        <option value="">Not sent</option>
                         {sources.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
                       </Select>
                       <Select

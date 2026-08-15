@@ -1,6 +1,6 @@
 # Capability modules
 
-The four heavy capabilities — **scraper**, **enrich**, **whatsapp**, **audit** — are
+The four heavy capabilities - **scraper**, **enrich**, **whatsapp**, **audit** - are
 packaged here as pluggable modules so each can be changed in isolation and scaled
 onto its own VPS independently. **By default every module runs in-process** (the app
 behaves exactly as before). A module switches to a remote worker only when its
@@ -33,7 +33,7 @@ Call sites import `modules/<name>/index.cjs` and never the raw `enrich.cjs` /
 | audit    | `auditUrl(url,opts)`, `runBatch(ctx)` | `runReport(ctx)`, `runFile` |
 
 `ctx` (built in `web-runner.cjs`) carries `{ ROOT, dir, projectName, userId, flags,
-value, log, store }` — the project context a batch stage needs.
+value, log, store }` - the project context a batch stage needs.
 
 ## Config (env)
 
@@ -49,7 +49,7 @@ WORKER_SECRET                  shared secret (per-module override: <NAME>_WORKER
 ```
 # on the worker box (shares the same DATABASE_URL as the app)
 WORKER_SECRET=… npm run worker -- --modules=scraper        # or WORKER_MODULES=scraper
-# → [worker] listening on :8787 — modules: scraper
+# → [worker] listening on :8787 - modules: scraper
 ```
 
 Then on the app: `SCRAPER_WORKER_URL=http://<worker>:8787` + the matching
@@ -57,7 +57,7 @@ Then on the app: `SCRAPER_WORKER_URL=http://<worker>:8787` + the matching
 
 | Route             | Module   | Body                                   |
 |-------------------|----------|----------------------------------------|
-| `GET /health`     | —        | → `{ ok, modules }`                    |
+| `GET /health`     | -        | → `{ ok, modules }`                    |
 | `POST /scraper/run`  | scraper  | `{ query, max, project, userId, mode, … }` → `{ csv, rows }` |
 | `POST /enrich/site`  | enrich   | `{ website }` → `{ result }`           |
 | `POST /enrich/batch` | enrich   | `{ params, inputs:[{name,data}] }` → `{ outputs }` |

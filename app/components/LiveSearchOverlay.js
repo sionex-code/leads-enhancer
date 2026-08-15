@@ -10,7 +10,7 @@ import { cn } from "../lib/utils";
 // This used to be a corner toast showing two weighted phases, because the
 // extension also crawled every lead's website for emails before handing
 // anything back. That phase now runs on the server after /ingest, so the only
-// thing happening in the browser is the Google Maps search — one phase, one
+// thing happening in the browser is the Google Maps search - one phase, one
 // bar, and a run measured in tens of seconds rather than tens of minutes.
 //
 // It sits in the centre of the screen and holds a backdrop while running,
@@ -105,7 +105,7 @@ function FoundTicker({ found, seq, active }) {
         >
           {biz.photo ? (
             // Google's own storefront thumbnail, hotlinked. It is shown and then
-            // forgotten — never stored on the lead — because these URLs expire.
+            // forgotten - never stored on the lead - because these URLs expire.
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={biz.photo}
@@ -145,7 +145,7 @@ export default function LiveSearchOverlay({ state, onClose, onStop }) {
 
   // Rendered into <body>, deliberately. In the tree this is written into it sits
   // inside AppShell's `overflow-x-clip` main and, on the find page, alongside a
-  // `transform`ed wrapper — either of which becomes the containing block for
+  // `transform`ed wrapper - either of which becomes the containing block for
   // `position: fixed` and drags a "centred" panel off to somewhere it isn't.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -177,7 +177,7 @@ export default function LiveSearchOverlay({ state, onClose, onStop }) {
   }
 
   // Extrapolate from the run's own measured pace rather than a fixed guess, and
-  // only once there's enough of it to mean anything — an estimate drawn from the
+  // only once there's enough of it to mean anything - an estimate drawn from the
   // first two seconds is a random number.
   const elapsed = startedAt ? Date.now() - startedAt : 0;
   const eta =

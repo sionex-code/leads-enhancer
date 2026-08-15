@@ -4,14 +4,14 @@
 //
 // This replaces a bare <select> nested inside a styled label. That version
 // inherited the OS widget: no room for icons, no check on the active row, a
-// native popup that ignores the app's theme, and — worst — the selected value
+// native popup that ignores the app's theme, and - worst - the selected value
 // rendered in the same weight as the label, so you could not tell an active
 // filter from an idle one at a glance. Here the pill itself carries the state
 // (bordered and inked when narrowed), and the menu is ordinary DOM we control.
 
 // Shaped as a squared-off control rather than a pill: a row of pills reads as
 // tags you might type into, where these are persistent state. The active state
-// leans on border + label weight, not a block of brand colour — six tinted
+// leans on border + label weight, not a block of brand colour - six tinted
 // pills in a row is exactly how a filter bar starts to look like decoration.
 
 import { useEffect, useRef, useState } from "react";

@@ -2,7 +2,7 @@
 //
 // This is the adapter that makes the feature broad rather than deep: it posts
 // to any HTTPS endpoint, which means Zapier, Make, n8n, or somebody's own
-// server — and through those, effectively any CRM we haven't written a
+// server - and through those, effectively any CRM we haven't written a
 // dedicated adapter for.
 //
 // We can't dedupe on the receiver's behalf, so we give them what they need to
@@ -29,7 +29,7 @@ function checkUrl(raw) {
     return { ok: false, error: "That address is not reachable from the internet." };
   }
   // Literal IPs are checked directly. Hostnames that *resolve* to private space
-  // are not caught here — DNS can change between check and fetch anyway — but
+  // are not caught here - DNS can change between check and fetch anyway - but
   // the literal case is the one people actually hit.
   if (net.isIP(host)) {
     if (isPrivateAddress(host)) return { ok: false, error: "That address is not reachable from the internet." };
@@ -94,7 +94,7 @@ async function post(creds, config, payload, idempotencyKey) {
 module.exports = {
   id: "webhook",
   label: "Webhook",
-  blurb: "POST leads to any HTTPS endpoint — your own server, or Zapier, Make and n8n to reach any other CRM.",
+  blurb: "POST leads to any HTTPS endpoint - your own server, or Zapier, Make and n8n to reach any other CRM.",
   docsUrl: "",
 
   authFields: [

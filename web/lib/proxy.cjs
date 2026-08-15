@@ -3,9 +3,9 @@
 // proxy list (random pick) instead of hammering one IP.
 //
 // Source priority for the proxy list:
-//   1. process.env.GMAPS_PROXIES  (newline/comma separated) — explicit override,
+//   1. process.env.GMAPS_PROXIES  (newline/comma separated) - explicit override,
 //      and the path for the standalone CLI / desktop build where there's no DB.
-//   2. the `proxies` table (enabled rows) via web/lib/db.cjs — best effort; if the
+//   2. the `proxies` table (enabled rows) via web/lib/db.cjs - best effort; if the
 //      DB / DATABASE_URL isn't reachable we just fall back to direct connections.
 // The resolved list is cached briefly so a short scraper run hits the DB once.
 

@@ -2,7 +2,7 @@
 // URL. Free of charge but NOT unauthenticated: Ahrefs now rejects this endpoint
 // with 403 unless the request carries an API key, which is why every Domain
 // Rating check silently failed until AHREFS_API_KEY was wired up. The key is
-// free — create an Ahrefs account, then Account settings → API keys — and goes
+// free - create an Ahrefs account, then Account settings → API keys - and goes
 // in the VPS .env.local as AHREFS_API_KEY.
 //
 // Still rate-limited, so callers should cache results on the lead (see
@@ -17,7 +17,7 @@ const { hostOf } = require("./db.cjs");
 const ENDPOINT = "https://api.ahrefs.com/v3/public/domain-rating-free";
 const DEFAULT_TIMEOUT_MS = 10000;
 
-// AHREFS_TOKEN accepted as an alias — the docs call it a token, the settings
+// AHREFS_TOKEN accepted as an alias - the docs call it a token, the settings
 // screen calls it an API key, and guessing wrong shouldn't cost an afternoon.
 const apiKey = () => String(process.env.AHREFS_API_KEY || process.env.AHREFS_TOKEN || "").trim();
 const MISSING_KEY =
@@ -79,7 +79,7 @@ async function fetchDomainRating(rawTarget, { timeoutMs = DEFAULT_TIMEOUT_MS } =
   }
 }
 
-// Public Ahrefs site-search URL for a given host — linked from the leads page so
+// Public Ahrefs site-search URL for a given host - linked from the leads page so
 // users can confirm the cached DR. Falls back to a plain Google search.
 function ahrefsSiteUrl(host) {
   const h = hostOf(host);

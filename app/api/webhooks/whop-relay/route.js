@@ -4,7 +4,7 @@ import { handleWhopEvent } from "../../../../web/lib/whop-events.cjs";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// Whop relay receiver — accepts the original Whop payload that was forwarded
+// Whop relay receiver - accepts the original Whop payload that was forwarded
 // by webmarkaz.net (the marketing/frontend app) AFTER webmarkaz has already
 // verified the Whop HMAC signature. We authenticate the relay hop with a
 // shared secret in the X-Webmarkaz-Relay-Secret header instead of re-checking
@@ -38,7 +38,7 @@ export async function POST(request) {
   }
 
   // 2) Parse the forwarded Whop payload. It is the SAME raw body webmarkaz
-  //    received from Whop, with the same shape — no transformation.
+  //    received from Whop, with the same shape - no transformation.
   const raw = await request.text();
   let event;
   try {
@@ -47,7 +47,7 @@ export async function POST(request) {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  // 3) Dispatch — shared with the direct Whop endpoint.
+  // 3) Dispatch - shared with the direct Whop endpoint.
   const action = event?.action || event?.type || "unknown";
   try {
     const result = await handleWhopEvent(event);

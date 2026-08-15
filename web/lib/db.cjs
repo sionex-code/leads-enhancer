@@ -86,7 +86,7 @@ async function listProxies() {
   return rows.map((p) => ({ ...p, enabled: !!p.enabled }));
 }
 
-// Just the enabled proxy urls — what the scrapers rotate through.
+// Just the enabled proxy urls - what the scrapers rotate through.
 async function listEnabledProxyUrls() {
   const { rows } = await q(`SELECT url FROM proxies WHERE enabled = 1 ORDER BY id`);
   return rows.map((r) => r.url);
@@ -215,7 +215,7 @@ function normalizeLead(lead) {
 // Once ANY user enriches a business website (emails + socials), the result is
 // cached here keyed by domain (phone is a secondary lookup). Every later scrape
 // or on-demand enrich for that same domain reuses the cached data instead of
-// re-crawling the site — so an already-enriched business shows its email/socials
+// re-crawling the site - so an already-enriched business shows its email/socials
 // immediately, with no second check.
 const CACHE_FIELDS = [
   "email", "all_emails", "contact_page", "facebook", "instagram", "linkedin",
@@ -268,7 +268,7 @@ function hasUsefulCache(row) {
   return hasUsefulEnrichment(cacheFieldsFrom(row || {}));
 }
 
-// One cached row by domain (preferred), else by phone (digits-only) — but a phone
+// One cached row by domain (preferred), else by phone (digits-only) - but a phone
 // hit is only returned when it actually carries an email.
 async function getCachedEnrichment({ domain = "", website = "", phone = "" } = {}) {
   const d = hostOf(domain) || hostOf(website);
@@ -362,7 +362,7 @@ const FILL_SOCIALS = ["facebook", "instagram", "linkedin", "twitter", "youtube",
 
 // Backfill flat (CSV-shaped) lead objects IN PLACE from the shared caches. The
 // project workspace renders from the raw warehouse CSV, so enrichment/WhatsApp a
-// user runs after the find would vanish on reload (the session overlay is gone) —
+// user runs after the find would vanish on reload (the session overlay is gone) -
 // this restores it from the permanent caches. Only fills leads still missing the
 // data, so a fully-loaded project costs nothing.
 async function fillLeadsFromCaches(leads) {
@@ -404,7 +404,7 @@ async function upsertLeads(userId, leadObjs) {
   ).join(", ");
   // Build a single multi-row upsert for `rowCount` rows. Writing the whole batch
   // in one statement avoids a separate Supabase round-trip per lead (~250ms each
-  // from the VPS) — the dominant cost of a find. ON CONFLICT still returns one row
+  // from the VPS) - the dominant cost of a find. ON CONFLICT still returns one row
   // per affected lead, so we can count inserts vs updates from RETURNING.
   const buildSql = (rowCount) => {
     const cpr = insertCols.length;
@@ -420,7 +420,7 @@ async function upsertLeads(userId, leadObjs) {
   };
 
   // Normalize + dedup-key every row up front, dropping rows with no identity, and
-  // dedupe by key WITHIN the batch — a multi-row ON CONFLICT can't touch the same
+  // dedupe by key WITHIN the batch - a multi-row ON CONFLICT can't touch the same
   // (user_id, dedup_key) twice. Later non-empty fields overwrite earlier ones,
   // matching the field-by-field merge the ON CONFLICT clause performs.
   // `ownEnrichment` records whether the scrape/import itself carried enrichment,
@@ -474,7 +474,7 @@ async function upsertLeads(userId, leadObjs) {
     for (const row of res.rows) { returned++; if (row.inserted) inserted++; }
   };
   if (prepared.length <= CHUNK) {
-    // A single statement is atomic on its own — skip BEGIN/COMMIT round-trips.
+    // A single statement is atomic on its own - skip BEGIN/COMMIT round-trips.
     await runChunk(q, prepared);
   } else {
     const client = await pool().connect();
@@ -494,7 +494,7 @@ async function upsertLeads(userId, leadObjs) {
   const updated = returned - inserted;
 
   // (b) Save freshly-enriched businesses back to the shared cache so the next
-  // user who scrapes the same domain reuses it — in one batched upsert rather than
+  // user who scrapes the same domain reuses it - in one batched upsert rather than
   // a round-trip per domain. Only rows whose enrichment came from this
   // scrape/import (not values we just filled from the cache above).
   try {
@@ -552,7 +552,7 @@ async function upsertLeads(userId, leadObjs) {
 // tack on extras (queryLeads appends LIMIT/OFFSET). Both queryLeads and exportCsv
 // use this so the list view and the CSV export apply identical filtering.
 // reviews/rating arrive from the scrape as raw strings ("1,204", "4.6", ""), so
-// every numeric use of them has to cast defensively — a stray "." or "n/a" cast
+// every numeric use of them has to cast defensively - a stray "." or "n/a" cast
 // straight to a number would error the whole query, taking the leads table down
 // rather than just mis-filtering one row. The regex tests mean anything that
 // isn't a clean number simply reads as "not captured" (NULL), which is also the
@@ -809,7 +809,7 @@ async function getLeadListIds(userId, leadId) {
 }
 
 // Replace a lead's membership with exactly `listIds` (this user's own lists only).
-// Named lists are an independent dimension — contact_list / outreach are untouched.
+// Named lists are an independent dimension - contact_list / outreach are untouched.
 async function setLeadLists(userId, leadId, listIds) {
   const id = Number(leadId);
   const { rows: owned } = await q(`SELECT id FROM lists WHERE user_id = $1`, [userId]);
@@ -947,7 +947,7 @@ async function bulkSaveLeads(userId, rawLeads = []) {
   return entries.map((e) => (e && byKey.has(e.key) ? { id: byKey.get(e.key), dedup_key: e.key } : null));
 }
 
-// Delete by domain/name match — used by the agent ("delete the lead for x.com").
+// Delete by domain/name match - used by the agent ("delete the lead for x.com").
 async function deleteLeadsWhere(userId, { domain = "", search = "" } = {}) {
   if (domain) {
     const res = await q(`DELETE FROM leads WHERE user_id = $1 AND domain = $2`, [
@@ -1126,7 +1126,7 @@ async function exportCsv(userId, filters = {}) {
   return lines.join("");
 }
 
-// Just the ids matching a filter set — the work list for a CRM push. Separate
+// Just the ids matching a filter set - the work list for a CRM push. Separate
 // from queryLeads because that one pulls whole rows plus a per-row list_count
 // subquery; a push only needs to know *which* leads, and then loads them a
 // chunk at a time. Capped, like exportCsv, so a broad filter can't queue an
@@ -1193,7 +1193,7 @@ module.exports = {
   statsLeads,
   exportCsv,
   queryLeadIds,
-  // The allowlist a CRM field map validates its sources against — a mapping may
+  // The allowlist a CRM field map validates its sources against - a mapping may
   // only read columns that actually exist on a lead.
   LEAD_COLUMNS,
   WORKFLOW_COLUMNS,

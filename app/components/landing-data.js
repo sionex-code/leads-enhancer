@@ -3,7 +3,7 @@
 // Deliberately not inside Landing.js: that file is "use client", and the FAQ
 // also has to be readable by the server component that emits the FAQPage
 // structured data. One copy, so the rich result and the visible accordion can
-// never drift apart — Google treats a mismatch between them as a violation.
+// never drift apart - Google treats a mismatch between them as a violation.
 
 export const FAQ = [
   { q: "Do I need to install anything?", a: "You sign in with Google, no account setup beyond that. Most searches are answered straight from leads we already hold. For a city or niche we haven't indexed yet, you'll need the free Chrome extension: it runs that search live on your own machine instead of putting you in a queue." },

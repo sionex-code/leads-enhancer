@@ -1,4 +1,4 @@
-# LeadsFunda — Production Deploy Checklist
+# LeadsFunda - Production Deploy Checklist
 
 The app is a Next.js 16 (App Router) server backed by Postgres (Supabase). It runs
 as a single Node process under pm2 on the VPS (`onlano-prod`, 144.91.104.65) and is
@@ -7,15 +7,15 @@ retired/moved aside.
 
 ## 1. Environment (`.env` on the server)
 Copy `.env.example` → `.env` and fill in:
-- `DATABASE_URL` — Supabase **session pooler** URI (IPv4). The direct `db.<ref>` host
+- `DATABASE_URL` - Supabase **session pooler** URI (IPv4). The direct `db.<ref>` host
   is IPv6-only and will fail on the VPS. Password must be URL-encoded.
-- `AUTH_SECRET` — `openssl rand -base64 32`
+- `AUTH_SECRET` - `openssl rand -base64 32`
 - `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`
 - `NEXTAUTH_URL=https://leadsfunda.com`, `AUTH_TRUST_HOST=true`
 - `WHOP_API_KEY`, `WHOP_WEBHOOK_SECRET`, `WHOP_PLAN_19/35/49`, `WHOP_CHECKOUT_19/35/49`
 - `MAX_CONCURRENT_JOBS=6`, `FEATURE_AGENT=0`
-- `WAREHOUSE_URL` — base URL of the warehouse server (default `http://127.0.0.1:3200`); omit if co-located on the same VPS.
-- `WAREHOUSE_TOKEN` — copy from `gmaps-scraper-standalone/.warehouse-token.txt` on the worker VPS.
+- `WAREHOUSE_URL` - base URL of the warehouse server (default `http://127.0.0.1:3200`); omit if co-located on the same VPS.
+- `WAREHOUSE_TOKEN` - copy from `gmaps-scraper-standalone/.warehouse-token.txt` on the worker VPS.
 
 ## 2. Google OAuth (Google Cloud Console → Credentials → the OAuth client)
 - Authorized JavaScript origin: `https://leadsfunda.com`
@@ -57,7 +57,7 @@ basePath/`/leads` rewrite and the HTTP Basic auth.
 
 ## 8. Scaling a capability onto another VPS (optional)
 The four heavy capabilities (scraper / enrich / whatsapp / audit) are pluggable
-modules — in-process by default, offloadable to a worker on another box to balance
+modules - in-process by default, offloadable to a worker on another box to balance
 load. To move e.g. the **map scraper** to a second VPS:
 
 1. On the new VPS: clone the repo, `npm ci`, `npm run install-chrome` (scraper/audit
@@ -80,4 +80,4 @@ keep that capability in-process. Full details in `modules/README.md`.
 - The projects dashboard + leads table still use the legacy hand-written CSS; the new
   Tailwind/shadcn shell (landing, account/plan widget, sign-out) wraps them. A full
   table re-skin is the remaining UI polish.
-- `scripts/queue-smoke.cjs` is a dev test and runs `DELETE FROM jobs` — never run in prod.
+- `scripts/queue-smoke.cjs` is a dev test and runs `DELETE FROM jobs` - never run in prod.

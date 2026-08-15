@@ -5,10 +5,10 @@ const db = require("./db.cjs");
 
 // Two roots so the runner works both as the web app (repo) and inside the
 // Electron desktop build:
-//   ROOT      — where the runner scripts + node_modules live (read-only in the
+//   ROOT      - where the runner scripts + node_modules live (read-only in the
 //               packaged app: the standalone bundle). Used to locate web-runner.js
 //               / scrape.js etc. and as the child process cwd.
-//   DATA_ROOT — writable location for projects/output/leads.db (per-user in the
+//   DATA_ROOT - writable location for projects/output/leads.db (per-user in the
 //               desktop app via GMAPS_DATA_DIR).
 // Both default to process.cwd() so the normal web/CLI usage is unchanged.
 const ROOT = process.env.GMAPS_APP_ROOT || process.cwd();
@@ -48,7 +48,7 @@ function randomProjectId(len = 5) {
 }
 
 // Every project's stored publicId, read without the CSV/summary work
-// projectSummary does — this only ever needs to answer "is this id taken?".
+// projectSummary does - this only ever needs to answer "is this id taken?".
 function existingPublicIds(userId) {
   const root = projectRootFor(userId);
   ensureDir(root);
@@ -67,7 +67,7 @@ function existingPublicIds(userId) {
 }
 
 // A short, collision-checked id for support references and cross-project
-// lookups — the thing a user can read out loud or paste into a support
+// lookups - the thing a user can read out loud or paste into a support
 // message without pasting the whole project name. It used to be a bare
 // Math.random().toString(36) with no uniqueness check at all: fine odds for
 // any single pair, but with hundreds of projects per tenant the birthday
@@ -81,7 +81,7 @@ function uniquePublicId(userId) {
     if (!taken.has(candidate)) return candidate;
   }
   // 36^6 candidates exhausted 25 draws in a row is not a coincidence worth
-  // trusting further — widen it instead of trying again.
+  // trusting further - widen it instead of trying again.
   return `${randomProjectId(6)}${Date.now().toString(36).slice(-2).toUpperCase()}`;
 }
 
@@ -102,7 +102,7 @@ function uniqueProjectName(name, userId) {
 // Per-tenant project root. On the web server, each request passes the signed-in
 // userId so users never share project dirs (two users can both have a project
 // named "plumbers-miami" without colliding). Inside the runner child, userId is
-// omitted — its GMAPS_DATA_DIR is already set to the tenant dir by spawnRunner,
+// omitted - its GMAPS_DATA_DIR is already set to the tenant dir by spawnRunner,
 // so PROJECT_ROOT is per-tenant and projectRootFor() returns it directly.
 function projectRootFor(userId) {
   if (!userId) return PROJECT_ROOT;
@@ -299,7 +299,7 @@ function latestInputCsv(dir) {
   if (!raw) return enriched;
   // Prefer the enriched CSV only when it's at least as new as the latest raw
   // scrape. A stale enriched file (from an earlier run, or a differently-named
-  // query) must not shadow a fresher raw CSV — otherwise the UI shows "No leads
+  // query) must not shadow a fresher raw CSV - otherwise the UI shows "No leads
   // loaded" while a full raw scrape sits right next to it.
   return mtimeOf(enriched) >= mtimeOf(raw) ? enriched : raw;
 }
@@ -603,7 +603,7 @@ function loadStatus(slugOrName, userId) {
 const summaryCache = new Map();
 
 // Lightweight project summary for the sidebar list. Unlike loadStatus() this
-// does NOT build the full leads array, domain maps, or tail every log file — the
+// does NOT build the full leads array, domain maps, or tail every log file - the
 // sidebar only needs counts + the running flag, and doing the heavy work for
 // every project on every poll is what made the UI glitch under load.
 function projectSummary(dir) {
@@ -691,7 +691,7 @@ function spawnRunner(payload) {
   // to be cheap: it runs unattended right after every live search, on the same
   // box as the warehouse workers, so it stays on the plain-HTTP pass and skips
   // both the Playwright scroll fallback and the owner-reply pass (which drives a
-  // real Chrome through every lead's Maps page — minutes of browser time nobody
+  // real Chrome through every lead's Maps page - minutes of browser time nobody
   // asked for).
   if (payload.enrichFast) args.push("--noBrowser", "--no-owner-reply");
   if (payload.headless) args.push("--headless");

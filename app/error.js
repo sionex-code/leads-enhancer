@@ -19,7 +19,7 @@ export default function Error({ error, reset }) {
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
       <div className="relative w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl">
-        {/* Close button — always present so the overlay can never trap the user. */}
+        {/* Close button - always present so the overlay can never trap the user. */}
         <button
           type="button"
           onClick={close}

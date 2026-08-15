@@ -1,5 +1,5 @@
 // Provider registry. Same shape as llm.cjs's PROVIDERS map: adding a CRM means
-// writing one file and adding one line here — nothing else in the app knows the
+// writing one file and adding one line here - nothing else in the app knows the
 // difference between HubSpot and a webhook.
 const webhook = require("./webhook.cjs");
 const smartlead = require("./smartlead.cjs");
@@ -20,7 +20,7 @@ const PROVIDERS = {
 const get = (id) => PROVIDERS[String(id || "").toLowerCase()] || null;
 
 // What the connect UI needs to render a provider's form. Deliberately excludes
-// the runtime functions — this is serialized to the browser.
+// the runtime functions - this is serialized to the browser.
 const describeProvider = (p) => ({
   id: p.id,
   label: p.label,

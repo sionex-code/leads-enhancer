@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Website auditor: fast patchright (real Chrome) audit of each lead's website,
 // saving a full HTML report per site plus a scores summary CSV. Replaces the old
-// Google Lighthouse runner (which took ~60s/site) — this loads each page once
+// Google Lighthouse runner (which took ~60s/site) - this loads each page once
 // (~5-20s) and scores performance, layout, mobile, SEO, security, accessibility.
 //
 // Usage:

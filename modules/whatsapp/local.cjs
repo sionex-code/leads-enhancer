@@ -1,4 +1,4 @@
-// WhatsApp-checker module — LOCAL backend. Wraps whatsapp.cjs (the OpenWA client)
+// WhatsApp-checker module - LOCAL backend. Wraps whatsapp.cjs (the OpenWA client)
 // and the project-aware batch stage that used to live inline in web-runner.cjs.
 const path = require("path");
 const waCjs = require("../../whatsapp.cjs");
@@ -29,8 +29,8 @@ async function runFile({ ROOT, inputPath, params = {}, logFile }) {
 
 module.exports = {
   checkNumber,
-  normalizePhone: waCjs.normalizePhone, // pure — always local
-  dialingCode: waCjs.dialingCode, // pure — always local
+  normalizePhone: waCjs.normalizePhone, // pure - always local
+  dialingCode: waCjs.dialingCode, // pure - always local
   runBatch,
   runFile,
 };

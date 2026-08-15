@@ -36,7 +36,7 @@ export async function POST(request, { params }) {
 
   const mapped = mapping.applyFieldMap(lead, valid.map);
 
-  // Which mapped fields came out empty for this lead — the usual reason a CRM
+  // Which mapped fields came out empty for this lead - the usual reason a CRM
   // later rejects a row, and much cheaper to notice here.
   const warnings = [];
   for (const f of adapter.mappableFields || []) {

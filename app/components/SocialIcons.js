@@ -73,7 +73,7 @@ const MISSING_SHOWN = ["facebook", "instagram", "linkedin", "twitter"];
 // colour on hover, rather than as a row of saturated chips: in a table of fifty
 // rows, eight full-colour badges per row is the loudest thing on screen and it
 // is never the thing anyone is looking for. `tone="brand"` keeps the old filled
-// chips for surfaces where a couple of them read as a detail rather than noise —
+// chips for surfaces where a couple of them read as a detail rather than noise -
 // the lead drawer, the mobile cards.
 //
 // With `showMissing`, absent networks render as faint outlines next to the
@@ -81,8 +81,8 @@ const MISSING_SHOWN = ["facebook", "instagram", "linkedin", "twitter"];
 // opportunity rather than as empty space.
 export function Socials({ lead, showMissing = false, tone = "subtle" }) {
   // Validate on the way out as well as on the way in. Rows enriched before the
-  // rule tightened still hold things like "facebook.com/people" — Facebook's
-  // directory index — and an icon that promises a profile and delivers a
+  // rule tightened still hold things like "facebook.com/people" - Facebook's
+  // directory index - and an icon that promises a profile and delivers a
   // listing page is worse than no icon. A rejected link counts as missing.
   const href = (key) => cleanSocialUrl(lead[key], key);
   const present = SOCIALS.filter((s) => href(s.key));

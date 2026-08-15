@@ -2,7 +2,7 @@ import pub from "../../../../web/lib/public-searches.cjs";
 
 export const dynamic = "force-dynamic";
 
-// Feeds the landing page's live list. Public and unauthenticated by design —
+// Feeds the landing page's live list. Public and unauthenticated by design -
 // it returns only what the directory already publishes (city, service, country,
 // row count), never a user or a typed query.
 export async function GET() {

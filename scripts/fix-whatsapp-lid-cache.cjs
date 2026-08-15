@@ -68,7 +68,7 @@ async function main() {
       }
     }
   }
-  console.log(`leads: ${fixedCount} fixed, ${clearedCount} cleared for re-check${DRY_RUN ? " (dry run — nothing written)" : ""}`);
+  console.log(`leads: ${fixedCount} fixed, ${clearedCount} cleared for re-check${DRY_RUN ? " (dry run - nothing written)" : ""}`);
 
   await db.end();
 }

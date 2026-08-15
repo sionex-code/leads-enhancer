@@ -7,8 +7,8 @@ import { signIn } from "next-auth/react";
 // auth (e.g. /dashboard, or /billing?plan=p35 from a pricing CTA on the landing).
 //
 // The auto-redirect used to be the *only* path through this page: if it didn't
-// fire — blocked redirect, a hiccup during hydration, an expired PKCE cookie
-// bouncing the user back with ?error= — the page sat on its spinner forever with
+// fire - blocked redirect, a hiccup during hydration, an expired PKCE cookie
+// bouncing the user back with ?error= - the page sat on its spinner forever with
 // no button to press and no explanation. Everything below exists so this screen
 // can never become a dead end.
 const ERRORS = {
@@ -26,7 +26,7 @@ export default function LoginRedirect() {
   const [slow, setSlow] = useState(false);
 
   useEffect(() => {
-    // Don't bounce straight back to Google after a failure — that loops the
+    // Don't bounce straight back to Google after a failure - that loops the
     // user through the same error. Let them read it and choose to retry.
     if (errorCode) return;
     signIn("google", { callbackUrl });
