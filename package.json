@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node scrape.js",
     "dev": "next dev -H 0.0.0.0 -p 3000",
-    "build": "next build",
+    "build": "npm run check:shadowed && next build",
     "start:web": "next start -H 0.0.0.0",
     "scrape": "node scrape.js",
     "enrich": "node enrich.js",
@@ -27,7 +27,8 @@
     "electron": "electron electron/main.cjs",
     "electron:build": "npm run build:standalone && npm run electron",
     "dist": "npm run build:standalone && node scripts/pack-electron.cjs",
-    "dist:dir": "npm run build:standalone && node scripts/pack-electron.cjs --dir"
+    "dist:dir": "npm run build:standalone && node scripts/pack-electron.cjs --dir",
+    "check:shadowed": "node scripts/check-shadowed-globals.cjs"
   },
   "bin": {
     "gmaps-scrape": "scrape.js"

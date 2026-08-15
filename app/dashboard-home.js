@@ -41,7 +41,11 @@ import {
   SlidersHorizontal,
   Share2,
   TrendingUp,
-  Map,
+  // Aliased, and it must stay aliased: a bare `Map` here shadows the global
+  // Map constructor for the whole module, and this file builds four of them -
+  // including one at module scope, which takes the entire dashboard down with
+  // "Map is not a constructor" before it can render.
+  Map as MapIcon,
   MapPin,
   MoreHorizontal,
   LocateFixed,
@@ -993,7 +997,7 @@ function LiveAreaPicker({ countryCode, onCountry, city, onCity, onCountryCities 
                   }}
                   className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent"
                 >
-                  <Map className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <MapIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   <span className="min-w-0 flex-1 truncate">
                     All of {p.n}
                   </span>
