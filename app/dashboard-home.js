@@ -807,6 +807,47 @@ function provincesOf(cities) {
   return [...by.values()].sort((a, b) => b.count - a.count);
 }
 
+// ---- live query text ---------------------------------------------------------
+// Pure so they can be tested directly; the component holds the state, these
+// decide what the search box should say.
+
+// The place half, from the live pickers. A province arrives as a city with no
+// state of its own, so this yields "Punjab, Pakistan" rather than a city name.
+function livePlaceTextOf(liveCity, countryName) {
+  return liveCity
+    ? [liveCity.n, liveCity.s, countryName].filter(Boolean).join(", ")
+    : countryName || "";
+}
+
+// Split "plumber in Austin, TX" into its keyword and place halves.
+function splitQueryText(query) {
+  const parts = String(query || "").trim().split(/(?:^|\s)in\s/i);
+  return {
+    keyword: (parts[0] || "").trim(),
+    place: parts.length > 1 ? parts.slice(1).join(" in ").trim() : "",
+  };
+}
+
+// The keyword for a live search, and *only* one the user actually chose: what
+// they picked in "Business type", else what they typed in the box.
+//
+// Deliberately no fall back to the warehouse `service` state. That select is
+// hidden in live mode and sits on the catalog's most common value, so borrowing
+// it filled the box with "general contractor in Punjab, Pakistan" for someone
+// who had only chosen a place - a keyword they never picked and could not see.
+function liveKeywordOf(liveService, query) {
+  return (liveService || splitQueryText(query).keyword || "").trim();
+}
+
+// Keyword + place, or nothing at all. An empty keyword must not produce
+// " in Punjab, Pakistan", which reads as broken; submit falls back to the
+// pickers anyway, so an empty box loses nothing.
+function composeLiveQuery(keyword, place) {
+  const k = String(keyword || "").trim();
+  if (!k) return "";
+  return (place ? `${k} in ${place}` : k).replace(/\s+/g, " ").trim();
+}
+
 function filterProvinces(provinces, text, cap = 5) {
   const t = normPlace(text);
   if (!t) return [];
@@ -1361,21 +1402,20 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
   // extension geocodes exactly this text. The live pickers therefore edit one
   // half of it each and leave the other alone, rather than each rebuilding the
   // whole string from their own state and clobbering the other's choice.
-  function splitQuery() {
-    const parts = query.trim().split(/(?:^|\s)in\s/i);
-    return {
-      keyword: (parts[0] || "").trim(),
-      place: parts.length > 1 ? parts.slice(1).join(" in ").trim() : "",
-    };
-  }
+  const splitQuery = () => splitQueryText(query);
+
+  // Read the place from the pickers, not from the search box: the box is now
+  // left empty until there is a business type to put in front of the place, so
+  // it cannot always answer this, and the pickers always can.
+  const livePlaceText = () => livePlaceTextOf(liveCity, liveCountryName);
+  const liveKeyword = () => liveKeywordOf(liveService, query);
+  const setLiveQuery = (keyword, place) => setQuery(composeLiveQuery(keyword, place));
 
   function pickLiveService(s) {
     touched.current.service = true;
     touched.current.query = true;
     setLiveService(s);
-    const { place } = splitQuery();
-    const next = place ? `${s} in ${place}` : s;
-    setQuery(next.replace(/\s+/g, " ").trim());
+    setLiveQuery(s, livePlaceText());
   }
 
   // Changing the country used to only swap the city list: the search box still
@@ -1391,8 +1431,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     setLiveCity(null);
     setLiveCountryName(countryName || "");
     if (!countryName) return;
-    const keyword = liveService || splitQuery().keyword || service;
-    setQuery(`${keyword} in ${countryName}`.replace(/\s+/g, " ").trim());
+    setLiveQuery(liveKeyword(), countryName);
   }
 
   // Move the map onto the new country as soon as its city list lands, using its
@@ -1417,7 +1456,6 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     if (Number.isFinite(c?.la) && Number.isFinite(c?.ln)) {
       setCenter({ lat: c.la, lng: c.ln });
     }
-    const keyword = liveService || splitQuery().keyword || service;
     // State disambiguates: "Austin" alone is four different places, and the
     // extension geocodes this text to decide where to grid.
     //
@@ -1425,7 +1463,7 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
     // join yields "Punjab, Pakistan" rather than a city name - which is what
     // makes searching a whole province need nothing more than this.
     const place = [c.n, c.s, countryName].filter(Boolean).join(", ");
-    setQuery(`${keyword} in ${place}`.replace(/\s+/g, " ").trim());
+    setLiveQuery(liveKeyword(), place);
   }
 
   // Take a suggestion. This sets the three selects rather than only rewriting the
@@ -1697,14 +1735,21 @@ function QuickScrapeHome({ busy, onFind, onOpenDashboard, error, needPlan, count
   // would search a city the user never saw. Empty when there is nothing to go
   // on, which is what keeps the submit button disabled.
   const queryFromPickers = useCallback(() => {
-    const svc = (liveService || service || "").trim();
     if (source === "live") {
+      // Live mode shows only its own business-type picker, so only that counts.
+      // Falling back to `service` here would put the hidden warehouse default
+      // back into the search the moment the box was left empty - the same
+      // invented "general contractor" the pickers no longer write.
+      const liveSvc = (liveService || "").trim();
       const place = liveCity
         ? [liveCity.n, liveCity.s, liveCountryName].filter(Boolean).join(", ")
         : liveCountryName;
-      if (!svc || !place) return "";
-      return `${svc} in ${place}`.replace(/\s+/g, " ").trim();
+      if (!liveSvc || !place) return "";
+      return `${liveSvc} in ${place}`.replace(/\s+/g, " ").trim();
     }
+    // The warehouse form does show its Service select, so its value is a
+    // choice the user can see and change - fair to build from.
+    const svc = (liveService || service || "").trim();
     if (!svc || (!allCities && !cityObj?.name) || !country?.name) return "";
     return buildQuery(svc, allCities ? null : cityObj, country);
   }, [source, liveService, service, liveCity, liveCountryName, allCities, cityObj, country]);
