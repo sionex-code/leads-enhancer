@@ -1,18 +1,51 @@
 // Instantly - cold email campaigns (API v2).
 //
-// Like Smartlead, a push means "add these businesses to a campaign". v2 keys
+// A push means "add these businesses to a campaign *or* to a lead list". v2 keys
 // are Bearer tokens and are NOT the same as v1 keys; v2 access needs Growth or
 // above, which is worth saying in the form rather than letting a Basic-plan key
 // fail with a bare 401.
 //
-// Dedupe is Instantly's own: skip_if_in_campaign is sent on every lead, so
-// re-pushing a list does not duplicate anyone.
+// Campaign or list, never both: /leads/add refuses a request carrying
+// campaign_id and list_id together with
+// "Cannot add leads to both a campaign and a list in the same request."
+// That refusal is the whole reason the destination is one picker rather than
+// two checkboxes. It matters because the two land in different places in
+// Instantly's own UI: campaign leads are only visible inside that campaign,
+// while list leads are what the sidebar's Leads section shows. Pushing to a
+// campaign and then hunting for the leads under Leads finds nothing, which
+// reads exactly like a push that silently failed.
+//
+// Dedupe is Instantly's own: skip_if_in_campaign / skip_if_in_list is sent on
+// every lead, so re-pushing a list does not duplicate anyone.
 // https://developer.instantly.ai/api-reference/lead/add-leads-in-bulk-to-a-campaign-or-list
 const crypto = require("node:crypto");
 const { fetchJson, describe, retryable } = require("./http.cjs");
 
 const API = "https://api.instantly.ai/api/v2";
 const LABEL = "Instantly";
+
+// Where a push is aimed. Stored in the `campaignId` config key as
+// "campaign:<id>" or "list:<id>"; the key keeps its old name so connections
+// made before lists existed keep working, and their bare id still means a
+// campaign.
+// `value` comes back canonical - always prefixed - even when what was stored
+// was a bare id, so it can be matched against listTargets() without every
+// caller having to know the old shape.
+function destinationOf(config) {
+  const raw = String(config?.campaignId || "").trim();
+  if (!raw) return null;
+  const m = /^(campaign|list):(.+)$/.exec(raw);
+  return m
+    ? { kind: m[1], id: m[2], value: raw }
+    : { kind: "campaign", id: raw, value: `campaign:${raw}` };
+}
+
+// Instantly's campaign status codes. Only the ones worth a word are named: the
+// negatives are all trouble of some kind (suspended workspace, unhealthy
+// sending accounts, bounce protection), and saying which is less useful than
+// saying "look at this one".
+const CAMPAIGN_STATUS = { 0: "draft", 1: "active", 2: "paused", 3: "completed" };
+const statusHint = (s) => CAMPAIGN_STATUS[s] || (Number(s) < 0 ? "needs attention" : "");
 
 // Every plan caps how many leads the workspace may upload, and /leads/add is
 // all-or-nothing about it: a batch larger than what is left is refused whole,
@@ -80,7 +113,7 @@ const planExhausted = (it) => ({
 });
 
 // Send one group, splitting it to fit whatever the plan has left.
-async function send(creds, config, campaignId, group) {
+async function send(creds, config, dest, group) {
   if (!group.length) return [];
   const key = keyOf(creds);
 
@@ -90,8 +123,8 @@ async function send(creds, config, campaignId, group) {
   if (Number.isInteger(known) && known < group.length) {
     if (known <= 0) return group.map(planExhausted);
     return [
-      ...(await send(creds, config, campaignId, group.slice(0, known))),
-      ...(await send(creds, config, campaignId, group.slice(known))),
+      ...(await send(creds, config, dest, group.slice(0, known))),
+      ...(await send(creds, config, dest, group.slice(known))),
     ];
   }
 
@@ -99,11 +132,13 @@ async function send(creds, config, campaignId, group) {
     method: "POST",
     headers: auth(creds),
     body: JSON.stringify({
-      campaign_id: campaignId,
+      // One or the other - sending both is a 400. Instantly does the deduping
+      // for us either way, which is what keeps a re-push from adding the same
+      // business twice.
+      ...(dest.kind === "list"
+        ? { list_id: dest.id, skip_if_in_list: true }
+        : { campaign_id: dest.id, skip_if_in_campaign: true }),
       leads: group.map((it) => it.mapped),
-      // Instantly does the deduping for us, which is what keeps a re-push
-      // from adding the same business to a campaign twice.
-      skip_if_in_campaign: true,
       verify_leads_on_import: config?.verifyOnImport === "yes",
     }),
     timeoutMs: 60000,
@@ -116,8 +151,8 @@ async function send(creds, config, campaignId, group) {
       if (group.length > 1) {
         const mid = Math.ceil(group.length / 2);
         return [
-          ...(await send(creds, config, campaignId, group.slice(0, mid))),
-          ...(await send(creds, config, campaignId, group.slice(mid))),
+          ...(await send(creds, config, dest, group.slice(0, mid))),
+          ...(await send(creds, config, dest, group.slice(mid))),
         ];
       }
       rememberRemaining(key, 0);
@@ -170,8 +205,11 @@ module.exports = {
       help: "Instantly → Settings → Integrations → API keys → create a V2 key with the leads:create scope (or All). A V1 key will not work here." },
   ],
   configFields: [
-    { key: "campaignId", label: "Campaign", type: "remote-select", required: true,
-      help: "Which campaign new leads are added to." },
+    // Still keyed `campaignId` so existing connections keep working - see
+    // destinationOf(). The label is what the user reads, and it is no longer
+    // only campaigns.
+    { key: "campaignId", label: "Destination", type: "remote-select", required: true,
+      help: "A campaign starts sending to these leads. A lead list just stores them, and is what Instantly's own Leads screen shows." },
     // Prominent, not behind "Advanced": Instantly only verifies at import, so a
     // push made with this off leaves leads that cannot be verified from its UI
     // afterwards. The cost of asking is one extra line; the cost of not asking
@@ -209,19 +247,52 @@ module.exports = {
     return { ok: true, account: { name: "Instantly workspace" } };
   },
 
+  // Campaigns and lead lists in one picker, because Instantly makes you choose
+  // one. One page of each is plenty; Instantly pages with starting_after.
   async listTargets(creds) {
-    // One page is plenty for a picker; Instantly pages with starting_after.
-    const res = await fetchJson(`${API}/campaigns?limit=100`, { headers: auth(creds) });
-    if (!res.ok) return fail(res);
-    const items = res.data?.items || [];
-    return {
-      ok: true,
-      targets: items.map((c) => ({
-        value: String(c.id),
-        label: c.name || `Campaign ${c.id}`,
-        hint: c.status ? String(c.status) : "",
-      })),
-    };
+    const [campaigns, lists] = await Promise.all([
+      fetchJson(`${API}/campaigns?limit=100`, { headers: auth(creds) }),
+      fetchJson(`${API}/lead-lists?limit=100`, { headers: auth(creds) }),
+    ]);
+    // Campaigns are the load-bearing half: if that call fails the key or the
+    // plan is the problem, and there is nothing to choose from.
+    if (!campaigns.ok) return fail(campaigns);
+
+    const targets = (campaigns.data?.items || []).map((c) => ({
+      value: `campaign:${c.id}`,
+      label: c.name || `Campaign ${c.id}`,
+      hint: statusHint(c.status),
+      group: "Campaigns",
+    }));
+
+    // Lists are the nice half. A workspace with none, or a key scoped without
+    // them, must still be able to pick a campaign rather than see an error.
+    if (lists.ok) {
+      for (const l of lists.data?.items || []) {
+        targets.push({
+          value: `list:${l.id}`,
+          label: l.name || `List ${l.id}`,
+          hint: "list",
+          group: "Lead lists",
+        });
+      }
+    }
+    return { ok: true, targets };
+  },
+
+  destinationOf,
+
+  // Where to actually look for these leads once they land. Instantly hides
+  // campaign leads inside the campaign, so "check your Leads page" is wrong
+  // half the time - which is the confusion this whole path exists to end.
+  describeDestination({ kind, label }) {
+    const name = label ? `"${label}"` : "the one you chose";
+    return kind === "list"
+      ? { path: `Leads → ${name}` }
+      : {
+          path: `Campaigns → ${name} → Leads`,
+          note: "Leads added to a campaign do not appear under Instantly's own Leads section - that lists only lead lists. Open the campaign itself to see them.",
+        };
   },
 
   // /leads/add takes 1000 at a time. The single-lead POST /leads works too, but
@@ -230,24 +301,24 @@ module.exports = {
   batchSizeFor: () => 1000,
 
   async pushBatch(creds, config, items) {
-    const campaignId = config?.campaignId;
-    if (!campaignId) {
+    const dest = destinationOf(config);
+    if (!dest) {
       return items.map((it) => ({
         leadId: it.lead.id, ok: false, retryable: false,
-        error: "No Instantly campaign chosen for this integration - pick one in Integrations.",
+        error: "No Instantly campaign or lead list chosen for this integration - pick one in Integrations.",
       }));
     }
 
     const out = [];
     const sendable = [];
     for (const it of items) {
-      // With a campaign (rather than a list) Instantly requires an email.
+      // Instantly keys a lead on its email whichever destination it goes to.
       if (!it.mapped.email) out.push({ leadId: it.lead.id, ok: true, skipped: true, reason: "no email" });
       else sendable.push(it);
     }
     if (!sendable.length) return out;
 
-    out.push(...(await send(creds, config, campaignId, sendable)));
+    out.push(...(await send(creds, config, dest, sendable)));
     return out;
   },
 

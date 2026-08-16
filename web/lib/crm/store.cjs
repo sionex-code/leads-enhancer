@@ -220,6 +220,13 @@ async function patchJob(jobId, patch = {}) {
   })) {
     if (patch[key] !== undefined) push(col, patch[key]);
   }
+  // Written once, by the runner, to record the resolved destination. Cast
+  // explicitly: `source` is jsonb, and a bare string parameter would be
+  // rejected rather than stored.
+  if (patch.source !== undefined) {
+    params.push(JSON.stringify(patch.source));
+    sets.push(`source = $${params.length}::jsonb`);
+  }
   push("heartbeat_at", now());
   const { rows } = await q(
     `UPDATE crm_push_jobs SET ${sets.join(", ")} WHERE id = $1 RETURNING *`,

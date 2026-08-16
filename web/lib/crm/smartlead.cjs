@@ -84,6 +84,19 @@ module.exports = {
     };
   },
 
+  // Smartlead only has campaigns, so the destination is never in doubt - but
+  // the push summary asks every adapter the same question, and answering it
+  // here is what lets the summary name the campaign instead of saying
+  // "your CRM".
+  destinationOf(config) {
+    const id = String(config?.campaignId || "").trim();
+    return id ? { kind: "campaign", id, value: id } : null;
+  },
+
+  describeDestination({ label }) {
+    return { path: `Campaigns → ${label ? `"${label}"` : "the one you chose"} → Leads` };
+  },
+
   // 400 is Smartlead's documented ceiling per request; the runner chunks at 25,
   // so one call per chunk.
   batchSize: 400,

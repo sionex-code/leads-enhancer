@@ -70,6 +70,19 @@ async function run(jobId) {
   const fieldMap = opened.connection.field_map?.length ? opened.connection.field_map : adapter.defaultFieldMap;
   const leadIds = job.lead_ids || [];
 
+  // Resolved once, at the start, and written onto the job so the push summary
+  // can say where the leads actually went. Best-effort by design: naming the
+  // destination is a courtesy, and a slow or unhappy listTargets must never be
+  // the reason a push does not run.
+  if (!job.source?.destination) {
+    const destination = await resolveDestination(adapter, opened.credentials, config);
+    if (destination) {
+      const source = { ...(job.source || {}), destination };
+      await store.patchJob(jobId, { source });
+      job.source = source;
+    }
+  }
+
   let { done, succeeded, failed, skipped, cursor } = job;
   let authFailures = 0;
   let quotaHit = false;
@@ -151,6 +164,35 @@ async function run(jobId) {
 
   await store.updateConnection(job.user_id, job.connection_id, { lastPushAt: new Date().toISOString() });
   return finish(job, "done", lastError, { done, succeeded, failed, skipped, cursor });
+}
+
+// What the push is aimed at, named well enough to repeat back to the user.
+// The id alone is in the config already; the point of this is the label, which
+// only the CRM knows.
+async function resolveDestination(adapter, credentials, config) {
+  if (!adapter.destinationOf) return null;
+  const want = adapter.destinationOf(config);
+  if (!want) return null;
+
+  let label = null;
+  try {
+    const listed = await adapter.listTargets?.(credentials, config);
+    if (listed?.ok) label = listed.targets?.find((t) => t.value === want.value)?.label || null;
+  } catch {
+    // A destination we can point at by kind but not by name is still worth
+    // recording - "your Instantly campaign" beats "your CRM".
+  }
+
+  const described = adapter.describeDestination?.({ kind: want.kind, label }) || {};
+  return {
+    provider: adapter.id,
+    providerLabel: adapter.label,
+    kind: want.kind,
+    id: want.id,
+    label,
+    path: described.path || null,
+    note: described.note || null,
+  };
 }
 
 // Leads come back in the order given, so a batch adapter's results line up.

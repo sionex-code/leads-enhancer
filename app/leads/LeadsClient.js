@@ -683,6 +683,8 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
   // tracked by job id and polled, exactly like the report/audit batches.
   const [crmDialog, setCrmDialog] = useState(null);
   const [crmJob, setCrmJob] = useState(null);
+  // The finished job, held so its summary dialog outlives the progress toast.
+  const [crmDone, setCrmDone] = useState(null);
   const [crmFailures, setCrmFailures] = useState(null);
   const crmPollRef = useRef(null);
   const batchPollRef = useRef(null);
@@ -884,7 +886,13 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
       if (!job) return;
       setCrmJob(job);
       const finished = ["done", "failed", "cancelled"].includes(job.status);
-      if (!finished) crmPollRef.current = setTimeout(tick, 2500);
+      if (!finished) { crmPollRef.current = setTimeout(tick, 2500); return; }
+      // Hand off from the corner toast to a summary dialog. The toast is the
+      // right shape for "still going, leave me alone"; the outcome is worth
+      // interrupting for, because it is the only place the user is told where
+      // the leads actually landed.
+      setCrmJob(null);
+      setCrmDone(job);
     };
     tick();
   }, []);
@@ -909,6 +917,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
     try {
       const d = await jsonFetch(`/api/crm/push/${jobId}/retry`, { method: "POST" });
       setCrmFailures(null);
+      setCrmDone(null);
       setCrmJob({ id: d.jobId, status: "queued", total: d.total, done: 0, succeeded: 0, failed: 0, skipped: 0, connection: d.connection });
       pollCrmJob(d.jobId);
     } catch (e) { alert(e.message); }
@@ -1894,76 +1903,118 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
         />
       )}
 
-      {/* CRM push progress. Counts are always shown, including skipped - a
-          silent "done" after 41 leads were skipped reads as a broken feature. */}
+      {/* CRM push progress, while it runs. The outcome is not shown here - it
+          moves to the summary dialog below the moment the job finishes. */}
       {crmJob && (() => {
-        const finished = ["done", "failed", "cancelled"].includes(crmJob.status);
         const pct = crmJob.total ? Math.round((crmJob.done / crmJob.total) * 100) : 0;
-        const broke = crmJob.status === "failed" || (finished && crmJob.failed > 0);
         return (
           <div className="fixed bottom-4 right-4 z-50 w-80 rounded-xl border border-border bg-card p-4 shadow-xl">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                {!finished ? <Loader2 size={16} className="animate-spin text-primary" />
-                  : broke ? <AlertTriangle size={16} className="text-amber-500" />
-                  : <CheckCircle2 size={16} className="text-emerald-500" />}
-                {!finished
-                  ? `Sending to ${crmJob.connection?.label || "your CRM"}…`
-                  : crmJob.status === "cancelled" ? "Push cancelled"
-                  : broke ? `${crmJob.succeeded} sent, ${crmJob.failed} failed`
-                  : `${crmJob.succeeded} lead${crmJob.succeeded === 1 ? "" : "s"} sent`}
-              </div>
-              {finished && (
-                <button onClick={() => setCrmJob(null)} className="shrink-0 text-muted-foreground hover:text-foreground" title="Dismiss">
-                  <X size={16} />
-                </button>
-              )}
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <Loader2 size={16} className="animate-spin text-primary" />
+              Sending to {crmJob.connection?.label || "your CRM"}…
             </div>
 
             <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-muted">
-              <div
-                className={cn("h-full rounded-full transition-[width] duration-500",
-                  !finished ? "bg-primary" : broke ? "bg-amber-500" : "bg-emerald-500")}
-                style={{ width: `${pct}%` }}
-              />
+              <div className="h-full rounded-full bg-primary transition-[width] duration-500" style={{ width: `${pct}%` }} />
             </div>
             <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
               <span>{crmJob.done} / {crmJob.total}</span>
               <span>{pct}%</span>
             </div>
-            {crmJob.skipped ? (
-              <p className="mt-1.5 text-[11px] text-muted-foreground">{crmJob.skipped} skipped (unchanged or nothing to send)</p>
-            ) : null}
-            {crmJob.lastError ? (
-              <p className="mt-1.5 text-[11px] text-destructive">{crmJob.lastError}</p>
-            ) : null}
 
-            <div className="mt-2.5 flex flex-wrap items-center gap-2">
-              {!finished && (
-                <button onClick={() => cancelCrmPush(crmJob.id)}
-                        className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-medium hover:bg-accent">
-                  Cancel
-                </button>
-              )}
-              {finished && crmJob.failed > 0 && (
-                <>
-                  <button onClick={() => openCrmFailures(crmJob.id)}
-                          className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-medium hover:bg-accent">
-                    View failures
-                  </button>
-                  <button onClick={() => retryCrmPush(crmJob.id)}
-                          className="rounded-lg bg-primary px-2.5 py-1 text-[11px] font-semibold text-primary-foreground hover:opacity-90">
-                    Retry failed
-                  </button>
-                </>
-              )}
-              {crmJob.status === "failed" && (
-                <Link href="/integrations" className="text-[11px] font-medium text-primary hover:underline">
-                  Check the integration
-                </Link>
-              )}
+            <div className="mt-2.5">
+              <button onClick={() => cancelCrmPush(crmJob.id)}
+                      className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-medium hover:bg-accent">
+                Cancel
+              </button>
             </div>
           </div>
+        );
+      })()}
+
+      {/* How a push ends. Counts are always shown, including skipped - a silent
+          "done" after 41 leads were skipped reads as a broken feature - and so
+          is the destination, because "it worked" is useless if the user then
+          cannot find the leads. */}
+      {crmDone && (() => {
+        const broke = crmDone.status === "failed" || crmDone.failed > 0;
+        const cancelled = crmDone.status === "cancelled";
+        const dest = crmDone.destination;
+        const title = cancelled ? "Push cancelled"
+          : crmDone.status === "failed" && !crmDone.succeeded ? "Nothing was sent"
+          : broke ? "Sent, with problems"
+          : `${crmDone.succeeded} lead${crmDone.succeeded === 1 ? "" : "s"} sent`;
+        return (
+          <Dialog open onOpenChange={(v) => { if (!v) setCrmDone(null); }}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  {cancelled ? <AlertTriangle size={18} className="text-muted-foreground" />
+                    : broke ? <AlertTriangle size={18} className="text-amber-500" />
+                    : <CheckCircle2 size={18} className="text-emerald-500" />}
+                  {title}
+                </DialogTitle>
+                <DialogDescription>
+                  {crmDone.connection?.label || "Your CRM"} · {crmDone.total} lead{crmDone.total === 1 ? "" : "s"} in this push.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 p-5">
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  {[["Sent", crmDone.succeeded, "text-emerald-600 dark:text-emerald-400"],
+                    ["Skipped", crmDone.skipped, "text-muted-foreground"],
+                    ["Failed", crmDone.failed, crmDone.failed ? "text-destructive" : "text-muted-foreground"]].map(([label, n, tone]) => (
+                    <div key={label} className="rounded-lg border border-border bg-muted/20 p-2.5">
+                      <p className={cn("text-lg font-semibold tabular-nums", tone)}>{n || 0}</p>
+                      <p className="text-[11px] text-muted-foreground">{label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* The answer to "where did they go". Only shown when the push
+                    actually put something there. */}
+                {dest && crmDone.succeeded > 0 ? (
+                  <div className="rounded-lg border border-border bg-muted/20 p-3">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Where to find them</p>
+                    <p className="mt-1 text-sm text-foreground">
+                      In {dest.providerLabel || crmDone.connection?.label}: <span className="font-medium">{dest.path}</span>
+                    </p>
+                    {dest.note ? (
+                      <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">{dest.note}</p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {crmDone.skipped > 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Skipped leads were already there, unchanged since their last push, or had no email to send.
+                  </p>
+                ) : null}
+
+                {crmDone.lastError ? (
+                  <p className="rounded-lg border border-destructive/40 bg-destructive/5 p-2.5 text-xs text-destructive">
+                    {crmDone.lastError}
+                  </p>
+                ) : null}
+              </div>
+
+              <DialogFooter>
+                {crmDone.status === "failed" ? (
+                  <Button asChild variant="outline">
+                    <Link href="/integrations">Check the integration</Link>
+                  </Button>
+                ) : null}
+                {crmDone.failed > 0 ? (
+                  <>
+                    <Button variant="outline" onClick={() => openCrmFailures(crmDone.id)}>View failures</Button>
+                    <Button onClick={() => retryCrmPush(crmDone.id)}>Retry failed</Button>
+                  </>
+                ) : (
+                  <Button onClick={() => setCrmDone(null)}>Done</Button>
+                )}
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         );
       })()}
 

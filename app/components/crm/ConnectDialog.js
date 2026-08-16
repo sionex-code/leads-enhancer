@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, CheckCircle2, AlertTriangle, ExternalLink } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../ui/dialog";
 import { Button } from "../ui/button";
@@ -174,12 +174,10 @@ function QuickConnect({ provider, onClose, onSaved }) {
             <div key={f.key} className="space-y-1">
               <label htmlFor={`ct-${f.key}`} className="text-xs font-medium text-muted-foreground">Send leads to</label>
               {probe.targets?.length ? (
-                <Select id={`ct-${f.key}`} value={config[f.key] ?? ""}
+                <Select id={`ct-${f.key}`} value={selectedTarget(config[f.key], probe.targets)}
                         onChange={(e) => setConfig((c) => ({ ...c, [f.key]: e.target.value }))}>
                   <option value="">Choose a {f.label.toLowerCase()}</option>
-                  {probe.targets.map((t) => (
-                    <option key={t.value} value={t.value}>{t.label}{t.hint ? ` · ${t.hint}` : ""}</option>
-                  ))}
+                  <TargetOptions targets={probe.targets} />
                 </Select>
               ) : (
                 <p className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
@@ -228,6 +226,41 @@ function QuickConnect({ provider, onClose, onSaved }) {
   );
 }
 
+// A stored destination may predate a provider's move to prefixed target values
+// (Instantly now answers "campaign:<id>" so campaigns and lead lists can share
+// one picker). Without this an existing connection opens with an empty
+// dropdown, which reads as "my campaign was forgotten" and invites the user to
+// pick again. Kept provider-agnostic: any target whose value is the stored one
+// behind a "<kind>:" prefix is the same destination.
+function selectedTarget(value, targets) {
+  if (!value || !targets?.length) return value || "";
+  if (targets.some((t) => t.value === value)) return value;
+  return targets.find((t) => t.value.endsWith(`:${value}`))?.value || value;
+}
+
+// The options inside a remote-select. An adapter may tag each target with a
+// `group` (Instantly returns campaigns and lead lists together, because it
+// makes you pick exactly one of the two); when it does, they render as
+// optgroups so the two kinds are not one undifferentiated list. Untagged
+// targets stay a flat list, which is every other adapter.
+function TargetOptions({ targets }) {
+  const groups = [];
+  for (const t of targets) {
+    const name = t.group || "";
+    const last = groups[groups.length - 1];
+    if (last && last.name === name) last.items.push(t);
+    else groups.push({ name, items: [t] });
+  }
+  const option = (t) => (
+    <option key={t.value} value={t.value}>{t.label}{t.hint ? ` · ${t.hint}` : ""}</option>
+  );
+  return groups.map((g, i) =>
+    g.name
+      ? <optgroup key={g.name} label={g.name}>{g.items.map(option)}</optgroup>
+      : <Fragment key={`g${i}`}>{g.items.map(option)}</Fragment>
+  );
+}
+
 // One config setting, rendered the same whether it sits in the body or behind
 // "Advanced" - the two used to carry their own copies of this markup and had
 // already drifted (only one of them honoured `default`).
@@ -264,7 +297,10 @@ function ProbeStatus({ probe, label, complete, autoProbe, onCheck, expectsTarget
         <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
         <span>
           Connected{probe.account?.name ? ` · ${probe.account.name}` : ""}
-          {count ? ` · ${count} campaign${count === 1 ? "" : "s"} found` : ""}
+          {/* Not "campaigns": Instantly answers with campaigns and lead lists
+              together, so counting them as campaigns would be a lie on the one
+              provider where the difference is the whole point. */}
+          {count ? ` · ${count} destination${count === 1 ? "" : "s"} found` : ""}
         </span>
       </p>
     );
@@ -292,7 +328,7 @@ function ProbeStatus({ probe, label, complete, autoProbe, onCheck, expectsTarget
   return (
     <p className="text-xs text-muted-foreground">
       {expectsTargets
-        ? `Your ${label} campaigns load here as soon as the key checks out.`
+        ? `Where your leads can go loads here as soon as the key checks out.`
         : `We'll check the key against ${label} before anything is saved.`}
     </p>
   );
@@ -331,9 +367,9 @@ function EditConnection({ provider, connection, sources = [], transforms = [], o
     setTargetsError("");
     try {
       const d = await jsonFetch(`/api/crm/connections/${connectionId}/targets`);
-      if (!d.ok) { setTargets([]); setTargetsError(d.error || "Could not load campaigns."); return; }
+      if (!d.ok) { setTargets([]); setTargetsError(d.error || "Could not load the destination list."); return; }
       setTargets(d.targets || []);
-      if (!d.targets?.length) setTargetsError("No campaigns found in that account yet - create one first.");
+      if (!d.targets?.length) setTargetsError("Nothing to send to in that account yet - create a campaign or lead list first.");
     } catch (e) {
       setTargets([]);
       setTargetsError(e.message);
@@ -471,11 +507,9 @@ function EditConnection({ provider, connection, sources = [], transforms = [], o
                         Press <strong className="text-foreground">Test connection</strong> to load the list from your account.
                       </p>
                     ) : (
-                      <Select value={config[f.key] ?? ""} onChange={(e) => setConfig((c) => ({ ...c, [f.key]: e.target.value }))}>
-                        <option value="">Choose a campaign</option>
-                        {targets.map((t) => (
-                          <option key={t.value} value={t.value}>{t.label}{t.hint ? ` · ${t.hint}` : ""}</option>
-                        ))}
+                      <Select value={selectedTarget(config[f.key], targets)} onChange={(e) => setConfig((c) => ({ ...c, [f.key]: e.target.value }))}>
+                        <option value="">Choose a {f.label.toLowerCase()}</option>
+                        <TargetOptions targets={targets} />
                       </Select>
                     )
                   ) : f.type === "select" ? (

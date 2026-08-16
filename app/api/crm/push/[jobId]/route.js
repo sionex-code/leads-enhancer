@@ -25,6 +25,9 @@ export async function GET(_request, { params }) {
     createdAt: job.created_at,
     finishedAt: job.finished_at,
     connection: { id: job.connection_id, label: job.connection_label, provider: job.connection_provider },
+    // Filled in by the runner once it has resolved the campaign or list name,
+    // so the summary can say where the leads went rather than just how many.
+    destination: job.source?.destination || null,
   });
 }
 
