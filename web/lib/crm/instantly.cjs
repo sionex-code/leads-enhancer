@@ -15,6 +15,12 @@
 // campaign and then hunting for the leads under Leads finds nothing, which
 // reads exactly like a push that silently failed.
 //
+// A destination can also be one that does not exist yet: "a new lead list,
+// named after the LeadsFunda list I am sending". That is the shape people
+// actually want - a LeadsFunda list becomes an Instantly list they can point a
+// campaign at - and it is resolved into a real list id by prepareDestination()
+// before the first lead is sent.
+//
 // Dedupe is Instantly's own: skip_if_in_campaign / skip_if_in_list is sent on
 // every lead, so re-pushing a list does not duplicate anyone.
 // https://developer.instantly.ai/api-reference/lead/add-leads-in-bulk-to-a-campaign-or-list
@@ -31,9 +37,15 @@ const LABEL = "Instantly";
 // `value` comes back canonical - always prefixed - even when what was stored
 // was a bare id, so it can be matched against listTargets() without every
 // caller having to know the old shape.
+// Not an id: a standing instruction to make the list at push time. It has to
+// be resolved before /leads/add is called, because Instantly will not accept it
+// as a list_id - see prepareDestination().
+const NEW_LIST = "new-list";
+
 function destinationOf(config) {
   const raw = String(config?.campaignId || "").trim();
   if (!raw) return null;
+  if (raw === NEW_LIST) return { kind: "new", id: null, value: NEW_LIST };
   const m = /^(campaign|list):(.+)$/.exec(raw);
   return m
     ? { kind: m[1], id: m[2], value: raw }
@@ -191,10 +203,82 @@ async function send(creds, config, dest, group) {
   });
 }
 
+// ---- creating the destination -----------------------------------------------
+
+// A list name is a label in someone's workspace, not a data field. Instantly
+// stored a 133-character one intact when probed, so this is a tidiness bound
+// rather than an API limit.
+const MAX_NAME = 100;
+
+function listNameFor(sourceName) {
+  const clean = String(sourceName || "").trim();
+  if (clean) return clean.slice(0, MAX_NAME);
+  // No LeadsFunda list behind this push - it was a filtered or hand-picked
+  // selection. Dated rather than random so several pushes in one day collect in
+  // one list instead of littering the workspace with near-identical ones.
+  return `LeadsFunda ${new Date().toISOString().slice(0, 10)}`;
+}
+
+// Reuse before create, so pushing the same LeadsFunda list a second time tops
+// up the same Instantly list instead of leaving "Dentists", "Dentists (1)",
+// "Dentists (2)" behind. `search` is a contains-match, so the exact name still
+// has to be picked back out of what it returns.
+async function findListByName(creds, name) {
+  const res = await fetchJson(
+    `${API}/lead-lists?limit=100&search=${encodeURIComponent(name)}`,
+    { headers: auth(creds) }
+  );
+  if (!res.ok) return fail(res);
+  const wanted = name.trim().toLowerCase();
+  const hit = (res.data?.items || []).find((l) => String(l?.name || "").trim().toLowerCase() === wanted);
+  return { ok: true, list: hit || null };
+}
+
+// Turn a "new-list" destination into a real one. Called once per job, before
+// any lead is sent; every other destination passes straight through.
+//
+// Unlike naming the destination for the summary, this one is load-bearing: if
+// it fails there is nowhere to put the leads, so it reports the failure rather
+// than shrugging it off.
+//
+// { ok: true, config?, destination? } | { ok: false, error }
+async function prepareDestination(creds, config, ctx = {}) {
+  const dest = destinationOf(config);
+  if (!dest || dest.kind !== "new") return { ok: true };
+
+  const name = listNameFor(ctx.sourceName);
+
+  const found = await findListByName(creds, name);
+  if (!found.ok) return { ok: false, error: found.error };
+
+  let list = found.list;
+  const created = !list;
+  if (!list) {
+    const made = await fetchJson(`${API}/lead-lists`, {
+      method: "POST",
+      headers: auth(creds),
+      body: JSON.stringify({ name }),
+    });
+    if (!made.ok) return { ok: false, error: describe(made, LABEL) };
+    list = made.data;
+  }
+  if (!list?.id) {
+    return { ok: false, error: `${LABEL} accepted the new lead list but did not say which one it is.` };
+  }
+
+  return {
+    ok: true,
+    // Written onto the job by the runner, so a resumed or retried push aims at
+    // this list rather than resolving the sentinel a second time.
+    config: { campaignId: `list:${list.id}` },
+    destination: { kind: "list", id: String(list.id), label: list.name || name, created },
+  };
+}
+
 module.exports = {
   id: "instantly",
   label: "Instantly",
-  blurb: "Add leads straight into an Instantly campaign, deduped against everyone already in it.",
+  blurb: "Add leads straight into an Instantly campaign or lead list, deduped against everyone already in it.",
   // The developer-reference deep links (developer.instantly.ai/api/v2/…) are a
   // client-rendered SPA and 404 when opened directly, which is what a user
   // clicking this actually does. The help-centre article is a real page.
@@ -258,15 +342,32 @@ module.exports = {
     // plan is the problem, and there is nothing to choose from.
     if (!campaigns.ok) return fail(campaigns);
 
-    const targets = (campaigns.data?.items || []).map((c) => ({
+    const targets = [];
+
+    // First, and in its own group, because it is the answer to the question
+    // most people are actually asking - "put my LeadsFunda list into Instantly"
+    // - and burying it under a workspace's worth of campaigns is how it goes
+    // unfound. Offered only when the key can read lists, since a key that
+    // cannot read them cannot create them either.
+    if (lists.ok) {
+      targets.push({
+        value: NEW_LIST,
+        label: "New lead list, named after the LeadsFunda list",
+        hint: "created on the first push",
+        group: "Create in Instantly",
+      });
+    }
+
+    targets.push(...(campaigns.data?.items || []).map((c) => ({
       value: `campaign:${c.id}`,
       label: c.name || `Campaign ${c.id}`,
       hint: statusHint(c.status),
       group: "Campaigns",
-    }));
+    })));
 
-    // Lists are the nice half. A workspace with none, or a key scoped without
-    // them, must still be able to pick a campaign rather than see an error.
+    // Existing lists are the nice half. A workspace with none, or a key scoped
+    // without them, must still be able to pick a campaign rather than see an
+    // error.
     if (lists.ok) {
       for (const l of lists.data?.items || []) {
         targets.push({
@@ -285,15 +386,21 @@ module.exports = {
   // Where to actually look for these leads once they land. Instantly hides
   // campaign leads inside the campaign, so "check your Leads page" is wrong
   // half the time - which is the confusion this whole path exists to end.
-  describeDestination({ kind, label }) {
+  describeDestination({ kind, label, created }) {
     const name = label ? `"${label}"` : "the one you chose";
-    return kind === "list"
-      ? { path: `Leads → ${name}` }
-      : {
-          path: `Campaigns → ${name} → Leads`,
-          note: "Leads added to a campaign do not appear under Instantly's own Leads section - that lists only lead lists. Open the campaign itself to see them.",
-        };
+    if (kind === "campaign") {
+      return {
+        path: `Campaigns → ${name} → Leads`,
+        note: "Leads added to a campaign do not appear under Instantly's own Leads section - that lists only lead lists. Open the campaign itself to see them.",
+      };
+    }
+    return {
+      path: `Leads → ${name}`,
+      note: created ? `LeadsFunda created this list in ${LABEL}, so a campaign can be pointed straight at it.` : null,
+    };
   },
+
+  prepareDestination,
 
   // /leads/add takes 1000 at a time. The single-lead POST /leads works too, but
   // a 2000-lead push through it is 2000 round trips.
@@ -302,11 +409,14 @@ module.exports = {
 
   async pushBatch(creds, config, items) {
     const dest = destinationOf(config);
-    if (!dest) {
-      return items.map((it) => ({
-        leadId: it.lead.id, ok: false, retryable: false,
-        error: "No Instantly campaign or lead list chosen for this integration - pick one in Integrations.",
-      }));
+    // `new` here means prepareDestination() never ran, or ran and did not stick.
+    // Sending anyway would post the literal string as a list_id, so refuse -
+    // and say which of the two problems it is.
+    if (!dest || dest.kind === "new") {
+      const error = dest
+        ? "This integration makes a new Instantly list for each push, and that list could not be created - nothing was sent."
+        : "No Instantly campaign or lead list chosen for this integration - pick one in Integrations.";
+      return items.map((it) => ({ leadId: it.lead.id, ok: false, retryable: false, error }));
     }
 
     const out = [];

@@ -859,6 +859,13 @@ async function createList(userId, name) {
   return rows[0];
 }
 
+// One list's name. Used when a push needs to name its destination after the
+// list it came from.
+async function getListName(userId, listId) {
+  const { rows } = await q(`SELECT name FROM lists WHERE id = $1 AND user_id = $2`, [Number(listId), userId]);
+  return rows[0]?.name || null;
+}
+
 // List ids (owned by this user) a lead currently belongs to.
 async function getLeadListIds(userId, leadId) {
   const { rows } = await q(
@@ -1261,6 +1268,7 @@ module.exports = {
   WORKFLOW_COLUMNS,
   EXPORT_COLUMNS,
   listLists,
+  getListName,
   createList,
   getLeadListIds,
   setLeadLists,

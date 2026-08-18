@@ -37,6 +37,11 @@ export async function POST(_request, { params }) {
       retryOf: original.id,
       skipUnchanged: false,
       ...(original.source?.configOverride ? { configOverride: original.source.configOverride } : {}),
+      // A destination the first push had to create is carried over verbatim.
+      // Without it a retry would resolve the sentinel again and, having no
+      // source list to name itself after, build a second list beside the one
+      // holding the leads that did land.
+      ...(original.source?.resolvedConfig ? { resolvedConfig: original.source.resolvedConfig } : {}),
     },
     leadIds,
   });

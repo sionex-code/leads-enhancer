@@ -66,9 +66,42 @@ async function run(jobId) {
   // The connection's settings, with anything this particular push overrode on
   // top. Validated against the adapter's `pushOverride` fields before it was
   // stored on the job, so it is not re-checked here.
-  const config = { ...(opened.connection.config || {}), ...(job.source?.configOverride || {}) };
+  let config = {
+    ...(opened.connection.config || {}),
+    ...(job.source?.configOverride || {}),
+    // Written by prepareDestination() the first time this job ran. Applied last
+    // so a resumed push aims at the destination it already created, not at the
+    // instruction to create one.
+    ...(job.source?.resolvedConfig || {}),
+  };
   const fieldMap = opened.connection.field_map?.length ? opened.connection.field_map : adapter.defaultFieldMap;
   const leadIds = job.lead_ids || [];
+
+  // Some destinations do not exist until a push asks for them - Instantly can
+  // be told "put these in a new list named after the LeadsFunda list", which
+  // means creating that list now. Load-bearing, unlike naming the destination
+  // below: without it there is nowhere to send, so a failure ends the job here
+  // instead of failing every lead identically further down.
+  if (adapter.prepareDestination && !job.source?.resolvedConfig) {
+    const prepared = await adapter.prepareDestination(opened.credentials, config, {
+      sourceName: await sourceListName(job),
+    });
+    if (!prepared?.ok) {
+      return finish(job, "failed", prepared?.error || `Could not set up the ${adapter.label} destination.`);
+    }
+    if (prepared.config) {
+      config = { ...config, ...prepared.config };
+      const source = { ...(job.source || {}), resolvedConfig: prepared.config };
+      if (prepared.destination) {
+        // Named here rather than by resolveDestination(): we just created it,
+        // so its name is already known and a second round trip to look it up
+        // would only be a chance to get it wrong.
+        source.destination = describedDestination(adapter, prepared.destination);
+      }
+      await store.patchJob(jobId, { source });
+      job.source = source;
+    }
+  }
 
   // Resolved once, at the start, and written onto the job so the push summary
   // can say where the leads actually went. Best-effort by design: naming the
@@ -166,6 +199,34 @@ async function run(jobId) {
   return finish(job, "done", lastError, { done, succeeded, failed, skipped, cursor });
 }
 
+// The LeadsFunda list a push came from, by name. Only a "send this list" push
+// has one; a filtered or hand-picked selection does not, and the adapter
+// decides what to call the destination in that case.
+async function sourceListName(job) {
+  const listId = job.source?.list;
+  if (!listId) return null;
+  try {
+    return await db.getListName(job.user_id, listId);
+  } catch {
+    // A push must not fail because we could not read a name for it.
+    return null;
+  }
+}
+
+// The shape the push summary reads, built from what an adapter reports.
+function describedDestination(adapter, dest) {
+  const described = adapter.describeDestination?.(dest) || {};
+  return {
+    provider: adapter.id,
+    providerLabel: adapter.label,
+    kind: dest.kind,
+    id: dest.id,
+    label: dest.label || null,
+    path: described.path || null,
+    note: described.note || null,
+  };
+}
+
 // What the push is aimed at, named well enough to repeat back to the user.
 // The id alone is in the config already; the point of this is the label, which
 // only the CRM knows.
@@ -183,16 +244,7 @@ async function resolveDestination(adapter, credentials, config) {
     // recording - "your Instantly campaign" beats "your CRM".
   }
 
-  const described = adapter.describeDestination?.({ kind: want.kind, label }) || {};
-  return {
-    provider: adapter.id,
-    providerLabel: adapter.label,
-    kind: want.kind,
-    id: want.id,
-    label,
-    path: described.path || null,
-    note: described.note || null,
-  };
+  return describedDestination(adapter, { kind: want.kind, id: want.id, label });
 }
 
 // Leads come back in the order given, so a batch adapter's results line up.
