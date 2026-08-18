@@ -1971,11 +1971,15 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
                   ))}
                 </div>
 
-                {/* The answer to "where did they go". Only shown when the push
-                    actually put something there. */}
-                {dest && crmDone.succeeded > 0 ? (
+                {/* The answer to "where did they go" - shown even when nothing
+                    was sent, because a push of 48 leads that delivers none is
+                    exactly when the user needs to know it was aimed at a
+                    campaign they weren't expecting. */}
+                {dest ? (
                   <div className="rounded-lg border border-border bg-muted/20 p-3">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Where to find them</p>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      {crmDone.succeeded > 0 ? "Where to find them" : "Where this push was aimed"}
+                    </p>
                     <p className="mt-1 text-sm text-foreground">
                       In {dest.providerLabel || crmDone.connection?.label}: <span className="font-medium">{dest.path}</span>
                     </p>
@@ -1987,7 +1991,12 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
 
                 {crmDone.skipped > 0 ? (
                   <p className="text-xs text-muted-foreground">
-                    Skipped leads were already there, unchanged since their last push, or had no email to send.
+                    {/* Every lead skipped is worth its own sentence: it is the one
+                        outcome that looks like a broken button, and the reason is
+                        specific enough to act on. */}
+                    {!crmDone.succeeded && !crmDone.failed
+                      ? "Every lead here had already been sent to this destination and has not changed since, so none were sent again. Send them somewhere new by changing this integration's destination in Integrations."
+                      : "Skipped leads were already there, unchanged since their last push, or had no email to send."}
                   </p>
                 ) : null}
 

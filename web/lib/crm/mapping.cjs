@@ -78,9 +78,18 @@ function applyFieldMap(lead, map) {
 // Stable across key order, so it only changes when the data does. This is what
 // makes "push everything again" cheap: unchanged leads are skipped without a
 // request.
-function payloadHash(mapped) {
+// `scope` is where the payload was sent, not what was in it - an Instantly
+// campaign or list id, say. It belongs in the hash because "unchanged since the
+// last push" is only a reason to skip a lead if the last push went to the *same
+// place*. Without it, pointing a connection at a new destination is a silent
+// no-op: every lead matches its old hash, every lead is skipped as unchanged,
+// and nothing ever arrives at the new destination.
+//
+// Adapters with a single fixed destination (a webhook URL, a CRM's one contact
+// book) pass nothing and keep exactly the hashes they had.
+function payloadHash(mapped, scope = "") {
   const canonical = Object.keys(mapped || {}).sort().map((k) => `${k}=${mapped[k]}`).join("\n");
-  return crypto.createHash("sha256").update(canonical).digest("hex");
+  return crypto.createHash("sha256").update(scope ? `${scope}\n${canonical}` : canonical).digest("hex");
 }
 
 // Stable for the same content, different when the content changes - so a retry

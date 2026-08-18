@@ -116,6 +116,10 @@ async function run(jobId) {
     }
   }
 
+  // Read after prepareDestination(), so a "new list" job scopes to the list it
+  // actually created rather than to the instruction to create one.
+  const destScope = adapter.destinationOf?.(config)?.value || "";
+
   let { done, succeeded, failed, skipped, cursor } = job;
   let authFailures = 0;
   let quotaHit = false;
@@ -135,7 +139,7 @@ async function run(jobId) {
     const results = [];
     for (const lead of leads) {
       const mapped = mapping.applyFieldMap(lead, fieldMap);
-      const hash = mapping.payloadHash(mapped);
+      const hash = mapping.payloadHash(mapped, destScope);
       const prev = prevById.get(lead.id) || null;
 
       if (!Object.keys(mapped).length) {
