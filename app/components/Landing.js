@@ -212,7 +212,7 @@ function Cta({
 // Small pill eyebrow with icon, used above every section heading.
 function Eyebrow({ icon: Icon = Sparkles, children }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 py-1.5 text-xs font-semibold text-foreground/70 shadow-sm">
+    <span className="inline-flex items-center gap-1.5 rounded-[8px] border border-border bg-card px-3.5 py-1.5 text-xs font-semibold text-foreground/70 shadow-sm">
       <Icon className="h-3.5 w-3.5 text-primary" /> {children}
     </span>
   );
@@ -274,7 +274,7 @@ function HeroDecor() {
       <DotGrid className="absolute left-[15%] top-[27%] hidden text-muted-foreground/25 lg:block" cols={3} rows={3} />
       <DotGrid className="absolute right-[9%] top-[25%] hidden text-flare/45 xl:block" cols={6} rows={4} />
       {/* Single flare tile. */}
-      <div className="absolute left-[2.5%] top-[27%] hidden h-10 w-10 rotate-[8deg] rounded-xl bg-flare-tint lg:block" />
+      <div className="absolute left-[2.5%] top-[27%] hidden h-10 w-10 rotate-[8deg] rounded-[8px] bg-flare-tint lg:block" />
       <div className="absolute left-[13.5%] top-[34%] hidden h-4 w-4 rounded-md bg-flare-tint lg:block" />
     </div>
   );
@@ -357,7 +357,7 @@ function FloatCard({ className = "", delay = 0, children }) {
   return (
     <div
       style={{ animationDelay: `${delay}ms` }}
-      className={`absolute z-20 hidden rounded-2xl border border-border bg-card/95 p-4 shadow-2xl shadow-black/10 backdrop-blur-md lg:block ${className}`}
+      className={`absolute z-20 hidden rounded-[10px] border border-border bg-card/95 p-4 shadow-2xl shadow-black/10 backdrop-blur-md lg:block ${className}`}
     >
       {children}
     </div>
@@ -392,7 +392,7 @@ function HeroApp() {
           Example lead
         </div>
         <div className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary"><Building2 className="h-4 w-4" /></span>
+          <span className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-primary/10 text-primary"><Building2 className="h-4 w-4" /></span>
           <div className="leading-tight">
             <div className="text-sm font-semibold text-foreground">Contoso Roofing Co.</div>
             <div className="text-[11px] text-muted-foreground">Austin, TX · ★ 4.9</div>
@@ -409,7 +409,7 @@ function HeroApp() {
       </FloatCard>
 
       {/* the browser window */}
-      <div className="overflow-hidden rounded-[1.6rem] border border-border bg-card shadow-2xl shadow-primary/10">
+      <div className="overflow-hidden rounded-[10px] border border-border bg-card shadow-2xl shadow-primary/10">
         <div className="flex items-center gap-2 border-b border-border/60 bg-muted/40 px-4 py-3">
           <span className="h-3 w-3 rounded-full bg-rose-400" />
           <span className="h-3 w-3 rounded-full bg-amber-400" />
@@ -423,20 +423,20 @@ function HeroApp() {
           {/* sidebar */}
           <aside className="hidden w-56 shrink-0 flex-col border-r border-border/60 bg-muted/20 p-4 sm:flex">
             <Logo height={18} asLink={false} />
-            <button className="mt-5 flex items-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground shadow-sm">
+            <button className="mt-5 flex items-center gap-2 rounded-[8px] bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground shadow-sm">
               <Plus className="h-4 w-4" /> New scrape
             </button>
             <nav className="mt-4 space-y-1 text-sm">
               {[{ i: Search, l: "Find leads", on: true }, { i: Database, l: "All leads" }, { i: Star, l: "Watchlist" }].map((it) => (
-                <div key={it.l} className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 ${it.on ? "bg-primary/10 font-semibold text-primary" : "text-muted-foreground"}`}>
+                <div key={it.l} className={`flex items-center gap-2.5 rounded-[8px] px-2.5 py-2 ${it.on ? "bg-primary/10 font-semibold text-primary" : "text-muted-foreground"}`}>
                   <it.i className="h-4 w-4" /> {it.l}
                 </div>
               ))}
             </nav>
             <div className="mt-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Projects</div>
             <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-              <div className="truncate rounded-lg px-2.5 py-1.5">Plumbers · Austin</div>
-              <div className="truncate rounded-lg px-2.5 py-1.5">Dentists · Miami</div>
+              <div className="truncate rounded-[8px] px-2.5 py-1.5">Plumbers · Austin</div>
+              <div className="truncate rounded-[8px] px-2.5 py-1.5">Dentists · Miami</div>
             </div>
             <div className="mt-auto flex items-center gap-2 pt-4">
               <Image src={FACES[1]} alt="" width={28} height={28} className="h-7 w-7 rounded-full object-cover" />
@@ -456,16 +456,16 @@ function HeroApp() {
               </span>
             </div>
             {/* search bar */}
-            <div className="mt-4 flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 shadow-sm">
+            <div className="mt-4 flex items-center gap-2 rounded-[8px] border border-border bg-background px-3 py-2 shadow-sm">
               <Search className="h-4 w-4 text-muted-foreground" />
               <span className="flex-1 truncate text-sm text-foreground">plumbers in Austin, TX</span>
-              <span className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground">Scrape</span>
+              <span className="rounded-[8px] bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground">Scrape</span>
             </div>
             {/* leads list */}
             <div className="mt-4 space-y-2">
               {SCRAPE_FEED.map((r) => (
-                <div key={r.n} className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-background px-3 py-2.5 text-xs shadow-sm">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><Building2 className="h-3.5 w-3.5" /></span>
+                <div key={r.n} className="flex items-center gap-2.5 rounded-[8px] border border-border/70 bg-background px-3 py-2.5 text-xs shadow-sm">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-primary/10 text-primary"><Building2 className="h-3.5 w-3.5" /></span>
                   <div className="min-w-0">
                     <div className="truncate font-semibold text-foreground">{r.n}</div>
                     <div className="flex items-center gap-1 text-[11px] text-muted-foreground"><Phone className="h-3 w-3" /> {r.m}</div>
@@ -506,19 +506,19 @@ function StepMock({ step }) {
         <div className="mt-3 text-xs font-semibold text-foreground">Niche</div>
         <div className="mt-2 flex flex-wrap gap-2">
           {["Plumbers", "Dentists", "Roofers", "HVAC", "Salons"].map((s, i) => (
-            <span key={s} className={`rounded-lg px-3 py-1.5 text-xs font-medium ${i === 0 ? "bg-primary text-primary-foreground" : "border border-border bg-card text-muted-foreground"}`}>{s}</span>
+            <span key={s} className={`rounded-[8px] px-3 py-1.5 text-xs font-medium ${i === 0 ? "bg-primary text-primary-foreground" : "border border-border bg-card text-muted-foreground"}`}>{s}</span>
           ))}
         </div>
         <div className="mt-4 text-xs font-semibold text-foreground">City</div>
         <div className="mt-2 flex flex-wrap gap-2">
           {["Austin, TX", "Miami, FL", "Denver, CO", "Phoenix, AZ"].map((s, i) => (
-            <span key={s} className={`rounded-lg px-3 py-1.5 text-xs font-medium ${i === 0 ? "bg-flare/25 text-flare-ink" : "border border-border bg-card text-muted-foreground"}`}>{s}</span>
+            <span key={s} className={`rounded-[8px] px-3 py-1.5 text-xs font-medium ${i === 0 ? "bg-flare/25 text-flare-ink" : "border border-border bg-card text-muted-foreground"}`}>{s}</span>
           ))}
         </div>
-        <div className="mt-5 flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 shadow-sm">
+        <div className="mt-5 flex items-center gap-2 rounded-[8px] border border-border bg-card px-3 py-2 shadow-sm">
           <Search className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm text-foreground">plumbers in Austin, TX</span>
-          <span className="ml-auto rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground">Start</span>
+          <span className="ml-auto rounded-[8px] bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground">Start</span>
         </div>
       </div>
     );
@@ -541,7 +541,7 @@ function StepMock({ step }) {
             </div>
           ))}
         </div>
-        <div className="mt-5 flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs text-muted-foreground shadow-sm">
+        <div className="mt-5 flex items-center gap-2 rounded-[8px] border border-border bg-card px-3 py-2 text-xs text-muted-foreground shadow-sm">
           <Mail className="h-3.5 w-3.5 text-primary" /> office@example.com
           <MessageCircle className="ml-auto h-3.5 w-3.5 text-emerald-600" />
         </div>
@@ -552,11 +552,11 @@ function StepMock({ step }) {
     <div className="p-6">
       <div className="flex items-center justify-between">
         <div className="font-heading text-sm font-bold">Pipeline</div>
-        <span className="inline-flex items-center gap-1.5 rounded-lg bg-flare/25 px-2.5 py-1 text-xs font-semibold text-flare-ink"><FileSpreadsheet className="h-3.5 w-3.5" /> Export CSV</span>
+        <span className="inline-flex items-center gap-1.5 rounded-[8px] bg-flare/25 px-2.5 py-1 text-xs font-semibold text-flare-ink"><FileSpreadsheet className="h-3.5 w-3.5" /> Export CSV</span>
       </div>
       <div className="mt-4 space-y-2">
         {[{ n: "Northwind HVAC", s: "Contacted", c: "bg-amber-500/10 text-amber-700" }, { n: "Fabrikam Electric", s: "Replied", c: "bg-emerald-500/10 text-emerald-600" }, { n: "Contoso Roofing", s: "To call", c: "bg-amber-500/10 text-amber-600" }, { n: "Acme Plumbing Co.", s: "Won", c: "bg-flare/30 text-flare-ink" }].map((r) => (
-          <div key={r.n} className="flex items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2 text-xs shadow-sm">
+          <div key={r.n} className="flex items-center gap-2.5 rounded-[8px] border border-border bg-card px-3 py-2 text-xs shadow-sm">
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
             <span className="truncate font-medium text-foreground">{r.n}</span>
             <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-semibold ${r.c}`}>{r.s}</span>
@@ -591,11 +591,11 @@ function PriceCard({ plan, signedIn }) {
   const btnVariant = blue || dark ? "default" : "outline";
 
   return (
-    <div className={`relative flex h-full flex-col rounded-3xl border p-6 transition-all duration-300 hover:-translate-y-1.5 ${shell} ${blue ? "lg:-mt-4 lg:mb-4" : ""}`}>
+    <div className={`relative flex h-full flex-col rounded-[10px] border p-6 transition-all duration-300 hover:-translate-y-1.5 ${shell} ${blue ? "lg:-mt-4 lg:mb-4" : ""}`}>
       {plan.popular && (
-        <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-flare px-3 py-1 text-xs font-semibold text-flare-ink shadow-lg">Most popular</span>
+        <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-[8px] bg-flare px-3 py-1 text-xs font-semibold text-flare-ink shadow-lg">Most popular</span>
       )}
-      <div className={`mb-4 flex h-10 w-10 items-center justify-center rounded-xl ${tile}`}><Icon className="h-5 w-5" /></div>
+      <div className={`mb-4 flex h-10 w-10 items-center justify-center rounded-[8px] ${tile}`}><Icon className="h-5 w-5" /></div>
       <div className="font-heading text-lg font-bold">{plan.name}</div>
       <div className={`mt-1 text-sm ${sub}`}>{plan.sub}</div>
       <div className={`my-5 h-px ${rule}`} />
@@ -605,7 +605,7 @@ function PriceCard({ plan, signedIn }) {
       </div>
       <div className={`mt-1 text-xs ${per}`}>{plan.quota}</div>
 
-      <Cta signedIn={signedIn} callbackUrl={plan.callbackUrl} className={`mt-6 w-full rounded-xl ${btnClass}`} variant={btnVariant}>
+      <Cta signedIn={signedIn} callbackUrl={plan.callbackUrl} className={`mt-6 w-full rounded-[8px] ${btnClass}`} variant={btnVariant}>
         {plan.cta}
       </Cta>
 
@@ -710,10 +710,10 @@ function DiscoverCards() {
           <div
             ref={(el) => (cardRefs.current[i] = el)}
             style={{ transformOrigin: "center top", transform: `rotate(${i % 2 === 0 ? "2.2deg" : "-2.2deg"})` }}
-            className={`relative min-h-[180px] overflow-hidden rounded-3xl border border-border bg-card bg-gradient-to-br ${d.grad} p-7 ring-1 ${d.ring} shadow-xl shadow-black/[0.07]`}
+            className={`relative min-h-[180px] overflow-hidden rounded-[10px] border border-border bg-card bg-gradient-to-br ${d.grad} p-7 ring-1 ${d.ring} shadow-xl shadow-black/[0.07]`}
           >
             <span className={`absolute right-5 top-5 h-2.5 w-2.5 rounded-full ${d.dot} shadow-[0_0_0_4px_rgba(255,255,255,0.6)]`} />
-            <div className={`mb-4 inline-flex items-center gap-2 rounded-2xl px-3 py-2 ${d.chip}`}>
+            <div className={`mb-4 inline-flex items-center gap-2 rounded-[10px] px-3 py-2 ${d.chip}`}>
               <d.icon className="h-5 w-5" />
               <span className="text-[11px] font-bold uppercase tracking-wide">{d.tag}</span>
             </div>
@@ -753,14 +753,14 @@ export default function Landing({ recent = [], total = 0 }) {
             <Logo />
             <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 text-[0.95rem] font-medium md:flex">
               {NAV.map((n) => (
-                <a key={n.href} href={n.href} className="rounded-full px-3.5 py-1.5 text-foreground/70 transition-colors hover:bg-muted hover:text-foreground">{n.label}</a>
+                <a key={n.href} href={n.href} className="rounded-[8px] px-3.5 py-1.5 text-foreground/70 transition-colors hover:bg-muted hover:text-foreground">{n.label}</a>
               ))}
             </nav>
             <div className="flex items-center gap-2">
-              <Cta signedIn={signedIn} className="hidden h-11 rounded-xl px-5 text-[0.95rem] font-semibold sm:inline-flex" signedInLabel="Dashboard">Get started</Cta>
+              <Cta signedIn={signedIn} className="hidden h-11 rounded-[8px] px-5 text-[0.95rem] font-semibold sm:inline-flex" signedInLabel="Dashboard">Get started</Cta>
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground md:hidden hover:bg-muted transition-colors"
+                className="flex h-9 w-9 items-center justify-center rounded-[8px] border border-border bg-card text-foreground md:hidden hover:bg-muted transition-colors"
                 aria-label="Toggle menu"
               >
                 {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
@@ -770,20 +770,20 @@ export default function Landing({ recent = [], total = 0 }) {
 
           {/* Mobile nav dropdown */}
           {mobileMenuOpen && (
-            <div className="absolute left-0 right-0 top-16 z-50 rounded-2xl border border-border/75 bg-background/95 p-4 shadow-xl backdrop-blur-xl md:hidden animate-in fade-in slide-in-from-top-5 duration-200">
+            <div className="absolute left-0 right-0 top-16 z-50 rounded-[10px] border border-border/75 bg-background/95 p-4 shadow-xl backdrop-blur-xl md:hidden animate-in fade-in slide-in-from-top-5 duration-200">
               <nav className="flex flex-col gap-1.5">
                 {NAV.map((n) => (
                   <a
                     key={n.href}
                     href={n.href}
                     onClick={() => setMobileMenuOpen(false)}
-                    className="rounded-xl px-4 py-2.5 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    className="rounded-[8px] px-4 py-2.5 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                   >
                     {n.label}
                   </a>
                 ))}
                 <div className="mt-2 border-t border-border/60 pt-3">
-                  <Cta signedIn={signedIn} size="lg" className="w-full rounded-xl" signedInLabel="Dashboard">Get started</Cta>
+                  <Cta signedIn={signedIn} size="lg" className="w-full rounded-[8px]" signedInLabel="Dashboard">Get started</Cta>
                 </div>
               </nav>
             </div>
@@ -800,7 +800,7 @@ export default function Landing({ recent = [], total = 0 }) {
       <section className="relative px-4">
         <HeroDecor />
         <div className="container relative z-10 flex flex-col items-center pb-10 pt-10 text-center sm:pt-14">
-          <span className="mb-5 inline-flex max-w-full items-center gap-2 rounded-lg bg-muted px-4 py-2 text-center text-sm font-medium text-foreground/75">
+          <span className="mb-5 inline-flex max-w-full items-center gap-2 rounded-[8px] bg-muted px-4 py-2 text-center text-sm font-medium text-foreground/75">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-70" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-600" />
@@ -824,7 +824,7 @@ export default function Landing({ recent = [], total = 0 }) {
 
           {/* The hero needs one action now that the inline search box is gone. */}
           <div className="mt-8">
-            <Cta signedIn={signedIn} size="lg" className="lf-cta rounded-xl px-7" signedInLabel="Open dashboard">Continue with Google</Cta>
+            <Cta signedIn={signedIn} size="lg" className="lf-cta rounded-[8px] px-7" signedInLabel="Open dashboard">Continue with Google</Cta>
           </div>
 
           <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
@@ -853,9 +853,9 @@ export default function Landing({ recent = [], total = 0 }) {
             return (
               <div
                 key={item.label}
-                className="group flex flex-col items-center text-center rounded-2xl border border-border bg-card p-6 transition-all duration-300 hover:-translate-y-1.5 hover:border-primary/40 hover:shadow-xl hover:shadow-primary/5"
+                className="group flex flex-col items-center text-center rounded-[10px] border border-border bg-card p-6 transition-all duration-300 hover:-translate-y-1.5 hover:border-primary/40 hover:shadow-xl hover:shadow-primary/5"
               >
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-all duration-300 group-hover:scale-110 group-hover:bg-primary group-hover:text-primary-foreground">
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-[10px] bg-primary/10 text-primary transition-all duration-300 group-hover:scale-110 group-hover:bg-primary group-hover:text-primary-foreground">
                   <Icon className="h-6 w-6" />
                 </div>
                 <h3 className="font-heading text-base font-bold text-foreground">
@@ -878,7 +878,7 @@ export default function Landing({ recent = [], total = 0 }) {
             <h2 className="font-heading mt-4 text-3xl font-bold leading-tight tracking-tight sm:text-[2.6rem]">Follow one lead from search to sent</h2>
             <p className="mt-4 max-w-md text-muted-foreground">A map listing is a name and a pin. Here is exactly what LeadsFunda does to it before it reaches you, stage by stage, and what each stage costs in credits.</p>
             <div className="mt-7 hidden lg:block">
-              <Cta signedIn={signedIn} size="lg" className="lf-cta rounded-xl px-7" signedInLabel="Open dashboard">Continue with Google</Cta>
+              <Cta signedIn={signedIn} size="lg" className="lf-cta rounded-[8px] px-7" signedInLabel="Open dashboard">Continue with Google</Cta>
             </div>
           </div>
           <DiscoverCards />
@@ -896,7 +896,7 @@ export default function Landing({ recent = [], total = 0 }) {
           <Reveal className="lg:col-span-2"><BentoCell icon={MapPin} tile="bg-primary/10 text-primary" title="Scrape the map" body="Name, phone, website, rating, reviews and hours for any niche + city.">
             <div className="space-y-2">
               {SCRAPE_FEED.slice(0, 3).map((r) => (
-                <div key={r.n} className="flex items-center gap-2 rounded-xl border border-border bg-background px-2.5 py-1.5 text-[11px] shadow-sm">
+                <div key={r.n} className="flex items-center gap-2 rounded-[8px] border border-border bg-background px-2.5 py-1.5 text-[11px] shadow-sm">
                   <Building2 className="h-3.5 w-3.5 text-primary" /><span className="truncate font-medium text-foreground">{r.n}</span>
                   <span className="ml-auto text-muted-foreground">{r.m}</span>
                 </div>
@@ -907,13 +907,13 @@ export default function Landing({ recent = [], total = 0 }) {
           <Reveal delay={90} className="lg:col-span-2"><BentoCell icon={Mail} tile="bg-primary/10 text-primary" title="Enrich every contact" body="Emails, socials and WhatsApp crawled from each business's own website.">
             <div className="flex flex-wrap gap-2">
               {[{ t: "Email", c: "bg-primary/10 text-primary" }, { t: "WhatsApp", c: "bg-emerald-500/10 text-emerald-600" }, { t: "Instagram", c: "bg-rose-500/10 text-rose-600" }, { t: "Facebook", c: "bg-primary/10 text-primary" }, { t: "LinkedIn", c: "bg-sky-500/10 text-sky-600" }].map((s) => (
-                <span key={s.t} className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold ${s.c}`}>{s.t}</span>
+                <span key={s.t} className={`rounded-[8px] px-2.5 py-1 text-[11px] font-semibold ${s.c}`}>{s.t}</span>
               ))}
             </div>
           </BentoCell></Reveal>
 
           <Reveal delay={180} className="lg:col-span-2"><BentoCell icon={Search} tile="bg-amber-500/10 text-amber-600" title="Find leads in seconds" body="Type a niche or pick from 190+ presets, choose a city, and go.">
-            <div className="rounded-xl border border-border bg-background">
+            <div className="rounded-[8px] border border-border bg-background">
               <div className="flex items-center gap-2 border-b border-border/60 px-3 py-2 text-xs text-muted-foreground"><Search className="h-3.5 w-3.5" /> Ask for a niche…</div>
               {["Plumbers", "Dentists", "Roofers"].map((s, i) => (
                 <div key={s} className={`flex items-center gap-2 px-3 py-1.5 text-xs ${i === 0 ? "bg-muted/60 font-semibold text-foreground" : "text-muted-foreground"}`}><Wand2 className="h-3.5 w-3.5 text-amber-600" /> {s}</div>
@@ -923,7 +923,7 @@ export default function Landing({ recent = [], total = 0 }) {
 
           {/* row 2: two wide cells */}
           <Reveal delay={120} className="lg:col-span-2"><BentoCell icon={Zap} tile="bg-flare-tint text-flare-ink" title="Instant delivery" body="Leads arrive in seconds from our pre-built database. No scraping delays, no browser needed.">
-            <div className="flex items-center justify-between rounded-xl border border-border bg-background px-3 py-3">
+            <div className="flex items-center justify-between rounded-[8px] border border-border bg-background px-3 py-3">
               <div><div className="text-[11px] text-muted-foreground">Avg. delivery</div><div className="font-heading text-lg font-bold text-foreground">&lt; 5s</div></div>
               <Sparkline />
             </div>
@@ -931,12 +931,12 @@ export default function Landing({ recent = [], total = 0 }) {
 
           <Reveal delay={210} className="lg:col-span-4"><BentoCell icon={Activity} tile="bg-emerald-500/10 text-emerald-600" title="Actionable insights" body="See what's landing in real time and pounce on the warmest prospects first.">
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="flex items-center justify-between rounded-xl border border-border bg-background px-3 py-3">
+              <div className="flex items-center justify-between rounded-[8px] border border-border bg-background px-3 py-3">
                 <div><div className="text-[11px] text-muted-foreground">Leads today</div><div className="font-heading text-xl font-bold text-foreground">1,860 <span className="text-xs font-semibold text-emerald-600">+10%</span></div></div>
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-flare/25 text-flare-ink"><TrendingUp className="h-4 w-4" /></span>
+                <span className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-flare/25 text-flare-ink"><TrendingUp className="h-4 w-4" /></span>
               </div>
-              <div className="flex items-center gap-2.5 rounded-xl border border-border bg-background px-3 py-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary"><Bell className="h-4 w-4" /></span>
+              <div className="flex items-center gap-2.5 rounded-[8px] border border-border bg-background px-3 py-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-primary/10 text-primary"><Bell className="h-4 w-4" /></span>
                 <div className="leading-tight"><div className="text-xs font-semibold text-foreground">New lead captured</div><div className="text-[11px] text-muted-foreground">+1 to Plumbers · Austin</div></div>
               </div>
             </div>
@@ -955,7 +955,7 @@ export default function Landing({ recent = [], total = 0 }) {
                 { t: "HubSpot", s: "88 updated", c: "text-orange-600" },
                 { t: "Instantly", s: "1,204 added", c: "text-violet-600" },
               ].map((r) => (
-                <div key={r.t} className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2.5 text-[11px] shadow-sm">
+                <div key={r.t} className="flex items-center gap-2 rounded-[8px] border border-border bg-background px-3 py-2.5 text-[11px] shadow-sm">
                   <CheckCircle2 className={`h-3.5 w-3.5 shrink-0 ${r.c}`} />
                   <span className="font-semibold text-foreground">{r.t}</span>
                   <span className="ml-auto text-muted-foreground">{r.s}</span>
@@ -976,7 +976,7 @@ export default function Landing({ recent = [], total = 0 }) {
             <ul className="mx-auto flex max-w-3xl flex-wrap items-center justify-center gap-3">
               {INTEGRATIONS.map((i) => (
                 <li key={i.name}
-                    className={`flex items-baseline gap-2 rounded-xl bg-background px-4 py-3 shadow-sm ring-1 ${i.ring}`}>
+                    className={`flex items-baseline gap-2 rounded-[8px] bg-background px-4 py-3 shadow-sm ring-1 ${i.ring}`}>
                   <span className={`font-heading text-lg font-bold tracking-tight ${i.tint}`}>{i.name}</span>
                   <span className="text-[11px] font-medium text-muted-foreground">{i.note}</span>
                 </li>
@@ -1012,9 +1012,9 @@ export default function Landing({ recent = [], total = 0 }) {
             {STEPS.map((s, i) => {
               const active = step === i;
               return (
-                <button key={s.n} onClick={() => setStep(i)} className={`group relative flex w-full items-start gap-4 rounded-2xl border p-5 text-left transition-all ${active ? "border-border bg-card shadow-xl shadow-primary/5" : "border-transparent hover:bg-card/60"}`}>
+                <button key={s.n} onClick={() => setStep(i)} className={`group relative flex w-full items-start gap-4 rounded-[10px] border p-5 text-left transition-all ${active ? "border-border bg-card shadow-xl shadow-primary/5" : "border-transparent hover:bg-card/60"}`}>
                   {active && <span className="absolute inset-x-5 top-0 h-1 rounded-full bg-gradient-to-r from-primary to-flare" />}
-                  <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}><s.icon className="h-5 w-5" /></span>
+                  <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] ${active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}><s.icon className="h-5 w-5" /></span>
                   <span>
                     <span className="font-heading flex items-center gap-2 text-lg font-bold">{s.title}</span>
                     <span className="mt-1 block text-sm text-muted-foreground">{s.body}</span>
@@ -1023,7 +1023,7 @@ export default function Landing({ recent = [], total = 0 }) {
               );
             })}
           </div>
-          <Reveal className="overflow-hidden rounded-3xl border border-border bg-muted/30 shadow-xl shadow-primary/5">
+          <Reveal className="overflow-hidden rounded-[10px] border border-border bg-muted/30 shadow-xl shadow-primary/5">
             <div className="flex items-center gap-2 border-b border-border/60 bg-card px-4 py-3">
               <span className="h-2.5 w-2.5 rounded-full bg-rose-400" /><span className="h-2.5 w-2.5 rounded-full bg-amber-400" /><span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
               <span className="ml-2 text-xs text-muted-foreground">Step {step + 1} of 3</span>
@@ -1041,7 +1041,7 @@ export default function Landing({ recent = [], total = 0 }) {
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
             {TESTIMONIALS.map((t, i) => (
               <Reveal key={t.name} delay={(i % 3) * 90}>
-                <div className="h-full rounded-3xl border border-border bg-card p-6 shadow-sm">
+                <div className="h-full rounded-[10px] border border-border bg-card p-6 shadow-sm">
                   <div className="flex items-center gap-3">
                     <Image src={t.img} alt="" width={40} height={40} className="h-10 w-10 rounded-full object-cover" />
                     <div className="min-w-0">
@@ -1062,7 +1062,7 @@ export default function Landing({ recent = [], total = 0 }) {
       <section id="pricing" className="container py-24">
         <Reveal><SectionHead icon={Zap} eyebrow="Pricing" title="Simple plans for every stage"
           sub="Choose a plan that fits your needs, budget and growth." className="mb-10" /></Reveal>
-        <div className="rounded-[2rem] border border-border bg-muted/30 p-5 sm:p-8 pt-10 sm:pt-14">
+        <div className="rounded-[10px] border border-border bg-muted/30 p-5 sm:p-8 pt-10 sm:pt-14">
           <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-4">
             {PLANS.map((plan, i) => (
               <Reveal key={plan.id} delay={i * 80} className="h-full flex flex-col"><PriceCard plan={plan} signedIn={signedIn} /></Reveal>
@@ -1082,7 +1082,7 @@ export default function Landing({ recent = [], total = 0 }) {
               const isOpen = openFaqIndex === i;
               return (
                 <Reveal key={item.q} delay={i * 60}>
-                  <div className="overflow-hidden rounded-2xl border border-border bg-card transition-all duration-300 hover:border-primary/30">
+                  <div className="overflow-hidden rounded-[10px] border border-border bg-card transition-all duration-300 hover:border-primary/30">
                     <button
                       onClick={() => setOpenFaqIndex(isOpen ? null : i)}
                       className="flex w-full items-center justify-between p-5 text-left font-heading text-base font-bold text-foreground transition-colors hover:text-primary"
@@ -1107,19 +1107,19 @@ export default function Landing({ recent = [], total = 0 }) {
 
       {/* ---- cta banner ---- */}
       <section className="container py-20">
-        <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-primary via-[#04503f] to-[#046a50] px-6 py-16 text-center text-white">
+        <div className="relative overflow-hidden rounded-[10px] bg-gradient-to-br from-primary via-[#04503f] to-[#046a50] px-6 py-16 text-center text-white">
           <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10 blur-2xl" />
           <div className="pointer-events-none absolute -bottom-20 -left-10 h-56 w-56 rounded-full bg-flare/15 blur-3xl" />
           <h2 className="font-heading mx-auto max-w-xl text-3xl font-bold sm:text-4xl">Ready to build your lead list?</h2>
           <p className="mx-auto mt-3 max-w-lg text-white/80">Sign in with Google and run your first scrape in minutes.</p>
           <div className="mt-7 flex justify-center">
-            <Cta signedIn={signedIn} size="lg" variant="secondary" className="lf-cta rounded-xl px-7" signedInLabel="Open dashboard">Continue with Google</Cta>
+            <Cta signedIn={signedIn} size="lg" variant="secondary" className="lf-cta rounded-[8px] px-7" signedInLabel="Open dashboard">Continue with Google</Cta>
           </div>
         </div>
       </section>
       {/* ---- footer ---- */}
       <footer className="px-4 pb-6">
-        <div className={`container overflow-hidden bg-transparent md:bg-card border-none md:border md:rounded-[2rem] md:shadow-sm ${HATCH}`}>
+        <div className={`container overflow-hidden bg-transparent md:bg-card border-none md:border md:rounded-[10px] md:shadow-sm ${HATCH}`}>
           <div className="grid grid-cols-2 gap-8 p-6 md:p-10 md:grid-cols-5">
             <div className="col-span-2 md:col-span-2">
               <Logo />
@@ -1149,16 +1149,16 @@ export default function Landing({ recent = [], total = 0 }) {
             <div className="col-span-2 md:col-span-1">
               <div className="mb-4 text-sm font-semibold text-foreground">Social</div>
               <div className="flex items-center gap-2.5">
-                <a href="https://x.com/leadsfunda" target="_blank" rel="noopener noreferrer" aria-label="X (Twitter)" className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#000000] text-white shadow-sm transition-all hover:opacity-80 hover:scale-110">
+                <a href="https://x.com/leadsfunda" target="_blank" rel="noopener noreferrer" aria-label="X (Twitter)" className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-[#000000] text-white shadow-sm transition-all hover:opacity-80 hover:scale-110">
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z" /></svg>
                 </a>
-                <a href="https://instagram.com/leadsfunda" target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-sm transition-all hover:opacity-80 hover:scale-110" style={{ background: "linear-gradient(45deg, #F58529, #DD2A7B 45%, #8134AF 70%, #515BD4)" }}>
+                <a href="https://instagram.com/leadsfunda" target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="flex h-9 w-9 items-center justify-center rounded-[8px] text-white shadow-sm transition-all hover:opacity-80 hover:scale-110" style={{ background: "linear-gradient(45deg, #F58529, #DD2A7B 45%, #8134AF 70%, #515BD4)" }}>
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 0C8.74 0 8.333.015 7.053.072 5.775.132 4.905.333 4.14.63c-.789.306-1.459.717-2.126 1.384S.935 3.35.63 4.14C.333 4.905.131 5.775.072 7.053.012 8.333 0 8.74 0 12s.015 3.667.072 4.947c.06 1.277.261 2.148.558 2.913.306.788.717 1.459 1.384 2.126.667.666 1.336 1.079 2.126 1.384.766.296 1.636.499 2.913.558C8.333 23.988 8.74 24 12 24s3.667-.015 4.947-.072c1.277-.06 2.148-.262 2.913-.558.788-.306 1.459-.718 2.126-1.384.666-.667 1.079-1.335 1.384-2.126.296-.765.499-1.636.558-2.913.06-1.28.072-1.687.072-4.947s-.015-3.667-.072-4.947c-.06-1.277-.262-2.149-.558-2.913-.306-.789-.718-1.459-1.384-2.126C21.319 1.347 20.651.935 19.86.63c-.765-.297-1.636-.499-2.913-.558C15.667.012 15.26 0 12 0zm0 2.16c3.203 0 3.585.016 4.85.071 1.17.055 1.805.249 2.227.415.562.217.96.477 1.382.896.419.42.679.819.896 1.381.164.422.36 1.057.413 2.227.057 1.266.07 1.646.07 4.85s-.015 3.585-.074 4.85c-.061 1.17-.256 1.805-.421 2.227-.224.562-.479.96-.899 1.382-.419.419-.824.679-1.38.896-.42.164-1.065.36-2.235.413-1.274.057-1.649.07-4.859.07-3.211 0-3.586-.015-4.859-.074-1.171-.061-1.816-.256-2.236-.421-.569-.224-.96-.479-1.379-.899-.421-.419-.69-.824-.9-1.38-.165-.42-.359-1.065-.42-2.235-.045-1.26-.061-1.649-.061-4.844 0-3.196.016-3.586.061-4.861.061-1.17.255-1.814.42-2.234.21-.57.479-.96.9-1.381.419-.419.81-.689 1.379-.898.42-.166 1.051-.361 2.221-.421 1.275-.045 1.65-.06 4.859-.06l.045.03zm0 3.678c-3.405 0-6.162 2.76-6.162 6.162 0 3.405 2.76 6.162 6.162 6.162 3.405 0 6.162-2.76 6.162-6.162 0-3.405-2.76-6.162-6.162-6.162zM12 16c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zm7.846-10.405c0 .795-.646 1.44-1.44 1.44-.795 0-1.44-.646-1.44-1.44 0-.794.646-1.439 1.44-1.439.793-.001 1.44.645 1.44 1.439z" /></svg>
                 </a>
-                <a href="https://facebook.com/leadsfunda" target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#1877F2] text-white shadow-sm transition-all hover:opacity-80 hover:scale-110">
+                <a href="https://facebook.com/leadsfunda" target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-[#1877F2] text-white shadow-sm transition-all hover:opacity-80 hover:scale-110">
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M9.101 23.691v-7.98H6.627v-3.667h2.474v-1.58c0-4.085 1.848-5.978 5.858-5.978.401 0 .955.042 1.468.103a8.68 8.68 0 0 1 1.141.195v3.325a8.623 8.623 0 0 0-.653-.036 26.805 26.805 0 0 0-.733-.009c-.707 0-1.259.096-1.675.309a1.686 1.686 0 0 0-.679.622c-.258.42-.374.995-.374 1.752v1.297h3.919l-.386 2.103-.287 1.564h-3.246v8.245C19.396 23.238 24 18.179 24 12.044c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.628 3.874 10.35 9.101 11.647Z" /></svg>
                 </a>
-                <a href="#" aria-label="LinkedIn" className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0A66C2] text-white shadow-sm transition-all hover:opacity-80 hover:scale-110">
+                <a href="#" aria-label="LinkedIn" className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-[#0A66C2] text-white shadow-sm transition-all hover:opacity-80 hover:scale-110">
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.225 0z" /></svg>
                 </a>
               </div>
@@ -1177,8 +1177,8 @@ export default function Landing({ recent = [], total = 0 }) {
 // One bento cell: icon tile + title + body + a custom mini-widget.
 function BentoCell({ icon: Icon, tile, title, body, children }) {
   return (
-    <div className="group flex h-full flex-col rounded-3xl border border-border bg-card p-6 transition-all duration-300 hover:-translate-y-1.5 hover:border-primary/40 hover:shadow-xl hover:shadow-primary/10">
-      <div className={`mb-4 flex h-11 w-11 items-center justify-center rounded-2xl ${tile} transition-transform duration-300 group-hover:scale-110`}><Icon className="h-5 w-5" /></div>
+    <div className="group flex h-full flex-col rounded-[10px] border border-border bg-card p-6 transition-all duration-300 hover:-translate-y-1.5 hover:border-primary/40 hover:shadow-xl hover:shadow-primary/10">
+      <div className={`mb-4 flex h-11 w-11 items-center justify-center rounded-[10px] ${tile} transition-transform duration-300 group-hover:scale-110`}><Icon className="h-5 w-5" /></div>
       <h3 className="font-heading text-lg font-bold">{title}</h3>
       <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</p>
       <div className="mt-5">{children}</div>
