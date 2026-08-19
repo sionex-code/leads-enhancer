@@ -52,7 +52,7 @@ const DialogContent = React.forwardRef(({ className, children, showClose = true,
           // dvh (not vh) tracks the real visible viewport - on mobile Safari with
           // the address bar showing, 90vh can exceed what's actually visible and
           // push the dialog off-screen.
-          "relative z-10 flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-2xl",
+          "relative z-10 flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-2xl",
           className
         )}
         {...props}

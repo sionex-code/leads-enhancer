@@ -125,7 +125,7 @@ export default function PushToCrmDialog({ target, count, onClose, onStarted }) {
           ) : connections.length === 0 ? (
             // Never hide the button when nothing is connected - this empty state
             // is how most people will discover the feature exists at all.
-            <div className="rounded-xl border border-dashed border-border p-6 text-center">
+            <div className="rounded-lg border border-dashed border-border p-6 text-center">
               <Plug className="mx-auto mb-2 h-6 w-6 text-muted-foreground" />
               <p className="text-sm font-medium text-foreground">No CRM connected yet</p>
               <p className="mt-1 text-xs text-muted-foreground">

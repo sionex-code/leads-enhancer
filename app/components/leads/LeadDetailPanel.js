@@ -196,7 +196,7 @@ export default function LeadDetailPanel({
 
       <div className="flex-1 space-y-5 overflow-y-auto p-4">
         {/* Opportunity - the score plus the reasons behind it */}
-        <div className={cn("rounded-xl border p-3", bandTint)}>
+        <div className={cn("rounded-lg border p-3", bandTint)}>
           <div className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-1.5 text-sm font-semibold">
               <TrendingUp size={15} /> {BAND_LABEL[band]} Opportunity

@@ -331,7 +331,7 @@ function RowActions({ lead, busy = {}, onRemove, removeTitle }) {
 
 function DrawerCard({ title, children }) {
   return (
-    <section className="rounded-xl border border-border bg-card/60 p-4">
+    <section className="rounded-lg border border-border bg-card/60 p-4">
       <h3 className="mb-3 text-sm font-semibold">{title}</h3>
       {children}
     </section>
@@ -1847,7 +1847,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
         const noun = isAudit ? "audit" : "report";
         const pct = batch.total ? Math.round((batch.done / batch.total) * 100) : 0;
         return (
-        <div className="fixed bottom-4 right-4 z-50 w-80 rounded-xl border border-border bg-card p-4 shadow-xl">
+        <div className="fixed bottom-4 right-4 z-50 w-80 rounded-lg border border-border bg-card p-4 shadow-xl">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-2 text-sm font-semibold">
               {batch.finished ? (
@@ -1908,7 +1908,7 @@ export default function LeadsPage({ initialWorkflow = "", initialList = "", page
       {crmJob && (() => {
         const pct = crmJob.total ? Math.round((crmJob.done / crmJob.total) * 100) : 0;
         return (
-          <div className="fixed bottom-4 right-4 z-50 w-80 rounded-xl border border-border bg-card p-4 shadow-xl">
+          <div className="fixed bottom-4 right-4 z-50 w-80 rounded-lg border border-border bg-card p-4 shadow-xl">
             <div className="flex items-center gap-2 text-sm font-semibold">
               <Loader2 size={16} className="animate-spin text-primary" />
               Sending to {crmJob.connection?.label || "your CRM"}…

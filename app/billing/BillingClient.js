@@ -54,7 +54,7 @@ function DailyMeter({ icon: Icon, label, metric, loading }) {
   const pct = unlimited || !limit ? 0 : Math.min(100, (used / limit) * 100);
   const exhausted = !unlimited && remaining <= 0;
   return (
-    <div className="rounded-xl border border-border bg-card/60 p-4">
+    <div className="rounded-lg border border-border bg-card/60 p-4">
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
           <Icon className="h-4 w-4" /> {label}
@@ -169,7 +169,7 @@ export default function BillingClient() {
           <div className="grid gap-px bg-border/60 md:grid-cols-[1.4fr_1fr]">
             <div className="bg-card p-6">
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 text-primary">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/15 text-primary">
                   <Crown className="h-6 w-6" />
                 </div>
                 <div>

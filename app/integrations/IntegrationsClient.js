@@ -53,7 +53,7 @@ function ProviderCard({ provider, compact = false, onConnect }) {
     <button
       type="button"
       onClick={onConnect}
-      className="flex flex-col rounded-xl border border-border bg-card/40 p-4 text-left transition hover:border-primary/50 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="flex flex-col rounded-lg border border-border bg-card/40 p-4 text-left transition hover:border-primary/50 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <span className={`mb-2 flex h-10 w-10 items-center justify-center rounded-lg ${tile}`}>
         <Icon className="h-5 w-5" />
@@ -137,7 +137,7 @@ export default function IntegrationsClient() {
           flush against the sidebar and stretch the full window width. */}
       <div className="mx-auto max-w-4xl space-y-8 p-4 sm:p-6 lg:p-8">
       {!configured && (
-        <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-4">
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4">
           <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
             Integrations aren&apos;t switched on for this server yet
@@ -162,7 +162,7 @@ export default function IntegrationsClient() {
             {connections.map((c) => {
               const { icon: Icon, tile } = styleFor(c.provider);
               return (
-                <li key={c.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card/40 p-3">
+                <li key={c.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card/40 p-3">
                   <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${tile}`}>
                     <Icon className="h-4 w-4" />
                   </span>
@@ -233,7 +233,7 @@ export default function IntegrationsClient() {
             Nothing sent yet. Select some leads on the <Link href="/leads" className="text-primary hover:underline">Leads</Link> page and choose &ldquo;Send to CRM&rdquo;.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-border">
+          <div className="overflow-x-auto rounded-lg border border-border">
             <table className="w-full text-sm">
               <thead className="bg-muted/40 text-xs text-muted-foreground">
                 <tr>

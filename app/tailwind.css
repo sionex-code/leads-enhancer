@@ -42,7 +42,7 @@
   --border: 28 22% 90%;
   --input: 28 22% 87%;
   --ring: 21 94% 45%;
-  --radius: 0.75rem;
+  --radius: 0.5rem;
 
   /* The hot end of the brand: the underline flourish, the rating stars, the
      glow behind the hero. Three steps because the design uses it at three
