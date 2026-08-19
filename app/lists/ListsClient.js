@@ -202,10 +202,15 @@ export default function ListsClient() {
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
+                        {/* Visible and labelled, unlike rename and delete. The
+                            hover-only icon this replaced was undiscoverable:
+                            sending a list is the point of the page rather than a
+                            tidy-up action, and on a touch screen there is no
+                            hover to reveal it with at all. */}
                         <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 gap-1.5 px-2.5 text-xs"
                           title="Send this list to your CRM"
                           onClick={(e) => {
                             e.preventDefault();
@@ -213,6 +218,7 @@ export default function ListsClient() {
                           }}
                         >
                           <Share2 className="h-3.5 w-3.5" />
+                          Send
                         </Button>
                         <Button
                           size="icon"
