@@ -747,9 +747,15 @@ export default function Landing({ recent = [], total = 0 }) {
       </div>
 
       {/* ---- nav ---- */}
-      <header className="sticky top-3 z-40 px-4">
+      {/* Full-bleed bar rather than a floating pill. The pill capped at the
+          container's 1292px, so on a wide monitor the white stopped a third of
+          the way in from each edge and read as a misaligned header. The inner
+          px-4 is kept so the logo and nav still line up with the hero content
+          below at every width. */}
+      <header className="sticky top-0 z-40 border-b border-border/50 bg-card/95 shadow-[0_4px_24px_-8px_rgba(1,59,47,0.14)] backdrop-blur-xl">
+        <div className="px-4">
         <div className="container relative">
-          <div className="flex h-16 items-center justify-between rounded-[1.75rem] border border-border/50 bg-card/95 px-3 pl-6 shadow-[0_4px_24px_-8px_rgba(1,59,47,0.14)] backdrop-blur-xl sm:h-[4.5rem]">
+          <div className="flex h-16 items-center justify-between sm:h-[4.5rem]">
             <Logo />
             <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 text-[0.95rem] font-medium md:flex">
               {NAV.map((n) => (
@@ -788,6 +794,7 @@ export default function Landing({ recent = [], total = 0 }) {
               </nav>
             </div>
           )}
+        </div>
         </div>
       </header>
 
