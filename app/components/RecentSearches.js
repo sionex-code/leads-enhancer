@@ -87,7 +87,7 @@ export default function RecentSearches({ items = [], total = 0, me = "" }) {
                 key={e.slug}
                 href={`/directory/${e.slug}`}
                 className={
-                  "group relative flex flex-col overflow-hidden rounded-2xl border bg-card p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md " +
+                  "group relative flex flex-col overflow-hidden rounded-[10px] border bg-card p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md " +
                   (fresh ? "border-primary/50 ring-1 ring-primary/15" : "border-border hover:border-primary/40")
                 }
               >
@@ -152,7 +152,7 @@ export default function RecentSearches({ items = [], total = 0, me = "" }) {
         <div className="mt-10 text-center">
           <a
             href="/directory"
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-5 py-2.5 text-sm font-semibold text-foreground shadow-sm transition hover:bg-accent"
+            className="inline-flex items-center gap-2 rounded-[8px] border border-border bg-card px-5 py-2.5 text-sm font-semibold text-foreground shadow-sm transition hover:bg-accent"
           >
             <TrendingUp className="h-4 w-4" />
             {/* Counted from the same query that fills the index, so the number
