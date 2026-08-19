@@ -212,7 +212,7 @@ function Cta({
 // Small pill eyebrow with icon, used above every section heading.
 function Eyebrow({ icon: Icon = Sparkles, children }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs font-semibold text-foreground/70 shadow-sm">
+    <span className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 py-1.5 text-xs font-semibold text-foreground/70 shadow-sm">
       <Icon className="h-3.5 w-3.5 text-primary" /> {children}
     </span>
   );
@@ -800,7 +800,7 @@ export default function Landing({ recent = [], total = 0 }) {
       <section className="relative px-4">
         <HeroDecor />
         <div className="container relative z-10 flex flex-col items-center pb-10 pt-10 text-center sm:pt-14">
-          <span className="mb-5 inline-flex max-w-full items-center gap-2 rounded-full bg-muted px-4 py-2 text-center text-sm font-medium text-foreground/75">
+          <span className="mb-5 inline-flex max-w-full items-center gap-2 rounded-lg bg-muted px-4 py-2 text-center text-sm font-medium text-foreground/75">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-70" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-600" />
